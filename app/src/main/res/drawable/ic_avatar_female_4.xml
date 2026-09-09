@@ -1,0 +1,73 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="256dp"
+    android:height="256dp"
+    android:viewportWidth="256"
+    android:viewportHeight="256">
+    <!-- Solid Pastel Mint / Sage Background -->
+    <path
+        android:fillColor="#B7E2D5"
+        android:pathData="M0,0h256v256h-256z" />
+
+    <!-- Cream Hoodie Shoulders & Chest -->
+    <path
+        android:fillColor="#F6EFE5"
+        android:pathData="M35,256 C35,228 65,202 128,202 C191,202 221,228 221,256 Z" />
+    <path
+        android:fillColor="#E6DDD2"
+        android:pathData="M78,212 C94,232 110,240 128,240 C146,240 162,232 178,212 C160,206 144,202 128,202 C112,202 96,206 78,212 Z" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M114,228 L110,252 M142,228 L146,252" />
+
+    <!-- Slender Neck -->
+    <path
+        android:fillColor="#D8A581"
+        android:pathData="M106,150 L106,212 C114,216 142,216 150,212 L150,150 Z" />
+
+    <!-- Delicate Face Profile -->
+    <path
+        android:fillColor="#EBBDA0"
+        android:pathData="M92,112 C92,160 110,182 138,182 C166,182 182,154 182,118 C182,88 170,72 136,72 C102,72 92,88 92,112 Z" />
+
+    <!-- Ear with Pearl Earring -->
+    <path
+        android:fillColor="#E2B395"
+        android:pathData="M88,118 C84,118 80,126 80,136 C80,146 86,152 92,150 C92,138 92,124 88,118 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M88,144 A5,5 0 1,1 88,154 A5,5 0 1,1 88,144 Z" />
+
+    <!-- Soft Tinted Lips -->
+    <path
+        android:fillColor="#C8727E"
+        android:pathData="M148,154 C156,152 164,154 166,158 C158,162 152,162 148,154 Z" />
+
+    <!-- Chic Dark Sunglasses -->
+    <path
+        android:fillColor="#1C1B1F"
+        android:pathData="M124,102 C124,94 148,92 154,96 C160,100 160,128 152,132 C140,138 124,134 124,118 Z" />
+    <path
+        android:fillColor="#151417"
+        android:pathData="M156,96 C162,92 186,94 186,102 C186,118 182,134 170,134 C158,134 156,124 156,96 Z" />
+    <path
+        android:strokeColor="#111012"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M88,122 L130,106 L184,104" />
+
+    <!-- High Top Bun -->
+    <path
+        android:fillColor="#1F1B1A"
+        android:pathData="M56,58 C46,38 60,16 88,14 C116,12 128,32 120,54 C114,64 100,70 82,68 C68,66 58,64 56,58 Z" />
+    <path
+        android:fillColor="#1A1716"
+        android:pathData="M70,108 C64,80 80,48 112,38 C144,28 178,38 194,64 C204,78 202,98 194,110 C186,94 178,78 162,72 C146,66 128,70 114,78 C98,86 92,98 90,114 C84,108 76,120 74,132 C70,126 68,118 70,108 Z" />
+    <path
+        android:strokeColor="#1A1716"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M110,118 C116,140 108,160 106,174 M152,128 C158,146 154,166 150,180" />
+</vector>

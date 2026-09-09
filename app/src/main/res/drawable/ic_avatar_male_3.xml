@@ -1,0 +1,70 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="256dp"
+    android:height="256dp"
+    android:viewportWidth="256"
+    android:viewportHeight="256">
+    <!-- Solid Pastel Mint / Sage Green Background -->
+    <path
+        android:fillColor="#A2D7C5"
+        android:pathData="M0,0h256v256h-256z" />
+
+    <!-- Cream Hoodie Shoulders -->
+    <path
+        android:fillColor="#F0EAE1"
+        android:pathData="M30,256 C30,225 60,198 128,198 C196,198 226,225 226,256 Z" />
+    <path
+        android:fillColor="#DFD8CE"
+        android:pathData="M76,210 C92,230 110,238 128,238 C146,238 164,230 180,210 C162,204 145,200 128,200 C111,200 94,204 76,210 Z" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M112,225 L108,252 M144,225 L148,252" />
+
+    <!-- Neck -->
+    <path
+        android:fillColor="#CA9B76"
+        android:pathData="M102,150 L102,210 C110,214 146,214 154,210 L154,150 Z" />
+    <path
+        android:fillColor="#B3835E"
+        android:pathData="M102,150 C115,178 141,178 154,150 Z" />
+
+    <!-- Face & Jaw -->
+    <path
+        android:fillColor="#E0B690"
+        android:pathData="M88,110 C88,162 108,185 140,185 C172,185 186,155 186,118 C186,85 174,68 136,68 C98,68 88,85 88,110 Z" />
+
+    <!-- Ear -->
+    <path
+        android:fillColor="#D6A780"
+        android:pathData="M84,118 C80,118 76,126 76,136 C76,146 82,152 88,150 C88,138 88,124 84,118 Z" />
+
+    <!-- Lips Profile -->
+    <path
+        android:fillColor="#C48473"
+        android:pathData="M152,156 C158,154 164,156 166,160 C160,163 154,163 152,156 Z" />
+
+    <!-- Dark Sunglasses (Stylish Geometric) -->
+    <path
+        android:fillColor="#1A191E"
+        android:pathData="M128,102 C128,96 150,94 154,98 C158,102 158,128 152,132 C142,137 128,134 128,118 Z" />
+    <path
+        android:fillColor="#131217"
+        android:pathData="M156,98 C160,94 186,96 186,104 C186,120 182,134 172,134 C162,134 158,126 156,98 Z" />
+    <path
+        android:strokeColor="#0D0C10"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M84,124 L132,108 L184,106" />
+
+    <!-- Curly/Textured Dark Brown Hair -->
+    <path
+        android:fillColor="#211B17"
+        android:pathData="M68,108 C60,82 76,50 108,36 C138,24 176,28 196,52 C208,68 206,92 196,106 C190,90 184,74 168,68 C152,62 134,66 120,74 C104,82 94,94 90,112 C84,108 74,122 74,132 C70,128 68,120 68,108 Z" />
+    <path
+        android:strokeColor="#3D322B"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M98,52 C120,40 152,42 174,54 M116,40 C142,32 168,38 186,50 M84,70 C106,58 136,60 154,70" />
+</vector>

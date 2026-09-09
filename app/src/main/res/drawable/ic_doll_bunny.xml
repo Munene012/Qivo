@@ -1,0 +1,64 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Background Circle -->
+    <path
+        android:fillColor="#E8F0FE"
+        android:pathData="M100,100m-100,0a100,100 0,1 1,200 0a100,100 0,1 1,-200 0" />
+    <!-- Bunny Long Ears Outer -->
+    <path
+        android:fillColor="#F4ACB7"
+        android:pathData="M54,20 C42,20 40,65 58,82 C68,75 66,20 54,20 Z" />
+    <path
+        android:fillColor="#F4ACB7"
+        android:pathData="M146,20 C158,20 160,65 142,82 C132,75 134,20 146,20 Z" />
+    <!-- Bunny Long Ears Inner -->
+    <path
+        android:fillColor="#FFCAD4"
+        android:pathData="M55,30 C48,30 46,60 58,72 C63,68 62,30 55,30 Z" />
+    <path
+        android:fillColor="#FFCAD4"
+        android:pathData="M145,30 C152,30 154,60 142,72 C137,68 138,30 145,30 Z" />
+    <!-- Head -->
+    <path
+        android:fillColor="#FFE5D9"
+        android:pathData="M100,118m-64,0a64,56 0,1 1,128 0a64,56 0,1 1,-128 0" />
+    <!-- Cheeks Blush -->
+    <path
+        android:fillColor="#FF9AA2"
+        android:pathData="M54,128m-11,0a11,7 0,1 1,22 0a11,7 0,1 1,-22 0" />
+    <path
+        android:fillColor="#FF9AA2"
+        android:pathData="M146,128m-11,0a11,7 0,1 1,22 0a11,7 0,1 1,-22 0" />
+    <!-- Big Sparkly Eyes -->
+    <path
+        android:fillColor="#4A4E69"
+        android:pathData="M70,108m-9,0a9,12 0,1 1,18 0a9,12 0,1 1,-18 0" />
+    <path
+        android:fillColor="#4A4E69"
+        android:pathData="M130,108m-9,0a9,12 0,1 1,18 0a9,12 0,1 1,-18 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M68,103m-4,0a4,5 0,1 1,8 0a4,5 0,1 1,-8 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M128,103m-4,0a4,5 0,1 1,8 0a4,5 0,1 1,-8 0" />
+    <!-- Nose & Mouth -->
+    <path
+        android:fillColor="#D90429"
+        android:pathData="M100,123 L96,118 L104,118 Z" />
+    <path
+        android:strokeColor="#4A4E69"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M100,124 L100,128 M93,128 Q100,135 100,128 Q100,135 107,128" />
+    <!-- Cute Hair Ribbon -->
+    <path
+        android:fillColor="#FFB703"
+        android:pathData="M62,68 L50,56 L50,74 Z M62,68 L74,56 L74,74 Z" />
+    <path
+        android:fillColor="#FB8500"
+        android:pathData="M62,68m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+</vector>

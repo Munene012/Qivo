@@ -1,0 +1,76 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="256dp"
+    android:height="256dp"
+    android:viewportWidth="256"
+    android:viewportHeight="256">
+    <!-- Solid Pastel Sky Blue Background -->
+    <path
+        android:fillColor="#9BCBF5"
+        android:pathData="M0,0h256v256h-256z" />
+
+    <!-- Light Heather Grey Hoodie Shoulders -->
+    <path
+        android:fillColor="#E3E6EB"
+        android:pathData="M30,256 C30,225 60,198 128,198 C196,198 226,225 226,256 Z" />
+    <path
+        android:fillColor="#D1D6DE"
+        android:pathData="M76,210 C92,230 110,238 128,238 C146,238 164,230 180,210 C162,204 145,200 128,200 C111,200 94,204 76,210 Z" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M112,225 L108,252 M144,225 L148,252" />
+
+    <!-- Neck -->
+    <path
+        android:fillColor="#C69771"
+        android:pathData="M102,150 L102,210 C110,214 146,214 154,210 L154,150 Z" />
+    <path
+        android:fillColor="#AF7F59"
+        android:pathData="M102,150 C115,178 141,178 154,150 Z" />
+
+    <!-- Face & Jaw -->
+    <path
+        android:fillColor="#DEB189"
+        android:pathData="M88,110 C88,162 108,185 140,185 C172,185 186,155 186,118 C186,85 174,68 136,68 C98,68 88,85 88,110 Z" />
+
+    <!-- Ear -->
+    <path
+        android:fillColor="#D4A47C"
+        android:pathData="M84,118 C80,118 76,126 76,136 C76,146 82,152 88,150 C88,138 88,124 84,118 Z" />
+    <path
+        android:fillColor="#BC8B63"
+        android:pathData="M82,126 C80,126 79,132 80,138 C82,142 84,142 85,138 C86,132 84,126 82,126 Z" />
+
+    <!-- Lips Profile -->
+    <path
+        android:fillColor="#BF7E6B"
+        android:pathData="M152,156 C158,154 164,156 166,160 C160,163 154,163 152,156 Z" />
+
+    <!-- Dark Sunglasses (Square Aviator/Wayfarer) -->
+    <path
+        android:fillColor="#18181A"
+        android:pathData="M126,102 C126,95 150,93 154,97 C158,101 158,129 150,133 C140,137 126,133 126,118 Z" />
+    <path
+        android:fillColor="#111113"
+        android:pathData="M156,97 C160,93 186,95 186,103 C186,120 182,135 170,135 C160,135 156,126 156,97 Z" />
+    <path
+        android:strokeColor="#0A0A0C"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M84,124 L130,107 L184,105" />
+    <path
+        android:fillColor="#383842"
+        android:pathData="M164,101 C174,101 178,107 178,115 C176,109 172,104 164,101 Z" />
+
+    <!-- Modern Quiff / Fade Dark Haircut -->
+    <path
+        android:fillColor="#1F1A17"
+        android:pathData="M66,112 C60,88 74,52 108,36 C138,24 182,28 198,52 C206,66 204,88 196,102 C190,86 182,70 166,64 C150,58 132,62 118,70 C102,78 92,90 88,110 C82,106 72,120 72,130 C68,126 66,118 66,112 Z" />
+    <path
+        android:strokeColor="#38302B"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M102,48 C128,34 160,38 180,50 M120,38 C148,30 174,34 190,46 M88,68 C112,56 142,58 160,68" />
+</vector>

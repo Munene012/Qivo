@@ -1,0 +1,62 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Background Circle -->
+    <path
+        android:fillColor="#E0F2FE"
+        android:pathData="M100,100m-100,0a100,100 0,1 1,200 0a100,100 0,1 1,-200 0" />
+    <!-- Panda Ears -->
+    <path
+        android:fillColor="#1E293B"
+        android:pathData="M48,50m-24,0a24,24 0,1 1,48 0a24,24 0,1 1,-48 0" />
+    <path
+        android:fillColor="#1E293B"
+        android:pathData="M152,50m-24,0a24,24 0,1 1,48 0a24,24 0,1 1,-48 0" />
+    <!-- Head -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M100,110m-68,0a68,62 0,1 1,136 0a68,62 0,1 1,-136 0" />
+    <!-- Panda Eye Patches -->
+    <path
+        android:fillColor="#1E293B"
+        android:pathData="M68,102 C58,95 56,115 64,124 C72,130 80,118 78,106 Z" />
+    <path
+        android:fillColor="#1E293B"
+        android:pathData="M132,102 C142,95 144,115 136,124 C128,130 120,118 122,106 Z" />
+    <!-- Eyes -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M68,106m-5,0a5,6 0,1 1,10 0a5,6 0,1 1,-10 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M132,106m-5,0a5,6 0,1 1,10 0a5,6 0,1 1,-10 0" />
+    <path
+        android:fillColor="#0F172A"
+        android:pathData="M69,106m-3,0a3,4 0,1 1,6 0a3,4 0,1 1,-6 0" />
+    <path
+        android:fillColor="#0F172A"
+        android:pathData="M131,106m-3,0a3,4 0,1 1,6 0a3,4 0,1 1,-6 0" />
+    <!-- Cheeks Blush -->
+    <path
+        android:fillColor="#FCA5A5"
+        android:pathData="M48,128m-10,0a10,6 0,1 1,20 0a10,6 0,1 1,-20 0" />
+    <path
+        android:fillColor="#FCA5A5"
+        android:pathData="M152,128m-10,0a10,6 0,1 1,20 0a10,6 0,1 1,-20 0" />
+    <!-- Nose -->
+    <path
+        android:fillColor="#0F172A"
+        android:pathData="M100,122m-10,0a10,7 0,1 1,20 0a10,7 0,1 1,-20 0" />
+    <!-- Mouth -->
+    <path
+        android:strokeColor="#0F172A"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M100,129 L100,136 M92,136 Q100,144 100,136 Q100,144 108,136" />
+    <!-- Bamboo Leaf -->
+    <path
+        android:fillColor="#22C55E"
+        android:pathData="M125,145 Q145,135 155,148 Q140,155 125,145 Z" />
+</vector>

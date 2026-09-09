@@ -1,0 +1,13 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+    <!-- Circular Arrow Refresh Custom Graphic -->
+    <path
+        android:fillColor="#FFD600"
+        android:pathData="M16,4 C9.37,4 4,9.37 4,16 C4,19.34 5.36,22.36 7.55,24.55 L9.67,22.43 C8.04,20.8 7,18.52 7,16 C7,11.03 11.03,7 16,7 C18.52,7 20.8,8.04 22.43,9.67 L19,13 L28,13 L28,4 L24.55,7.45 C22.36,5.36 19.34,4 16,4 Z" />
+    <path
+        android:fillColor="#FFD600"
+        android:pathData="M24.45,7.45 L22.33,9.57 C23.96,11.2 25,13.48 25,16 C25,20.97 20.97,25 16,25 C13.48,25 11.2,23.96 9.57,22.33 L6,26 L15,26 L15,17 L11.45,20.55 C12.64,21.46 14.25,22 16,22 C19.31,22 22,19.31 22,16 C22,14.34 21.32,12.84 20.24,11.76 L24.45,7.45 Z" />
+</vector>

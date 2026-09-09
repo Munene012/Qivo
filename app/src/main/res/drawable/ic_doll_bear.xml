@@ -1,0 +1,70 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Background Circle -->
+    <path
+        android:fillColor="#FFE8D6"
+        android:pathData="M100,100m-100,0a100,100 0,1 1,200 0a100,100 0,1 1,-200 0" />
+    <!-- Ears Outer -->
+    <path
+        android:fillColor="#DDA15E"
+        android:pathData="M48,52m-26,0a26,26 0,1 1,52 0a26,26 0,1 1,-52 0" />
+    <path
+        android:fillColor="#DDA15E"
+        android:pathData="M152,52m-26,0a26,26 0,1 1,52 0a26,26 0,1 1,-52 0" />
+    <!-- Ears Inner -->
+    <path
+        android:fillColor="#BC6C25"
+        android:pathData="M48,52m-15,0a15,15 0,1 1,30 0a15,15 0,1 1,-30 0" />
+    <path
+        android:fillColor="#BC6C25"
+        android:pathData="M152,52m-15,0a15,15 0,1 1,30 0a15,15 0,1 1,-30 0" />
+    <!-- Head -->
+    <path
+        android:fillColor="#DDA15E"
+        android:pathData="M100,110m-68,0a68,64 0,1 1,136 0a68,64 0,1 1,-136 0" />
+    <!-- Cheeks Blush -->
+    <path
+        android:fillColor="#FFAAA6"
+        android:pathData="M56,120m-12,0a12,8 0,1 1,24 0a12,8 0,1 1,-24 0" />
+    <path
+        android:fillColor="#FFAAA6"
+        android:pathData="M144,120m-12,0a12,8 0,1 1,24 0a12,8 0,1 1,-24 0" />
+    <!-- Snout Muzzle -->
+    <path
+        android:fillColor="#FEFAE0"
+        android:pathData="M100,126m-30,0a30,22 0,1 1,60 0a30,22 0,1 1,-60 0" />
+    <!-- Nose -->
+    <path
+        android:fillColor="#4A2810"
+        android:pathData="M100,118m-11,0a11,8 0,1 1,22 0a11,8 0,1 1,-22 0" />
+    <!-- Mouth -->
+    <path
+        android:strokeColor="#4A2810"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M100,126 L100,135 M90,135 Q100,143 100,135 Q100,143 110,135" />
+    <!-- Eyes -->
+    <path
+        android:fillColor="#283618"
+        android:pathData="M70,96m-8,0a8,10 0,1 1,16 0a8,10 0,1 1,-16 0" />
+    <path
+        android:fillColor="#283618"
+        android:pathData="M130,96m-8,0a8,10 0,1 1,16 0a8,10 0,1 1,-16 0" />
+    <!-- Eye Highlights -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M68,92m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M128,92m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
+    <!-- Bow Tie -->
+    <path
+        android:fillColor="#E63946"
+        android:pathData="M100,174 L80,162 L80,186 Z M100,174 L120,162 L120,186 Z" />
+    <path
+        android:fillColor="#FFD166"
+        android:pathData="M100,174m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0" />
+</vector>

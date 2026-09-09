@@ -1,0 +1,78 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Background Circle -->
+    <path
+        android:fillColor="#FFF0F5"
+        android:pathData="M100,100m-100,0a100,100 0,1 1,200 0a100,100 0,1 1,-200 0" />
+    <!-- Cat Ears Outer -->
+    <path
+        android:fillColor="#FFAFCC"
+        android:pathData="M38,78 L65,30 L90,65 Z" />
+    <path
+        android:fillColor="#FFAFCC"
+        android:pathData="M162,78 L135,30 L110,65 Z" />
+    <!-- Cat Ears Inner -->
+    <path
+        android:fillColor="#FFC8DD"
+        android:pathData="M48,72 L67,40 L84,65 Z" />
+    <path
+        android:fillColor="#FFC8DD"
+        android:pathData="M152,72 L133,40 L116,65 Z" />
+    <!-- Head -->
+    <path
+        android:fillColor="#FFDDE4"
+        android:pathData="M100,112m-68,0a68,58 0,1 1,136 0a68,58 0,1 1,-136 0" />
+    <!-- Cheeks Blush -->
+    <path
+        android:fillColor="#FF85A1"
+        android:pathData="M52,122m-12,0a12,8 0,1 1,24 0a12,8 0,1 1,-24 0" />
+    <path
+        android:fillColor="#FF85A1"
+        android:pathData="M148,122m-12,0a12,8 0,1 1,24 0a12,8 0,1 1,-24 0" />
+    <!-- Big Anime Eyes -->
+    <path
+        android:fillColor="#704341"
+        android:pathData="M68,102m-9,0a9,12 0,1 1,18 0a9,12 0,1 1,-18 0" />
+    <path
+        android:fillColor="#704341"
+        android:pathData="M132,102m-9,0a9,12 0,1 1,18 0a9,12 0,1 1,-18 0" />
+    <!-- Eye Highlights -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M66,97m-4,0a4,5 0,1 1,8 0a4,5 0,1 1,-8 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M130,97m-4,0a4,5 0,1 1,8 0a4,5 0,1 1,-8 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M71,108m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M135,108m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0" />
+    <!-- Nose -->
+    <path
+        android:fillColor="#E05780"
+        android:pathData="M100,120 L94,114 L106,114 Z" />
+    <!-- Kitty Whiskers -->
+    <path
+        android:strokeColor="#B56576"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M32,112 L56,116 M30,124 L54,124 M32,136 L56,132 M168,112 L144,116 M170,124 L146,124 M168,136 L144,132" />
+    <!-- Mouth -->
+    <path
+        android:strokeColor="#704341"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M92,125 Q100,132 100,125 Q100,132 108,125" />
+    <!-- Bell Collar -->
+    <path
+        android:fillColor="#FFD166"
+        android:pathData="M100,172m-10,0a10,10 0,1 1,20 0a10,10 0,1 1,-20 0" />
+    <path
+        android:fillColor="#E05780"
+        android:pathData="M80,166 Q100,178 120,166 L120,162 Q100,174 80,162 Z" />
+</vector>

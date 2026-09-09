@@ -1,0 +1,89 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="256dp"
+    android:height="256dp"
+    android:viewportWidth="256"
+    android:viewportHeight="256">
+    <!-- Solid Pastel Lilac Background (Image 1 Style) -->
+    <path
+        android:fillColor="#C6A8F0"
+        android:pathData="M0,0h256v256h-256z" />
+
+    <!-- Cream Hoodie Shoulders & Chest -->
+    <path
+        android:fillColor="#EDE3D8"
+        android:pathData="M30,256 C30,225 60,198 128,198 C196,198 226,225 226,256 Z" />
+    <path
+        android:fillColor="#DFD2C4"
+        android:pathData="M76,210 C92,230 110,238 128,238 C146,238 164,230 180,210 C162,204 145,200 128,200 C111,200 94,204 76,210 Z" />
+    <!-- Hoodie Strings -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M112,225 L108,252 M144,225 L148,252" />
+
+    <!-- Neck -->
+    <path
+        android:fillColor="#CCA17E"
+        android:pathData="M102,150 L102,210 C110,214 146,214 154,210 L154,150 Z" />
+    <!-- Neck Shadow -->
+    <path
+        android:fillColor="#B78864"
+        android:pathData="M102,150 C115,178 141,178 154,150 Z" />
+
+    <!-- Face & Jaw (Side / 3-Quarter Profile) -->
+    <path
+        android:fillColor="#E2BA96"
+        android:pathData="M88,110 C88,162 108,185 140,185 C172,185 186,155 186,118 C186,85 174,68 136,68 C98,68 88,85 88,110 Z" />
+    
+    <!-- Ear (Left Visible Profile) -->
+    <path
+        android:fillColor="#DCB08B"
+        android:pathData="M84,118 C80,118 76,126 76,136 C76,146 82,152 88,150 C88,138 88,124 84,118 Z" />
+    <path
+        android:fillColor="#C69771"
+        android:pathData="M82,126 C80,126 79,132 80,138 C82,142 84,142 85,138 C86,132 84,126 82,126 Z" />
+
+    <!-- Nose Profile Accent -->
+    <path
+        android:fillColor="#CCA17E"
+        android:pathData="M168,124 C175,134 168,142 160,140 Z" />
+
+    <!-- Lips Profile -->
+    <path
+        android:fillColor="#C78972"
+        android:pathData="M152,156 C158,154 164,156 166,160 C160,163 154,163 152,156 Z" />
+
+    <!-- Dark Trendy Sunglasses (Classic Black Wayfarer/Round) -->
+    <!-- Left Glass -->
+    <path
+        android:fillColor="#1C1B1F"
+        android:pathData="M128,102 C128,96 150,94 154,98 C158,102 158,128 152,132 C142,137 128,134 128,118 Z" />
+    <!-- Front Glass Right Profile -->
+    <path
+        android:fillColor="#151417"
+        android:pathData="M156,98 C160,94 186,96 186,104 C186,120 182,134 172,134 C162,134 158,126 156,98 Z" />
+    <!-- Sunglasses Frame & Temple Arm to Ear -->
+    <path
+        android:strokeColor="#111012"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M84,124 L132,108 L184,106" />
+
+    <!-- Glasses Lens Subtle Highlight Gloss -->
+    <path
+        android:fillColor="#3A3840"
+        android:pathData="M164,102 C174,102 178,108 178,116 C176,110 172,105 164,102 Z" />
+
+    <!-- Textured Wavy Dark Hair (Volume on Top, Stylish Taper) -->
+    <path
+        android:fillColor="#1A181C"
+        android:pathData="M68,110 C62,85 78,54 110,40 C140,28 178,32 196,56 C206,70 204,92 196,104 C190,88 184,72 168,66 C152,60 134,64 120,72 C104,80 94,92 90,110 C84,106 74,120 74,130 C70,126 68,118 68,110 Z" />
+    <!-- Hair Strands & Texture Highlights -->
+    <path
+        android:strokeColor="#2F2B33"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M98,54 C120,42 152,44 174,56 M116,42 C142,34 168,40 186,52 M86,72 C108,60 138,62 156,72 M78,92 C88,80 102,74 120,76" />
+</vector>

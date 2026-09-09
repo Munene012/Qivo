@@ -1,0 +1,61 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Background Circle -->
+    <path
+        android:fillColor="#FFF1F2"
+        android:pathData="M100,100m-100,0a100,100 0,1 1,200 0a100,100 0,1 1,-200 0" />
+    <!-- Princess Golden Crown -->
+    <path
+        android:fillColor="#FACC15"
+        android:pathData="M70,55 L85,25 L100,45 L115,25 L130,55 Z" />
+    <path
+        android:fillColor="#E11D48"
+        android:pathData="M100,45m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M85,32m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-3 0" />
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M115,32m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-3 0" />
+    <!-- Hair Base -->
+    <path
+        android:fillColor="#78350F"
+        android:pathData="M100,100 C40,50 30,160 30,170 C45,170 50,110 60,100 C80,90 120,90 140,100 C150,110 155,170 170,170 C170,160 160,50 100,100 Z" />
+    <!-- Face -->
+    <path
+        android:fillColor="#FED7AA"
+        android:pathData="M100,115m-54,0a54,52 0,1 1,108 0a54,52 0,1 1,-108 0" />
+    <!-- Bangs -->
+    <path
+        android:fillColor="#78350F"
+        android:pathData="M48,85 Q100,105 152,85 Q100,65 48,85 Z" />
+    <!-- Sparkle Eyes -->
+    <path
+        android:fillColor="#4C1D95"
+        android:pathData="M72,112m-9,0a9,12 0,1 1,18 0a9,12 0,1 1,-18 0" />
+    <path
+        android:fillColor="#4C1D95"
+        android:pathData="M128,112m-9,0a9,12 0,1 1,18 0a9,12 0,1 1,-18 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M70,107m-4,0a4,5 0,1 1,8 0a4,5 0,1 1,-8 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M126,107m-4,0a4,5 0,1 1,8 0a4,5 0,1 1,-8 0" />
+    <!-- Rosy Cheeks -->
+    <path
+        android:fillColor="#FDA4AF"
+        android:pathData="M56,128m-10,0a10,7 0,1 1,20 0a10,7 0,1 1,-20 0" />
+    <path
+        android:fillColor="#FDA4AF"
+        android:pathData="M144,128m-10,0a10,7 0,1 1,20 0a10,7 0,1 1,-20 0" />
+    <!-- Sweet Smile -->
+    <path
+        android:strokeColor="#BE123C"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M92,136 Q100,144 108,136" />
+</vector>

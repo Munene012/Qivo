@@ -1,0 +1,43 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Background Circle -->
+    <path
+        android:fillColor="#FEF3C7"
+        android:pathData="M100,100m-100,0a100,100 0,1 1,200 0a100,100 0,1 1,-200 0" />
+    <!-- Star Points Behind -->
+    <path
+        android:fillColor="#FBBF24"
+        android:pathData="M100,18 L122,65 L174,70 L135,108 L146,160 L100,134 L54,160 L65,108 L26,70 L78,65 Z" />
+    <!-- Face Center -->
+    <path
+        android:fillColor="#FEF08A"
+        android:pathData="M100,105m-48,0a48,46 0,1 1,96 0a48,46 0,1 1,-96 0" />
+    <!-- Star Sparkle Eyes -->
+    <path
+        android:fillColor="#1E1B4B"
+        android:pathData="M78,102m-7,0a7,9 0,1 1,14 0a7,9 0,1 1,-14 0" />
+    <path
+        android:fillColor="#1E1B4B"
+        android:pathData="M122,102m-7,0a7,9 0,1 1,14 0a7,9 0,1 1,-14 0" />
+    <!-- Big Eye Star Highlights -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M76,98 L78,94 L80,98 L84,100 L80,102 L78,106 L76,102 L72,100 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M120,98 L122,94 L124,98 L128,100 L124,102 L122,106 L120,102 L116,100 Z" />
+    <!-- Pink Cheeks -->
+    <path
+        android:fillColor="#F472B6"
+        android:pathData="M65,116m-9,0a9,6 0,1 1,18 0a9,6 0,1 1,-18 0" />
+    <path
+        android:fillColor="#F472B6"
+        android:pathData="M135,116m-9,0a9,6 0,1 1,18 0a9,6 0,1 1,-18 0" />
+    <!-- Joyful Smile -->
+    <path
+        android:fillColor="#EF4444"
+        android:pathData="M92,118 Q100,132 108,118 Z" />
+</vector>

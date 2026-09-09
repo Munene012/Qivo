@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+
+    <!-- 1. Ambient Golden Drop Shadow Ring -->
+    <path
+        android:pathData="M48,4 C72.3,4 92,23.7 92,48 C92,72.3 72.3,92 48,92 C23.7,92 4,72.3 4,48 C4,23.7 23.7,4 48,4 Z"
+        android:fillColor="#15FFA726" />
+
+    <!-- 2. Circular Base with Soft Golden Sunset Gradient (Matching Splash Screen) -->
+    <path
+        android:pathData="M48,6 C71.2,6 90,24.8 90,48 C90,71.2 71.2,90 48,90 C24.8,90 6,71.2 6,48 C6,24.8 24.8,6 48,6 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="20"
+                android:startY="10"
+                android:endX="76"
+                android:endY="86"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FFFFFFFF" />
+                <item android:offset="0.25" android:color="#FFFFF8E1" />
+                <item android:offset="0.55" android:color="#FFFFE082" />
+                <item android:offset="0.80" android:color="#FFFFB74D" />
+                <item android:offset="1.0" android:color="#FFFF9800" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 3. Outer Glossy Luxury Border (Matching Splash Screen) -->
+    <path
+        android:pathData="M48,6 C71.2,6 90,24.8 90,48 C90,71.2 71.2,90 48,90 C24.8,90 6,71.2 6,48 C6,24.8 24.8,6 48,6 Z M48,8.5 C26.2,8.5 8.5,26.2 8.5,48 C8.5,69.8 26.2,87.5 48,87.5 C69.8,87.5 87.5,69.8 87.5,48 C87.5,26.2 69.8,8.5 48,8.5 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="15"
+                android:startY="15"
+                android:endX="81"
+                android:endY="81"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FFFFFFFF" />
+                <item android:offset="0.5" android:color="#FFFFD54F" />
+                <item android:offset="1.0" android:color="#99FFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 4. QIVO Deep Warm Rich Typography (#4E2608) -->
+    <group
+        android:pivotX="48"
+        android:pivotY="48"
+        android:scaleX="1.0"
+        android:scaleY="1.0">
+
+        <!-- Letter Q -->
+        <path
+            android:fillColor="#FF4E2608"
+            android:pathData="M27.5,35 C23.0,35 20.0,38.5 20.0,46.5 C20.0,54.5 23.0,58.0 27.5,58.0 C29.5,58.0 31.0,57.2 32.2,55.8 L34.0,61.5 L37.5,60.0 L35.2,54.2 C36.5,52.2 37.0,49.5 37.0,46.5 C37.0,38.5 34.0,35 29.5,35 Z M27.5,39.2 C31.0,39.2 32.5,42.0 32.5,46.5 C32.5,51.0 31.0,53.8 27.5,53.8 C24.0,53.8 22.5,51.0 22.5,46.5 C22.5,42.0 24.0,39.2 27.5,39.2 Z" />
+
+        <!-- Letter I -->
+        <path
+            android:fillColor="#FF4E2608"
+            android:pathData="M39.5,35.2 H44.2 V59.0 H39.5 Z" />
+
+        <!-- Letter V -->
+        <path
+            android:fillColor="#FF4E2608"
+            android:pathData="M46.8,35.2 L52.2,59.0 H56.8 L62.2,35.2 H57.2 L54.5,50.5 L51.8,35.2 Z" />
+
+        <!-- Letter O -->
+        <path
+            android:fillColor="#FF4E2608"
+            android:pathData="M69.5,35 C65.0,35 62.0,38.5 62.0,46.5 C62.0,54.5 65.0,58.0 69.5,58.0 C74.0,58.0 77.0,54.5 77.0,46.5 C77.0,38.5 74.0,35 69.5,35 Z M69.5,39.2 C73.0,39.2 74.5,42.0 74.5,46.5 C74.5,51.0 73.0,53.8 69.5,53.8 C66.0,53.8 64.5,51.0 64.5,46.5 C64.5,42.0 66.0,39.2 69.5,39.2 Z" />
+    </group>
+
+</vector>

@@ -1,0 +1,62 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Background Circle -->
+    <path
+        android:fillColor="#FFF7ED"
+        android:pathData="M100,100m-100,0a100,100 0,1 1,200 0a100,100 0,1 1,-200 0" />
+    <!-- Fox Ears Outer -->
+    <path
+        android:fillColor="#EA580C"
+        android:pathData="M38,80 L62,24 L90,70 Z" />
+    <path
+        android:fillColor="#EA580C"
+        android:pathData="M162,80 L138,24 L110,70 Z" />
+    <!-- Fox Ear Tips -->
+    <path
+        android:fillColor="#1C1917"
+        android:pathData="M56,38 L62,24 L72,40 Z" />
+    <path
+        android:fillColor="#1C1917"
+        android:pathData="M144,38 L138,24 L128,40 Z" />
+    <!-- Fox Ear Inners -->
+    <path
+        android:fillColor="#FED7AA"
+        android:pathData="M48,74 L62,44 L80,70 Z" />
+    <path
+        android:fillColor="#FED7AA"
+        android:pathData="M152,74 L138,44 L120,70 Z" />
+    <!-- Head Base -->
+    <path
+        android:fillColor="#EA580C"
+        android:pathData="M100,115m-66,0a66,58 0,1 1,132 0a66,58 0,1 1,-132 0" />
+    <!-- White Fluffy Cheeks -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M100,126 L44,115 C34,140 60,165 100,168 C140,165 166,140 156,115 Z" />
+    <!-- Eyes -->
+    <path
+        android:fillColor="#431407"
+        android:pathData="M72,112m-7,0a7,10 0,1 1,14 0a7,10 0,1 1,-14 0" />
+    <path
+        android:fillColor="#431407"
+        android:pathData="M128,112m-7,0a7,10 0,1 1,14 0a7,10 0,1 1,-14 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M70,108m-3,0a3,4 0,1 1,6 0a3,4 0,1 1,-3 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M126,108m-3,0a3,4 0,1 1,6 0a3,4 0,1 1,-3 0" />
+    <!-- Fox Nose -->
+    <path
+        android:fillColor="#1C1917"
+        android:pathData="M100,132m-8,0a8,6 0,1 1,16 0a8,6 0,1 1,-16 0" />
+    <!-- Mouth -->
+    <path
+        android:strokeColor="#1C1917"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M94,140 Q100,146 106,140" />
+</vector>

@@ -1,0 +1,61 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Background Circle -->
+    <path
+        android:fillColor="#1E1B4B"
+        android:pathData="M100,100m-100,0a100,100 0,1 1,200 0a100,100 0,1 1,-200 0" />
+    <!-- Neon Headphones Band -->
+    <path
+        android:strokeColor="#06B6D4"
+        android:strokeWidth="10"
+        android:strokeLineCap="round"
+        android:pathData="M40,105 C40,45 160,45 160,105" />
+    <!-- Headphone Earcups -->
+    <path
+        android:fillColor="#A855F7"
+        android:pathData="M24,105m-14,0a14,22 0,1 1,28 0a14,22 0,1 1,-28 0" />
+    <path
+        android:fillColor="#A855F7"
+        android:pathData="M176,105m-14,0a14,22 0,1 1,28 0a14,22 0,1 1,-28 0" />
+    <path
+        android:fillColor="#22D3EE"
+        android:pathData="M24,105m-8,0a8,14 0,1 1,16 0a8,14 0,1 1,-8 0" />
+    <path
+        android:fillColor="#22D3EE"
+        android:pathData="M176,105m-8,0a8,14 0,1 1,16 0a8,14 0,1 1,-8 0" />
+    <!-- Cyber Head -->
+    <path
+        android:fillColor="#F8FAFC"
+        android:pathData="M100,116m-60,0a60,56 0,1 1,120 0a60,56 0,1 1,-120 0" />
+    <!-- Cyber Visor / Glasses -->
+    <path
+        android:fillColor="#3B82F6"
+        android:pathData="M52,94 L148,94 Q156,116 140,118 L60,118 Q44,116 52,94 Z" />
+    <!-- Neon Glowing Eye Grid -->
+    <path
+        android:fillColor="#F43F5E"
+        android:pathData="M70,104m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0" />
+    <path
+        android:fillColor="#F43F5E"
+        android:pathData="M130,104m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M69,102m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-2 0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M129,102m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-2 0" />
+    <!-- Tech Blush marks -->
+    <path
+        android:strokeColor="#06B6D4"
+        android:strokeWidth="2"
+        android:pathData="M52,130 L64,130 M54,134 L66,134 M148,130 L136,130 M146,134 L134,134" />
+    <!-- Mouth -->
+    <path
+        android:strokeColor="#334155"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M92,142 Q100,148 108,142" />
+</vector>
