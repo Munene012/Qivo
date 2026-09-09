@@ -1,12 +1,10 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,13 +15,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -32,7 +28,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ElectricBolt
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Stars
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Button
@@ -52,15 +48,13 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -74,7 +68,12 @@ import com.example.ui.theme.QivoOrange
 import com.example.ui.theme.QivoYellow
 
 /**
- * LevelScreen: Full Level & EXP Progress Hub (Levels 1 to 50)
+ * Clean & Minimalist LevelScreen
+ * Focuses purely on essential information:
+ * - Current level status & EXP progress
+ * - Level 4 Profile Visitors Radar unlock status
+ * - 5 Key milestone tiers
+ * - Quick EXP conversion guide
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -93,13 +92,10 @@ fun LevelScreen(
     val session = remember { UserSessionManager.getSession(context) }
     val currentExp = expState ?: session?.exp ?: UserSessionManager.getExp(context)
     val levelInfo = remember(currentExp) { UserLevelManager.getLevelInfo(currentExp) }
-    val allMilestones = remember { UserLevelManager.getAllLevelMilestones() }
-
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: Milestones (1-50), 1: Perks & Rules
 
     val animatedProgress by animateFloatAsState(
         targetValue = levelInfo.progressPercent,
-        animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing),
         label = "level_progress"
     )
 
@@ -113,7 +109,7 @@ fun LevelScreen(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "Level System",
+                            text = "Level & EXP",
                             fontWeight = FontWeight.Bold,
                             fontSize = 20.sp,
                             color = colors.textPrimary
@@ -121,13 +117,14 @@ fun LevelScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = QivoYellow.copy(alpha = 0.2f)
+                            color = levelInfo.badgeColor.copy(alpha = 0.2f),
+                            border = BorderStroke(1.dp, levelInfo.badgeColor.copy(alpha = 0.5f))
                         ) {
                             Text(
                                 text = "Lv.${levelInfo.level}",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = QivoYellow,
+                                color = levelInfo.badgeColor,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                             )
                         }
@@ -156,23 +153,20 @@ fun LevelScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
-            contentPadding = PaddingValues(bottom = 32.dp)
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // 1. HERO CURRENT LEVEL CARD
+            // 1. HERO PROGRESS CARD
             item {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
                         .testTag("card_level_hero"),
-                    shape = RoundedCornerShape(24.dp),
+                    shape = RoundedCornerShape(22.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (isDark) Color(0xFF1C1A24) else Color(0xFFFFF9E6)
+                        containerColor = if (isDark) Color(0xFF1B1A26) else Color(0xFFFFFBEA)
                     ),
-                    border = BorderStroke(
-                        1.5.dp,
-                        Brush.linearGradient(levelInfo.badgeGradient)
-                    )
+                    border = BorderStroke(1.5.dp, Brush.linearGradient(levelInfo.badgeGradient))
                 ) {
                     Column(
                         modifier = Modifier
@@ -180,78 +174,74 @@ fun LevelScreen(
                             .padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // 3D Level Trophy Icon
+                        // 3D Level Badge Icon
                         Box(
                             modifier = Modifier
-                                .size(90.dp)
+                                .size(80.dp)
                                 .clip(CircleShape)
                                 .background(
                                     Brush.radialGradient(
-                                        colors = listOf(
-                                            levelInfo.badgeColor.copy(alpha = 0.35f),
-                                            Color.Transparent
-                                        )
+                                        listOf(levelInfo.badgeColor.copy(alpha = 0.3f), Color.Transparent)
                                     )
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
-                            Level3DIcon(size = 76.dp, level = levelInfo.level)
+                            Level3DIcon(size = 68.dp, level = levelInfo.level)
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                        // Level Badge Title
+                        // Title Chip
                         Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = levelInfo.badgeColor.copy(alpha = 0.2f),
-                            border = BorderStroke(1.dp, levelInfo.badgeColor.copy(alpha = 0.6f))
+                            shape = RoundedCornerShape(12.dp),
+                            color = levelInfo.badgeColor.copy(alpha = 0.15f),
+                            border = BorderStroke(1.dp, levelInfo.badgeColor.copy(alpha = 0.4f))
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.WorkspacePremium,
                                     contentDescription = null,
                                     tint = levelInfo.badgeColor,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(15.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = "LEVEL ${levelInfo.level} • ${levelInfo.title}",
                                     fontSize = 13.sp,
-                                    fontWeight = FontWeight.ExtraBold,
+                                    fontWeight = FontWeight.Bold,
                                     color = levelInfo.badgeColor
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                        // Current Total EXP Counter
+                        // Total EXP
                         Text(
                             text = "%,d EXP".format(levelInfo.currentExp),
-                            fontSize = 28.sp,
+                            fontSize = 30.sp,
                             fontWeight = FontWeight.Black,
                             color = colors.textPrimary
                         )
 
                         Text(
                             text = if (levelInfo.isMaxLevel) {
-                                "Maximum Level Achieved! You are a Sovereign Master."
+                                "Maximum level reached!"
                             } else {
-                                "%,d / %,d EXP needed for Level %d".format(
-                                    levelInfo.expInCurrentLevel,
-                                    levelInfo.expNeededInCurrentLevel,
+                                "%,d EXP needed for Level %d".format(
+                                    (levelInfo.expNeededInCurrentLevel - levelInfo.expInCurrentLevel).coerceAtLeast(0L),
                                     levelInfo.level + 1
                                 )
                             },
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             color = colors.textSecondary,
-                            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                            modifier = Modifier.padding(top = 2.dp, bottom = 12.dp)
                         )
 
-                        // Progress Bar
+                        // Clean Progress Bar
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -283,23 +273,23 @@ fun LevelScreen(
                                 progress = { animatedProgress },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(10.dp)
-                                    .clip(RoundedCornerShape(5.dp)),
+                                    .height(8.dp)
+                                    .clip(RoundedCornerShape(4.dp)),
                                 color = QivoYellow,
-                                trackColor = if (isDark) Color(0xFF2C2C38) else Color(0xFFE2E8F0)
+                                trackColor = if (isDark) Color(0xFF2C2A3A) else Color(0xFFE2E8F0)
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
-                        // Recharge / Earn EXP CTA Button
+                        // Fast EXP Recharge CTA
                         Button(
                             onClick = onNavigateToRecharge,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(48.dp)
+                                .height(44.dp)
                                 .testTag("btn_level_get_coins"),
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = QivoYellow,
                                 contentColor = Color.Black
@@ -308,11 +298,11 @@ fun LevelScreen(
                             Icon(
                                 imageVector = Icons.Default.ElectricBolt,
                                 contentDescription = null,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Get Coins to Gain 1:1 EXP (1,000 Coins = 1,000 EXP)",
+                                text = "Get Coins (1 Coin = 1 EXP)",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -321,28 +311,25 @@ fun LevelScreen(
                 }
             }
 
-            // 2. LEVEL 4 VISITOR PRIVILEGE HIGHLIGHT CARD
+            // 2. ESSENTIAL PRIVILEGE: PROFILE VISITORS RADAR (LEVEL 4)
             item {
                 val isUnlocked = levelInfo.isVisitorsUnlocked
                 val expNeededForLevel4 = (UserLevelManager.getLevelThreshold(4) - levelInfo.currentExp).coerceAtLeast(0L)
 
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
-                        .testTag("card_visitor_feature_privilege"),
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = if (isUnlocked) {
                             if (isDark) Color(0xFF132B1A) else Color(0xFFE8F8EE)
                         } else {
-                            if (isDark) Color(0xFF2B1F13) else Color(0xFFFFF3E0)
+                            if (isDark) Color(0xFF241D17) else Color(0xFFFFF3E0)
                         }
                     ),
                     border = BorderStroke(
                         1.dp,
                         if (isUnlocked) Color(0xFF00E676).copy(alpha = 0.5f) else Color(0xFFFF9800).copy(alpha = 0.5f)
-                    )
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
                         modifier = Modifier
@@ -351,7 +338,7 @@ fun LevelScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Surface(
-                            modifier = Modifier.size(46.dp),
+                            modifier = Modifier.size(44.dp),
                             shape = CircleShape,
                             color = if (isUnlocked) Color(0xFF00E676).copy(alpha = 0.2f) else Color(0xFFFF9800).copy(alpha = 0.2f)
                         ) {
@@ -360,26 +347,26 @@ fun LevelScreen(
                                     imageVector = if (isUnlocked) Icons.Default.Visibility else Icons.Default.Lock,
                                     contentDescription = null,
                                     tint = if (isUnlocked) Color(0xFF00E676) else Color(0xFFFF9800),
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.width(14.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (isUnlocked) "Profile Visitors Radar Active" else "Profile Visitors (Unlocked at Level 4)",
+                                text = if (isUnlocked) "Profile Visitors Radar Active" else "Profile Visitors Radar (Level 4)",
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
+                                fontSize = 14.sp,
                                 color = colors.textPrimary
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = if (isUnlocked) {
-                                    "Your Level ${levelInfo.level} allows you to see everyone who visited your profile!"
+                                    "Your Level ${levelInfo.level} grants full access to view who visits your profile."
                                 } else {
-                                    "Reach Level 4 (%,d more EXP needed) to see who viewed your profile.".format(expNeededForLevel4)
+                                    "Reach Level 4 (%,d more EXP needed) to unlock.".format(expNeededForLevel4)
                                 },
                                 fontSize = 12.sp,
                                 color = colors.textSecondary
@@ -390,7 +377,10 @@ fun LevelScreen(
                             Button(
                                 onClick = onNavigateToVisitors,
                                 shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676), contentColor = Color.Black),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF00E676),
+                                    contentColor = Color.Black
+                                ),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                             ) {
                                 Text("View", fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -400,257 +390,122 @@ fun LevelScreen(
                 }
             }
 
-            // 3. TAB SELECTOR: ROADMAP (1-50) vs HOW IT WORKS
+            // 3. MILESTONE TIERS (5 Clear Groups)
             item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
-                        .background(
-                            color = if (isDark) Color(0xFF1E1E26) else Color(0xFFF1F5F9),
-                            shape = RoundedCornerShape(14.dp)
-                        )
-                        .padding(4.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (selectedTab == 0) QivoYellow else Color.Transparent)
-                            .clickable { selectedTab = 0 }
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Level Roadmap (1 - 50)",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (selectedTab == 0) Color.Black else colors.textSecondary
-                        )
-                    }
+                Text(
+                    text = "PROGRESSION TIERS",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.textSecondary,
+                    letterSpacing = 1.sp,
+                    modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                )
+            }
 
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (selectedTab == 1) QivoYellow else Color.Transparent)
-                            .clickable { selectedTab = 1 }
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "How to Gain EXP",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (selectedTab == 1) Color.Black else colors.textSecondary
+            item {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.cardBg),
+                    border = BorderStroke(1.dp, colors.divider),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        TierRow(
+                            range = "Lv. 1 – 9",
+                            title = "Bronze Novice",
+                            badgeColor = Color(0xFFCD7F32),
+                            isCurrent = levelInfo.level in 1..9,
+                            isReached = levelInfo.level >= 1,
+                            perk = "Standard badge & Level 4 Visitor Radar"
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = colors.divider)
+                        TierRow(
+                            range = "Lv. 10 – 19",
+                            title = "Silver Explorer",
+                            badgeColor = Color(0xFFC0C0C0),
+                            isCurrent = levelInfo.level in 10..19,
+                            isReached = levelInfo.level >= 10,
+                            perk = "Silver chat badge & room highlight"
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = colors.divider)
+                        TierRow(
+                            range = "Lv. 20 – 29",
+                            title = "Gold Champion",
+                            badgeColor = Color(0xFFFFD700),
+                            isCurrent = levelInfo.level in 20..29,
+                            isReached = levelInfo.level >= 20,
+                            perk = "Gold badge & prioritized matching"
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = colors.divider)
+                        TierRow(
+                            range = "Lv. 30 – 39",
+                            title = "Diamond Monarch",
+                            badgeColor = Color(0xFF00E5FF),
+                            isCurrent = levelInfo.level in 30..39,
+                            isReached = levelInfo.level >= 30,
+                            perk = "Cyan Diamond halo & special entry effect"
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = colors.divider)
+                        TierRow(
+                            range = "Lv. 40 – 50",
+                            title = "Sovereign Master",
+                            badgeColor = Color(0xFFFF1744),
+                            isCurrent = levelInfo.level in 40..50,
+                            isReached = levelInfo.level >= 40,
+                            perk = "Mythic crown & supreme room presence"
                         )
                     }
                 }
             }
 
-            // TAB CONTENT: ROADMAP
-            if (selectedTab == 0) {
-                item {
-                    Text(
-                        text = "50-LEVEL PROGRESSION TIERS",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = colors.textSecondary,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
-                    )
-                }
-
-                items(allMilestones) { milestone ->
-                    val isReached = levelInfo.level >= milestone.level
-                    val isCurrent = levelInfo.level == milestone.level
-
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 5.dp)
-                            .testTag("card_milestone_lvl_${milestone.level}"),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = when {
-                                isCurrent -> (if (isDark) Color(0xFF262015) else Color(0xFFFFFDE7))
-                                isReached -> (if (isDark) Color(0xFF181822) else Color(0xFFFAFAFC))
-                                else -> (if (isDark) Color(0xFF13131A) else Color(0xFFF3F4F6))
-                            }
-                        ),
-                        border = BorderStroke(
-                            width = if (isCurrent) 1.5.dp else 1.dp,
-                            color = when {
-                                isCurrent -> QivoYellow
-                                isReached -> milestone.badgeColor.copy(alpha = 0.4f)
-                                else -> colors.divider.copy(alpha = 0.5f)
-                            }
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Level Pill
-                            Surface(
-                                modifier = Modifier.size(44.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (isReached) milestone.badgeColor.copy(alpha = 0.25f) else Color.Gray.copy(alpha = 0.15f),
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (isReached) milestone.badgeColor else Color.Gray.copy(alpha = 0.3f)
-                                )
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(
-                                        text = "Lv.${milestone.level}",
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Black,
-                                        color = if (isReached) milestone.badgeColor else Color.Gray
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.width(14.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = milestone.title,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isReached) colors.textPrimary else colors.textSecondary
-                                    )
-                                    if (isCurrent) {
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Surface(
-                                            shape = RoundedCornerShape(8.dp),
-                                            color = QivoYellow
-                                        ) {
-                                            Text(
-                                                text = "CURRENT",
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = Color.Black,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                            )
-                                        }
-                                    }
-                                    if (milestone.level == 4) {
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Surface(
-                                            shape = RoundedCornerShape(8.dp),
-                                            color = Color(0xFFFF9800)
-                                        ) {
-                                            Text(
-                                                text = "VISITORS",
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = Color.Black,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                            )
-                                        }
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(2.dp))
-
-                                Text(
-                                    text = if (milestone.level == 1) {
-                                        "Starting Level (0 EXP)"
-                                    } else {
-                                        "Required: %,d EXP (+%,d from previous)".format(
-                                            milestone.cumulativeExpReq,
-                                            milestone.deltaExpReq
-                                        )
-                                    },
-                                    fontSize = 12.sp,
-                                    color = if (isCurrent) QivoOrange else colors.textSecondary
-                                )
-
-                                if (milestone.perks.isNotEmpty()) {
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = "• ${milestone.perks.first()}",
-                                        fontSize = 11.sp,
-                                        color = if (isReached) colors.textPrimary.copy(alpha = 0.8f) else colors.textSecondary.copy(alpha = 0.6f)
-                                    )
-                                }
-                            }
-
-                            if (isReached) {
-                                Icon(
-                                    imageVector = Icons.Default.CheckCircle,
-                                    contentDescription = "Achieved",
-                                    tint = if (isCurrent) QivoYellow else Color(0xFF00E676),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.Lock,
-                                    contentDescription = "Locked",
-                                    tint = colors.textSecondary.copy(alpha = 0.4f),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+            // 4. HOW EXP WORKS (Concise & Clean)
+            item {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.cardBg),
+                    border = BorderStroke(1.dp, colors.divider),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = QivoYellow,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "EXP Rules",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.textPrimary
+                            )
                         }
-                    }
-                }
-            } else {
-                // TAB CONTENT: HOW EXP WORKS
-                item {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-                        border = BorderStroke(1.dp, colors.divider)
-                    ) {
-                        Column(modifier = Modifier.padding(18.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Info,
-                                    contentDescription = null,
-                                    tint = QivoYellow,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = "How to Gain EXP & Level Up",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = colors.textPrimary
-                                )
-                            }
 
-                            Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                            ExpRuleItem(
-                                title = "1,000 Coins = 1,000 EXP",
-                                description = "Every coin you buy, recharge, or receive from coin seller transfers and awards directly converts to 1:1 EXP."
+                        Row(verticalAlignment = Alignment.Top) {
+                            Text("•", color = QivoYellow, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "1 Coin = 1 EXP. Recharging coins or receiving gifts directly adds to your level.",
+                                fontSize = 12.sp,
+                                color = colors.textSecondary,
+                                lineHeight = 16.sp
                             )
+                        }
 
-                            HorizontalDivider(color = colors.divider, modifier = Modifier.padding(vertical = 10.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
 
-                            ExpRuleItem(
-                                title = "Doubling Level Progression",
-                                description = "Level 1 to 2 requires 5,000 EXP. Level 2 to 3 requires 10,000 EXP (doubled), and continues doubling with every level up to Level 50!"
-                            )
-
-                            HorizontalDivider(color = colors.divider, modifier = Modifier.padding(vertical = 10.dp))
-
-                            ExpRuleItem(
-                                title = "Level 4 Visitor Unlock",
-                                description = "Reaching Level 4 (35,000 cumulative EXP) permanently unlocks your profile's Visitors Radar, allowing you to see everyone who visited your profile."
-                            )
-
-                            HorizontalDivider(color = colors.divider, modifier = Modifier.padding(vertical = 10.dp))
-
-                            ExpRuleItem(
-                                title = "Daily Check-Ins & Tasks",
-                                description = "Completing daily missions in the Tasks Center and claiming check-in bonuses awards free coins that boost your EXP."
+                        Row(verticalAlignment = Alignment.Top) {
+                            Text("•", color = QivoYellow, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Reach Level 4 (35,000 EXP) to permanently unlock the Profile Visitors Radar.",
+                                fontSize = 12.sp,
+                                color = colors.textSecondary,
+                                lineHeight = 16.sp
                             )
                         }
                     }
@@ -661,31 +516,81 @@ fun LevelScreen(
 }
 
 @Composable
-private fun ExpRuleItem(
+private fun TierRow(
+    range: String,
     title: String,
-    description: String
+    badgeColor: Color,
+    isCurrent: Boolean,
+    isReached: Boolean,
+    perk: String
 ) {
     val colors = AppTheme.colors
-    Row(modifier = Modifier.fillMaxWidth()) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Surface(
-            modifier = Modifier.size(8.dp).offset(y = 6.dp),
-            shape = CircleShape,
-            color = QivoYellow
-        ) {}
-        Spacer(modifier = Modifier.width(10.dp))
-        Column {
+            shape = RoundedCornerShape(8.dp),
+            color = badgeColor.copy(alpha = if (isReached) 0.25f else 0.1f),
+            border = BorderStroke(1.dp, badgeColor.copy(alpha = if (isReached) 0.6f else 0.2f)),
+            modifier = Modifier.width(68.dp)
+        ) {
             Text(
-                text = title,
-                fontSize = 14.sp,
+                text = range,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                color = colors.textPrimary
+                color = if (isReached) badgeColor else Color.Gray,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(2.dp))
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = title,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isReached) colors.textPrimary else colors.textSecondary
+                )
+                if (isCurrent) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = QivoYellow
+                    ) {
+                        Text(
+                            text = "CURRENT",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.Black,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                        )
+                    }
+                }
+            }
             Text(
-                text = description,
-                fontSize = 12.sp,
-                color = colors.textSecondary,
-                lineHeight = 17.sp
+                text = perk,
+                fontSize = 11.sp,
+                color = colors.textSecondary
+            )
+        }
+
+        if (isReached) {
+            Icon(
+                imageVector = Icons.Default.CheckCircle,
+                contentDescription = "Achieved",
+                tint = if (isCurrent) QivoYellow else Color(0xFF00E676),
+                modifier = Modifier.size(18.dp)
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Default.Lock,
+                contentDescription = "Locked",
+                tint = colors.textSecondary.copy(alpha = 0.4f),
+                modifier = Modifier.size(16.dp)
             )
         }
     }

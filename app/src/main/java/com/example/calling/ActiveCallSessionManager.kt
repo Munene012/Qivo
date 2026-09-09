@@ -114,6 +114,36 @@ object ActiveCallSessionManager {
                         return
                     }
 
+                    val incomingCallType = if (signal.callType.equals("VIDEO", ignoreCase = true)) CallType.VIDEO else CallType.VOICE
+
+                    // Check Do Not Disturb (DND) status for this specific call type
+                    val isDndActive = if (incomingCallType == CallType.VIDEO) {
+                        UserSessionManager.isDndVideoEnabled(context)
+                    } else {
+                        UserSessionManager.isDndVoiceEnabled(context)
+                    }
+
+                    if (isDndActive) {
+                        val callTypeStr = if (incomingCallType == CallType.VIDEO) "video" else "voice"
+                        val myName = UserSessionManager.getSession(context)?.name?.ifBlank { "User" } ?: "User"
+                        CallRealtimeRelayManager.sendSignal(
+                            RealtimeCallSignal(
+                                type = "DND_MODE",
+                                callId = signal.callId,
+                                callerId = myUserId,
+                                callerName = myName,
+                                callerAvatar = UserSessionManager.getSession(context)?.avatarUrl ?: "",
+                                callerGender = UserSessionManager.getSession(context)?.gender ?: "Male",
+                                receiverId = signal.callerId,
+                                callType = signal.callType,
+                                reason = "$myName is on Do Not Disturb mode for $callTypeStr calls"
+                            ),
+                            context = context
+                        )
+                        // Calls won't go through - suppressed on receiver device
+                        return
+                    }
+
                     if (session != null && session.status != ActiveCallStatus.IDLE && session.status != ActiveCallStatus.ENDED) {
                         // Busy in another call
                         CallRealtimeRelayManager.sendSignal(
@@ -133,7 +163,6 @@ object ActiveCallSessionManager {
                         return
                     }
 
-                    val incomingCallType = if (signal.callType.equals("VIDEO", ignoreCase = true)) CallType.VIDEO else CallType.VOICE
                     val callerUser = UserProfile(
                         id = signal.callerId,
                         numericId = 0L,
@@ -213,6 +242,22 @@ object ActiveCallSessionManager {
                     }
                 }
             }
+            "DND_MODE" -> {
+                if (session != null && session.callId == signal.callId && signal.callerId == session.otherUser.id) {
+                    timeoutJob?.cancel()
+                    InAppCallTonePlayer.stopRinging()
+                    val callTypeStr = if (session.callType == CallType.VIDEO) "video" else "voice"
+                    val reason = signal.reason.ifBlank {
+                        "${session.otherUser.name} is on Do Not Disturb mode for $callTypeStr calls"
+                    }
+                    _currentSession.value = session.copy(status = ActiveCallStatus.ENDED, endReason = reason)
+                    AppToast.show(reason, isLong = true)
+                    scope.launch {
+                        delay(2500)
+                        clearSession(context)
+                    }
+                }
+            }
             "TIMEOUT" -> {
                 if (session != null && session.callId == signal.callId && signal.callerId == session.otherUser.id) {
                     timeoutJob?.cancel()
@@ -255,6 +300,14 @@ object ActiveCallSessionManager {
         // 1. PARTY ROOM CONSTRAINT: User cannot send calls while in a Party Room
         if (PartyRoomSessionManager.activeRoom.value != null) {
             AppToast.show("Cannot make calls while in a Party Room", isLong = true)
+            return
+        }
+
+        // 2. DND CHECK: If target receiver has DND active for this call type
+        val isReceiverDnd = if (callType == CallType.VIDEO) receiver.isDndVideo else receiver.isDndVoice
+        if (isReceiverDnd) {
+            val callTypeStr = if (callType == CallType.VIDEO) "video" else "voice"
+            AppToast.show("${receiver.name} is currently on Do Not Disturb mode for $callTypeStr calls", isLong = true)
             return
         }
 

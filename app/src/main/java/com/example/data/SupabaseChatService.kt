@@ -520,6 +520,115 @@ class SupabaseChatService {
     }
 
     /**
+     * Fetch conversation messages between two specific users with pagination support.
+     * Messages are returned ordered by created_at descending (newest first).
+     * e.g., offset = 0, limit = 20 returns the 20 most recent messages between the two users.
+     */
+    suspend fun fetchConversationMessages(
+        userId1: String,
+        userId2: String,
+        context: Context? = null,
+        offset: Int = 0,
+        limit: Int = 20
+    ): List<ChatMessage> {
+        return withContext(Dispatchers.IO) {
+            val u1 = userId1.trim()
+            val u2 = userId2.trim()
+            if (u1.isEmpty() || u2.isEmpty()) return@withContext emptyList()
+
+            try {
+                val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+                val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+
+                if (baseUrl.isNotEmpty() && apiKey.isNotEmpty()) {
+                    val authHeader = UserSessionManager.getAuthHeader(context)
+                    val deletedPrefs = context?.getSharedPreferences("qivo_deleted_chats", Context.MODE_PRIVATE)
+
+                    // Primary query: targeted PostgREST filter for conversations between u1 and u2
+                    val primaryUrl = "$baseUrl/rest/v1/messages?or=(and(sender_id.eq.$u1,receiver_id.eq.$u2),and(sender_id.eq.$u2,receiver_id.eq.$u1))&order=created_at.desc&limit=$limit&offset=$offset"
+                    
+                    // Fallback query in case complex nested filter is not supported by backend schema
+                    val fallbackUrl = "$baseUrl/rest/v1/messages?or=(sender_id.eq.$u1,receiver_id.eq.$u1)&order=created_at.desc&limit=${maxOf(100, offset + limit)}"
+
+                    val urlsToTry = listOf(primaryUrl, fallbackUrl)
+
+                    for ((idx, url) in urlsToTry.withIndex()) {
+                        try {
+                            val request = Request.Builder()
+                                .url(url)
+                                .addHeader("apikey", apiKey)
+                                .addHeader("Authorization", authHeader)
+                                .get()
+                                .build()
+
+                            client.newCall(request).execute().use { response ->
+                                val responseBody = response.body?.string() ?: ""
+                                if (response.isSuccessful && responseBody.startsWith("[")) {
+                                    val jsonArray = JSONArray(responseBody)
+                                    val results = mutableListOf<ChatMessage>()
+                                    for (i in 0 until jsonArray.length()) {
+                                        val obj = jsonArray.getJSONObject(i)
+                                        val sId = obj.optString("sender_id", "").trim()
+                                        val rId = obj.optString("receiver_id", "").trim()
+                                        val createdAtStr = obj.optString("created_at", "")
+
+                                        val isPair = (sId.equals(u1, ignoreCase = true) && rId.equals(u2, ignoreCase = true)) ||
+                                                     (sId.equals(u2, ignoreCase = true) && rId.equals(u1, ignoreCase = true))
+                                        if (!isPair) continue
+
+                                        val partnerId = if (sId.equals(u1, ignoreCase = true)) rId else sId
+                                        if (profileService.isUserBlocked(u1, partnerId, context)) continue
+
+                                        val cutoff = deletedPrefs?.getLong("${u1}_${partnerId}", 0L) ?: 0L
+                                        if (cutoff > 0L) {
+                                            val ts = parseTimestampToMillis(createdAtStr)
+                                            if (ts in 1..cutoff) continue
+                                        }
+
+                                        results.add(
+                                            ChatMessage(
+                                                id = obj.optLong("id", 0L),
+                                                senderId = sId,
+                                                senderName = obj.optString("sender_name", "User"),
+                                                senderAvatar = obj.optString("sender_avatar", ""),
+                                                receiverId = rId,
+                                                receiverName = obj.optString("receiver_name", "User"),
+                                                message = obj.optString("message", ""),
+                                                createdAt = createdAtStr,
+                                                isRead = obj.optBoolean("is_read", false)
+                                            )
+                                        )
+                                    }
+
+                                    if (idx == 0) {
+                                        return@withContext results
+                                    } else {
+                                        return@withContext results.drop(offset).take(limit)
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            if (idx == urlsToTry.lastIndex) throw e
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("SupabaseChatService", "fetchConversationMessages remote error: ${e.message}")
+            }
+
+            // Offline or cache fallback
+            val cachedAll = getInMemoryMessages(u1).ifEmpty {
+                if (context != null) AppDataCacheManager.getCachedChatMessagesSync(context, u1) else emptyList()
+            }
+            val conversationMsgs = cachedAll.filter { msg ->
+                (msg.senderId.trim().equals(u1, ignoreCase = true) && msg.receiverId.trim().equals(u2, ignoreCase = true)) ||
+                (msg.receiverId.trim().equals(u1, ignoreCase = true) && msg.senderId.trim().equals(u2, ignoreCase = true))
+            }
+            conversationMsgs.drop(offset).take(limit)
+        }
+    }
+
+    /**
      * Fetch unread message count specifically for a user
      */
     suspend fun fetchUnreadCount(userId: String, context: Context? = null): Int {

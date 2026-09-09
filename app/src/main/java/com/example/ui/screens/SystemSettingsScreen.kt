@@ -83,7 +83,8 @@ fun SystemSettingsScreen(
     onSignOut: () -> Unit,
     onOpenBlockedList: () -> Unit = {},
     onOpenAccountSecurity: () -> Unit = {},
-    onOpenAboutQivo: () -> Unit = {}
+    onOpenAboutQivo: () -> Unit = {},
+    onOpenCallSettings: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -229,10 +230,10 @@ fun SystemSettingsScreen(
                     SettingsRowItem(
                         icon = { CallSettings3DIcon(size = 40.dp) },
                         title = "Call Settings",
-                        subtitle = "Configure voice & video preferences",
+                        subtitle = "Configure voice & video DND preferences",
                         titleColor = colors.textPrimary,
                         subtitleColor = colors.textSecondary,
-                        onClick = { AppToast.show("Call Settings configured") }
+                        onClick = onOpenCallSettings
                     )
 
                     HorizontalDivider(color = colors.divider)

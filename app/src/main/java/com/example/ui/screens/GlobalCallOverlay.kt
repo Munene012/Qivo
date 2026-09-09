@@ -173,6 +173,7 @@ fun GlobalCallOverlay(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .zIndex(9999f)
             .background(Color(0xFF0F0E17))
             .testTag("global_fullscreen_call_screen")
     ) {
@@ -407,12 +408,57 @@ fun GlobalCallOverlay(
                     )
                 }
                 isEnded -> {
-                    Text(
-                        text = session.endReason.ifBlank { "Call Ended" },
-                        color = Color(0xFFFF5252),
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    val isDnd = session.endReason.contains("Do Not Disturb", ignoreCase = true) || session.endReason.contains("DND", ignoreCase = true)
+                    if (isDnd) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFFE53935).copy(alpha = 0.2f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE53935).copy(alpha = 0.6f)),
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.DoNotDisturbOn,
+                                        contentDescription = "DND Mode",
+                                        tint = Color(0xFFFF5252),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Do Not Disturb Mode",
+                                        color = Color(0xFFFF5252),
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = session.endReason,
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Calls will not go through while user is on DND.",
+                                    color = Color.White.copy(alpha = 0.65f),
+                                    fontSize = 12.sp,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = session.endReason.ifBlank { "Call Ended" },
+                            color = Color(0xFFFF5252),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }

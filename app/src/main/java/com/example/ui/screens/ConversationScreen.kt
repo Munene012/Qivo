@@ -1,5 +1,6 @@
 package com.example.ui.screens
 import com.example.ui.components.AppToast
+import com.example.ui.theme.QivoYellow
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -124,15 +125,20 @@ fun ConversationScreen(
             val all = SupabaseChatService.getInMemoryMessages(myUserId).ifEmpty {
                 AppDataCacheManager.getCachedChatMessagesSync(context, myUserId)
             }
-            all.filter { msg ->
+            val filtered = all.filter { msg ->
                 (msg.senderId.trim().equals(myUserId, ignoreCase = true) && msg.receiverId.trim().equals(targetUser.id, ignoreCase = true)) ||
                 (msg.receiverId.trim().equals(myUserId, ignoreCase = true) && msg.senderId.trim().equals(targetUser.id, ignoreCase = true))
             }.reversed()
+            // Show only the last 20 messages initially
+            filtered.takeLast(20)
         } else emptyList()
     }
 
     var messagesList by remember { mutableStateOf(initialConversationMessages) }
     var isLoadingMessages by remember { mutableStateOf(initialConversationMessages.isEmpty()) }
+    var hasOlderMessages by remember { mutableStateOf(true) }
+    var isLoadingOlderMessages by remember { mutableStateOf(false) }
+    var hasScrolledToBottomInitially by remember { mutableStateOf(false) }
     // Initialize message draft from persistent local storage
     var inputMessageText by remember(targetUser.id, myUserId) {
         mutableStateOf(AppDataCacheManager.getChatDraft(context, myUserId, targetUser.id))
@@ -564,26 +570,127 @@ fun ConversationScreen(
         }
     }
 
-    // Fetch conversation messages & periodic live synchronization
-    LaunchedEffect(targetUser.id, targetUser.numericId) {
-        if (myUserId.isNotEmpty()) {
+    // Function to load older messages when user scrolls up to the top
+    val loadOlderMessages: () -> Unit = {
+        if (!isLoadingOlderMessages && hasOlderMessages && myUserId.isNotEmpty() && targetUser.id.isNotEmpty()) {
+            scope.launch {
+                try {
+                    isLoadingOlderMessages = true
+                    val currentFirstIndex = listState.firstVisibleItemIndex
+                    val currentFirstOffset = listState.firstVisibleItemScrollOffset
+                    val currentServerCount = messagesList.count { it.id > 0L }
+
+                    val olderBatch = chatService.fetchConversationMessages(
+                        userId1 = myUserId,
+                        userId2 = targetUser.id,
+                        context = context,
+                        offset = currentServerCount,
+                        limit = 20
+                    )
+
+                    if (olderBatch.isNotEmpty()) {
+                        val existingIds = messagesList.map { it.id }.toSet()
+                        val distinctOlder = olderBatch.filter { it.id !in existingIds }.reversed()
+                        if (distinctOlder.isNotEmpty()) {
+                            messagesList = distinctOlder + messagesList
+                            listState.scrollToItem(
+                                index = distinctOlder.size + currentFirstIndex,
+                                scrollOffset = currentFirstOffset
+                            )
+                        }
+                        if (olderBatch.size < 20 || distinctOlder.isEmpty()) {
+                            hasOlderMessages = false
+                        }
+                    } else {
+                        hasOlderMessages = false
+                    }
+                } catch (e: Throwable) {
+                    android.util.Log.e("ConversationScreen", "Error loading older messages: ${e.message}")
+                } finally {
+                    isLoadingOlderMessages = false
+                }
+            }
+        }
+    }
+
+    // Detect when user scrolls up to the top (first visible item) to fetch older messages
+    val shouldLoadOlder by remember {
+        derivedStateOf {
+            val isAtTop = listState.firstVisibleItemIndex <= 1
+            hasOlderMessages && !isLoadingOlderMessages && !isLoadingMessages && messagesList.isNotEmpty() && isAtTop
+        }
+    }
+
+    LaunchedEffect(shouldLoadOlder) {
+        if (shouldLoadOlder) {
+            loadOlderMessages()
+        }
+    }
+
+    // Fetch conversation messages (initial last 20) & periodic live synchronization
+    LaunchedEffect(targetUser.id, targetUser.numericId, myUserId) {
+        if (myUserId.isNotEmpty() && targetUser.id.isNotEmpty()) {
+            var isFirstFetch = true
             while (true) {
                 try {
-                    val allMsgs = chatService.fetchUserMessages(myUserId, context)
-                    val filtered = allMsgs.filter { msg ->
-                        (msg.senderId.trim().equals(myUserId, ignoreCase = true) && msg.receiverId.trim().equals(targetUser.id, ignoreCase = true)) ||
-                        (msg.receiverId.trim().equals(myUserId, ignoreCase = true) && msg.senderId.trim().equals(targetUser.id, ignoreCase = true))
-                    }.reversed()
+                    val recent = chatService.fetchConversationMessages(
+                        userId1 = myUserId,
+                        userId2 = targetUser.id,
+                        context = context,
+                        offset = 0,
+                        limit = 20
+                    )
 
-                    val pendingOptimistic = messagesList.filter { it.id <= 0L }
-                    val remainingOptimistic = pendingOptimistic.filter { opt ->
-                        filtered.none { f ->
-                            f.senderId == opt.senderId && f.receiverId == opt.receiverId &&
-                            (f.message == opt.message)
+                    if (isFirstFetch) {
+                        isFirstFetch = false
+                        if (recent.isNotEmpty()) {
+                            val chronological = recent.reversed()
+                            val pendingOptimistic = messagesList.filter { it.id <= 0L }
+                            val remainingOptimistic = pendingOptimistic.filter { opt ->
+                                chronological.none { f ->
+                                    f.senderId == opt.senderId && f.receiverId == opt.receiverId &&
+                                    (f.message == opt.message)
+                                }
+                            }
+                            messagesList = chronological + remainingOptimistic
+                            hasOlderMessages = recent.size >= 20
+                        } else {
+                            hasOlderMessages = false
+                        }
+                        isLoadingMessages = false
+
+                        if (!hasScrolledToBottomInitially && messagesList.isNotEmpty()) {
+                            listState.scrollToItem(messagesList.size - 1)
+                            hasScrolledToBottomInitially = true
+                        }
+                    } else if (recent.isNotEmpty()) {
+                        // Periodic sync: only append brand-new incoming/outgoing messages
+                        val existingIds = messagesList.map { it.id }.filter { it > 0L }.toSet()
+                        val brandNew = recent.filter { it.id !in existingIds }.reversed()
+                        if (brandNew.isNotEmpty()) {
+                            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                            val totalItems = listState.layoutInfo.totalItemsCount
+                            val isNearBottom = totalItems == 0 || lastVisible >= totalItems - 3
+                            messagesList = messagesList + brandNew
+                            if (isNearBottom) {
+                                listState.animateScrollToItem(messagesList.size - 1)
+                            }
+                        }
+
+                        // Update isRead status in place without disturbing ordering or scroll position
+                        val recentMap = recent.associateBy { it.id }
+                        var hasReadStatusChanged = false
+                        val updatedList = messagesList.map { msg ->
+                            val r = recentMap[msg.id]
+                            if (r != null && r.isRead != msg.isRead) {
+                                hasReadStatusChanged = true
+                                msg.copy(isRead = r.isRead)
+                            } else msg
+                        }
+                        if (hasReadStatusChanged) {
+                            messagesList = updatedList
                         }
                     }
-                    messagesList = filtered + remainingOptimistic
-                    isLoadingMessages = false
 
                     // If female account, sync fast reply reward records from ledger
                     if (isFemaleAcc) {
@@ -597,16 +704,19 @@ fun ConversationScreen(
 
                     // Mark incoming messages as read in Supabase
                     chatService.markMessagesAsRead(senderId = targetUser.id, receiverId = myUserId)
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    isLoadingMessages = false
+                }
                 kotlinx.coroutines.delay(3_000L)
             }
         }
     }
 
-    // Auto-scroll to bottom when messages list updates or loads
-    LaunchedEffect(messagesList.size) {
-        if (messagesList.isNotEmpty()) {
-            listState.animateScrollToItem(messagesList.size - 1)
+    // Auto-scroll to bottom only on initial appearance if not yet scrolled
+    LaunchedEffect(messagesList.isNotEmpty()) {
+        if (messagesList.isNotEmpty() && !hasScrolledToBottomInitially) {
+            listState.scrollToItem(messagesList.size - 1)
+            hasScrolledToBottomInitially = true
         }
     }
 
@@ -804,6 +914,34 @@ fun ConversationScreen(
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.Bottom)
                     ) {
+                        if (isLoadingOlderMessages) {
+                            item(key = "loading_older_messages_indicator") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            strokeWidth = 2.dp,
+                                            color = QivoYellow
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "Loading older messages...",
+                                            fontSize = 12.sp,
+                                            color = colors.textSecondary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         items(
                             items = messagesList,
                             key = { msg ->

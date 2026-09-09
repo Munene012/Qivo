@@ -34,6 +34,8 @@ object UserSessionManager {
     private const val KEY_USER_EXP = "user_exp"
     private const val KEY_USER_EXP_PREFIX = "user_exp_"
     const val KEY_PROFILE_COMPLETED = "user_profile_completed"
+    private const val KEY_DND_VOICE = "dnd_voice_calls"
+    private const val KEY_DND_VIDEO = "dnd_video_calls"
 
     @Volatile private var cachedAccessToken: String = ""
     @Volatile private var cachedRefreshToken: String = ""
@@ -532,6 +534,36 @@ object UserSessionManager {
     private val _expFlow = kotlinx.coroutines.flow.MutableStateFlow<Long?>(null)
     val expFlow: kotlinx.coroutines.flow.StateFlow<Long?> = _expFlow
 
+    private val _dndVoiceFlow = kotlinx.coroutines.flow.MutableStateFlow<Boolean?>(null)
+    val dndVoiceFlow: kotlinx.coroutines.flow.StateFlow<Boolean?> = _dndVoiceFlow
+
+    private val _dndVideoFlow = kotlinx.coroutines.flow.MutableStateFlow<Boolean?>(null)
+    val dndVideoFlow: kotlinx.coroutines.flow.StateFlow<Boolean?> = _dndVideoFlow
+
+    fun isDndVoiceEnabled(context: Context?): Boolean {
+        return getPrefs(context)?.getBoolean(KEY_DND_VOICE, false) ?: false
+    }
+
+    fun setDndVoiceEnabled(context: Context?, enabled: Boolean) {
+        try {
+            getPrefs(context)?.edit()?.putBoolean(KEY_DND_VOICE, enabled)?.apply()
+            _dndVoiceFlow.value = enabled
+            notifySessionUpdated()
+        } catch (_: Exception) {}
+    }
+
+    fun isDndVideoEnabled(context: Context?): Boolean {
+        return getPrefs(context)?.getBoolean(KEY_DND_VIDEO, false) ?: false
+    }
+
+    fun setDndVideoEnabled(context: Context?, enabled: Boolean) {
+        try {
+            getPrefs(context)?.edit()?.putBoolean(KEY_DND_VIDEO, enabled)?.apply()
+            _dndVideoFlow.value = enabled
+            notifySessionUpdated()
+        } catch (_: Exception) {}
+    }
+
     private val _sessionUpdateFlow = kotlinx.coroutines.flow.MutableStateFlow<Long>(0L)
     val sessionUpdateFlow: kotlinx.coroutines.flow.StateFlow<Long> = _sessionUpdateFlow
 
@@ -807,7 +839,9 @@ object UserSessionManager {
         val activeFrameId: String = "",
         val frameExpiresAt: String = "",
         val exp: Long = 0L,
-        val isProfileCompleted: Boolean = false
+        val isProfileCompleted: Boolean = false,
+        val isDndVoice: Boolean = false,
+        val isDndVideo: Boolean = false
     )
 
     fun getSession(context: Context? = null): SessionData? {
@@ -862,7 +896,9 @@ object UserSessionManager {
             activeFrameId = validFrameId,
             frameExpiresAt = frameExp,
             exp = userExp,
-            isProfileCompleted = isProfileCompleted
+            isProfileCompleted = isProfileCompleted,
+            isDndVoice = prefs.getBoolean(KEY_DND_VOICE, false),
+            isDndVideo = prefs.getBoolean(KEY_DND_VIDEO, false)
         )
     }
 

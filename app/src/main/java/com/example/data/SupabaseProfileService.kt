@@ -58,7 +58,9 @@ data class UserProfile(
     val lastActiveAt: String = "",
     val activeFrameId: String = "",
     val frameExpiresAt: String = "",
-    val albumPhotos: List<String> = emptyList()
+    val albumPhotos: List<String> = emptyList(),
+    val isDndVoice: Boolean = false,
+    val isDndVideo: Boolean = false
 )
 
 data class CoinTransaction(
@@ -422,7 +424,9 @@ class SupabaseProfileService {
                 }
             } catch (_: Exception) {
                 inMemProfile?.albumPhotos ?: emptyList()
-            }
+            },
+            isDndVoice = obj.optBoolean("is_dnd_voice", inMemProfile?.isDndVoice ?: false),
+            isDndVideo = obj.optBoolean("is_dnd_video", inMemProfile?.isDndVideo ?: false)
         )
     }
 

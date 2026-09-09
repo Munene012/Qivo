@@ -116,6 +116,7 @@ sealed class AppNavStep {
     data object GameCenterStep : AppNavStep()
     data object AboutQivoStep : AppNavStep()
     data object AccountSecurityStep : AppNavStep()
+    data object CallSettingsStep : AppNavStep()
 }
 
 @Composable
@@ -640,7 +641,15 @@ fun MainBottomNavScaffold(
                         },
                         onOpenAboutQivo = {
                             navigateTo(AppNavStep.AboutQivoStep)
+                        },
+                        onOpenCallSettings = {
+                            navigateTo(AppNavStep.CallSettingsStep)
                         }
+                    )
+                }
+                is AppNavStep.CallSettingsStep -> {
+                    CallSettingsScreen(
+                        onBackClick = { navigateBack() }
                     )
                 }
                 is AppNavStep.AboutQivoStep -> {
@@ -1047,6 +1056,7 @@ fun MainBottomNavScaffold(
                 }
             }
         }
+    }
 
         // Full-Screen Promotional App-Open Announcement / Ad (Only shown if active)
         if (openAd != null && !hasDismissedOpenAd) {
@@ -1140,7 +1150,6 @@ fun MainBottomNavScaffold(
                 .statusBarsPadding()
         )
     }
-}
 }
 
 @Composable

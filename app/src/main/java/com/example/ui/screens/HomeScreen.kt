@@ -107,7 +107,7 @@ object HomeScreenDataStore {
     val hasMoreByGender: MutableMap<String, Boolean> = mutableMapOf()
     var savedFirstVisibleItemIndex: Int = 0
     var savedFirstVisibleItemScrollOffset: Int = 0
-    var selectedTab: String = "Recommend"
+    var selectedTab: String = "For You"
 
     fun resetScrollToTop() {
         savedFirstVisibleItemIndex = 0
@@ -173,14 +173,18 @@ fun HomeScreen(
         }
     }
 
-    var selectedTab by remember { mutableStateOf(HomeScreenDataStore.selectedTab) } // "Recommend" or "Nearby"
+    var selectedTab by remember { mutableStateOf(HomeScreenDataStore.selectedTab) } // "For You" or "Nearby"
     LaunchedEffect(selectedTab) {
         HomeScreenDataStore.selectedTab = selectedTab
     }
-    // Instant memory / cache retrieval to prevent blank screen or flickering loading states
+
+    val pageSize = 15
+
+    // Instant memory / cache retrieval to prevent blank screen or flickering loading states (strictly first 15)
     val initialCachedProfiles = remember(targetOppositeGender) {
-        HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender]
+        val cached = HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender]
             ?: AppDataCacheManager.getCachedProfilesSync(context, category = "home_$targetOppositeGender")
+        cached.take(pageSize)
     }
     var realProfiles by remember(targetOppositeGender) { mutableStateOf<List<UserProfile>>(initialCachedProfiles) }
     var isLoadingProfiles by remember(targetOppositeGender) { mutableStateOf(initialCachedProfiles.isEmpty()) }
@@ -188,8 +192,6 @@ fun HomeScreen(
     var hasMoreProfiles by remember(targetOppositeGender) {
         mutableStateOf(HomeScreenDataStore.hasMoreByGender[targetOppositeGender] ?: true)
     }
-
-    val pageSize = 15
 
     // Consistent spacing for buttons & profile cards (both horizontally & vertically)
     val cardSpacing = 8.dp
@@ -201,11 +203,12 @@ fun HomeScreen(
                 if (isPullRefresh || realProfiles.isEmpty()) {
                     isLoadingProfiles = realProfiles.isEmpty()
                 }
-                // 1. Immediately display cached profiles for instant offline/online UI
+                // 1. Immediately display cached profiles for instant offline/online UI (take initial 15)
                 val cached = AppDataCacheManager.getCachedProfiles(context, category = "home_$targetOppositeGender")
                 if (cached.isNotEmpty() && realProfiles.isEmpty()) {
-                    realProfiles = cached
-                    HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = cached
+                    val initialBatch = cached.take(pageSize)
+                    realProfiles = initialBatch
+                    HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = initialBatch
                     isLoadingProfiles = false
                 }
 
@@ -213,17 +216,19 @@ fun HomeScreen(
                 if (NetworkUtils.isOnline(context)) {
                     val initial = profileService.fetchProfilesPaged(offset = 0, limit = pageSize, targetGender = targetOppositeGender)
                     if (initial.isNotEmpty()) {
-                        realProfiles = initial
-                        HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = initial
+                        val first15 = initial.take(pageSize)
+                        realProfiles = first15
+                        HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = first15
                         hasMoreProfiles = initial.size >= pageSize
                         HomeScreenDataStore.hasMoreByGender[targetOppositeGender] = hasMoreProfiles
-                        AppDataCacheManager.saveProfilesCache(context, initial, category = "home_$targetOppositeGender")
+                        AppDataCacheManager.saveProfilesCache(context, first15, category = "home_$targetOppositeGender")
                     }
                 } else {
                     // Offline fallback: if no cached data was found yet
                     if (realProfiles.isEmpty() && cached.isNotEmpty()) {
-                        realProfiles = cached
-                        HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = cached
+                        val initialBatch = cached.take(pageSize)
+                        realProfiles = initialBatch
+                        HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = initialBatch
                     }
                 }
             } catch (e: Throwable) {
@@ -231,8 +236,9 @@ fun HomeScreen(
                 // Fallback to cache on error
                 val cached = AppDataCacheManager.getCachedProfiles(context, category = "home_$targetOppositeGender")
                 if (cached.isNotEmpty() && realProfiles.isEmpty()) {
-                    realProfiles = cached
-                    HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = cached
+                    val initialBatch = cached.take(pageSize)
+                    realProfiles = initialBatch
+                    HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = initialBatch
                 }
             } finally {
                 isLoadingProfiles = false
@@ -247,16 +253,22 @@ fun HomeScreen(
                 try {
                     isLoadingMore = true
                     if (NetworkUtils.isOnline(context)) {
-                        val nextBatch = profileService.fetchProfilesPaged(offset = realProfiles.size, limit = pageSize, targetGender = targetOppositeGender)
+                        val currentCount = realProfiles.size
+                        val nextBatch = profileService.fetchProfilesPaged(offset = currentCount, limit = pageSize, targetGender = targetOppositeGender)
                         if (nextBatch.isNotEmpty()) {
                             val existingIds = realProfiles.map { it.id }.toSet()
                             val distinctNew = nextBatch.filter { it.id !in existingIds }
-                            val combined = realProfiles + distinctNew
-                            realProfiles = combined
-                            HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = combined
-                            AppDataCacheManager.saveProfilesCache(context, combined, category = "home_$targetOppositeGender")
-                        }
-                        if (nextBatch.size < pageSize) {
+                            if (distinctNew.isNotEmpty()) {
+                                val combined = realProfiles + distinctNew
+                                realProfiles = combined
+                                HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = combined
+                                AppDataCacheManager.saveProfilesCache(context, combined, category = "home_$targetOppositeGender")
+                            }
+                            if (nextBatch.size < pageSize || distinctNew.isEmpty()) {
+                                hasMoreProfiles = false
+                                HomeScreenDataStore.hasMoreByGender[targetOppositeGender] = false
+                            }
+                        } else {
                             hasMoreProfiles = false
                             HomeScreenDataStore.hasMoreByGender[targetOppositeGender] = false
                         }
@@ -280,19 +292,21 @@ fun HomeScreen(
                 scope.launch {
                     val cached = AppDataCacheManager.getCachedProfiles(context, category = "home_$targetOppositeGender")
                     if (cached.isNotEmpty()) {
-                        realProfiles = cached
-                        HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = cached
+                        val initialBatch = cached.take(pageSize)
+                        realProfiles = initialBatch
+                        HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = initialBatch
                     }
                 }
             } else {
                 try {
                     val fresh = profileService.fetchProfilesPaged(offset = 0, limit = pageSize, targetGender = targetOppositeGender)
                     if (fresh.isNotEmpty()) {
-                        realProfiles = fresh
+                        val first15 = fresh.take(pageSize)
+                        realProfiles = first15
                         hasMoreProfiles = fresh.size >= pageSize
-                        HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = fresh
+                        HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = first15
                         HomeScreenDataStore.hasMoreByGender[targetOppositeGender] = hasMoreProfiles
-                        AppDataCacheManager.saveProfilesCache(context, fresh, category = "home_$targetOppositeGender")
+                        AppDataCacheManager.saveProfilesCache(context, first15, category = "home_$targetOppositeGender")
                     }
                 } catch (e: Throwable) {
                     android.util.Log.e("HomeScreen", "Error refreshing profiles: ${e.message}", e)
@@ -709,21 +723,21 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.Start,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Recommend Tab
+                            // For You Tab
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 modifier = Modifier
-                                    .clickable { selectedTab = "Recommend" }
+                                    .clickable { selectedTab = "For You" }
                                     .padding(end = 20.dp)
                             ) {
                                 Text(
-                                    text = "Recommend",
+                                    text = "For You",
                                     fontSize = 20.sp,
-                                    fontWeight = if (selectedTab == "Recommend") FontWeight.Bold else FontWeight.Medium,
-                                    color = if (selectedTab == "Recommend") colors.textPrimary else colors.textSecondary
+                                    fontWeight = if (selectedTab == "For You") FontWeight.Bold else FontWeight.Medium,
+                                    color = if (selectedTab == "For You") colors.textPrimary else colors.textSecondary
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
-                                if (selectedTab == "Recommend") {
+                                if (selectedTab == "For You") {
                                     Box(
                                         modifier = Modifier
                                             .width(32.dp)
@@ -812,7 +826,7 @@ fun HomeScreen(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = if (selectedTab == "Nearby") "Switch to Recommend to view users from all countries!" else "Pull down to refresh or check back soon!",
+                                text = if (selectedTab == "Nearby") "Switch to For You to view users from all countries!" else "Pull down to refresh or check back soon!",
                                 fontSize = 13.sp,
                                 color = colors.textSecondary,
                                 textAlign = TextAlign.Center
