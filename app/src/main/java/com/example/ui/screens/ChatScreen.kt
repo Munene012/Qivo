@@ -166,8 +166,8 @@ fun ChatScreen(
 
     var messagesList by remember { mutableStateOf(initialMessages) }
     var profilesMap by remember { mutableStateOf(initialProfiles) }
-    var isInitialSyncDone by remember { mutableStateOf(initialMessages.isNotEmpty()) }
-    var isLoadingMessages by remember { mutableStateOf(initialMessages.isEmpty()) }
+    var isInitialSyncDone by remember { mutableStateOf(false) }
+    var isLoadingMessages by remember { mutableStateOf(true) }
     var selectedChatForDelete by remember { mutableStateOf<ConversationItem?>(null) }
     var chatBannerAds by remember { mutableStateOf<List<AppAdvertisement>>(emptyList()) }
     var displayedLimit by remember { mutableStateOf(20) }
@@ -236,14 +236,12 @@ fun ChatScreen(
         if (currentUserId.isNotEmpty()) {
             // First pass: immediately ensure we have profiles and full messages
             try {
-                val msgs = chatService.fetchUserMessages(currentUserId, context, limit = 300)
-                if (profilesMap.isEmpty()) {
-                    val allProfs = profileService.fetchAllProfiles()
-                    val map = allProfs.associateBy { it.id.trim() }
-                    if (map.isNotEmpty()) {
-                        profilesMap = map
-                    }
+                val allProfs = profileService.fetchAllProfiles()
+                val map = allProfs.associateBy { it.id.trim() }
+                if (map.isNotEmpty()) {
+                    profilesMap = map
                 }
+                val msgs = chatService.fetchUserMessages(currentUserId, context, limit = 300)
                 if (!areMessageListsEqual(messagesList, msgs)) {
                     messagesList = msgs
                 }
@@ -412,7 +410,7 @@ fun ChatScreen(
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            if (isLoadingMessages && messagesList.isEmpty()) {
+            if (isLoadingMessages) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
