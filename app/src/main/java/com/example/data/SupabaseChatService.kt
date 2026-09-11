@@ -393,8 +393,41 @@ class SupabaseChatService {
         if (myUserId.isBlank() || partnerId.isBlank()) return false
         val now = System.currentTimeMillis()
         val prefs = context.getSharedPreferences("qivo_deleted_chats", Context.MODE_PRIVATE)
-        prefs.edit().putLong("${myUserId}_${partnerId}", now).apply()
+        prefs.edit().putLong("${myUserId.trim()}_${partnerId.trim()}", now).apply()
+
+        // Immediately remove soft-deleted messages from in-memory and disk caches
+        val currentInMem = _cachedUserMessages[myUserId.trim()]
+        if (!currentInMem.isNullOrEmpty()) {
+            val filtered = currentInMem.filterNot { msg ->
+                (msg.senderId.trim().equals(myUserId.trim(), ignoreCase = true) && msg.receiverId.trim().equals(partnerId.trim(), ignoreCase = true)) ||
+                (msg.receiverId.trim().equals(myUserId.trim(), ignoreCase = true) && msg.senderId.trim().equals(partnerId.trim(), ignoreCase = true))
+            }
+            _cachedUserMessages[myUserId.trim()] = filtered
+            try {
+                AppDataCacheManager.saveChatMessagesCache(context, myUserId.trim(), filtered)
+            } catch (_: Exception) {}
+        }
         return true
+    }
+
+    /**
+     * Checks if a conversation with partnerId is currently soft-deleted for myUserId.
+     * If latestMessageCreatedAt is provided, checks whether a new message was sent/received AFTER the cutoff.
+     */
+    fun isConversationSoftDeleted(
+        context: Context?,
+        myUserId: String,
+        partnerId: String,
+        latestMessageCreatedAt: String? = null
+    ): Boolean {
+        if (context == null || myUserId.isBlank() || partnerId.isBlank()) return false
+        val prefs = context.getSharedPreferences("qivo_deleted_chats", Context.MODE_PRIVATE)
+        val cutoff = prefs.getLong("${myUserId.trim()}_${partnerId.trim()}", 0L)
+        if (cutoff <= 0L) return false
+        if (latestMessageCreatedAt.isNullOrBlank()) return true
+        val msgTime = parseTimestampToMillis(latestMessageCreatedAt)
+        // If message timestamp is at or before cutoff (allowing 5000ms clock skew buffer), it remains deleted
+        return msgTime == 0L || msgTime <= (cutoff + 5000L)
     }
 
     /**
@@ -403,7 +436,77 @@ class SupabaseChatService {
     fun clearSoftDelete(context: Context, myUserId: String, partnerId: String) {
         if (myUserId.isBlank() || partnerId.isBlank()) return
         val prefs = context.getSharedPreferences("qivo_deleted_chats", Context.MODE_PRIVATE)
-        prefs.edit().remove("${myUserId}_${partnerId}").apply()
+        prefs.edit().remove("${myUserId.trim()}_${partnerId.trim()}").apply()
+    }
+
+    /**
+     * Check recent incoming messages for heads-up notifications and badges.
+     * Does NOT overwrite or truncate the user's full conversation cache.
+     */
+    suspend fun checkRecentIncomingMessages(
+        userId: String,
+        context: Context? = null,
+        limit: Int = 30
+    ): List<ChatMessage> {
+        return withContext(Dispatchers.IO) {
+            val uId = userId.trim()
+            if (uId.isBlank()) return@withContext emptyList()
+            try {
+                val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+                val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+                if (baseUrl.isEmpty() || apiKey.isEmpty()) return@withContext emptyList()
+
+                val endpoint = "$baseUrl/rest/v1/messages?receiver_id=eq.$uId&order=created_at.desc&limit=$limit"
+                val authHeader = UserSessionManager.getAuthHeader(context)
+
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", authHeader)
+                    .get()
+                    .build()
+
+                val deletedPrefs = context?.getSharedPreferences("qivo_deleted_chats", Context.MODE_PRIVATE)
+
+                client.newCall(request).execute().use { response ->
+                    val respBody = response.body?.string() ?: ""
+                    if (response.isSuccessful && respBody.startsWith("[")) {
+                        val jsonArray = JSONArray(respBody)
+                        val list = mutableListOf<ChatMessage>()
+                        for (i in 0 until jsonArray.length()) {
+                            val obj = jsonArray.getJSONObject(i)
+                            val sId = obj.optString("sender_id", "").trim()
+                            val rId = obj.optString("receiver_id", "").trim()
+                            val createdAtStr = obj.optString("created_at", "")
+
+                            val cutoff = deletedPrefs?.getLong("${uId}_${sId}", 0L) ?: 0L
+                            if (cutoff > 0L) {
+                                val ts = parseTimestampToMillis(createdAtStr)
+                                if (ts == 0L || ts <= (cutoff + 5000L)) continue
+                            }
+
+                            list.add(
+                                ChatMessage(
+                                    id = obj.optLong("id", 0L),
+                                    senderId = sId,
+                                    senderName = obj.optString("sender_name", "User"),
+                                    senderAvatar = obj.optString("sender_avatar", ""),
+                                    receiverId = rId,
+                                    receiverName = obj.optString("receiver_name", "User"),
+                                    message = obj.optString("message", ""),
+                                    createdAt = createdAtStr,
+                                    isRead = obj.optBoolean("is_read", false)
+                                )
+                            )
+                        }
+                        return@withContext list
+                    }
+                }
+                emptyList()
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
     }
 
     /**
@@ -413,7 +516,8 @@ class SupabaseChatService {
         userId: String,
         context: Context? = null,
         offset: Int = 0,
-        limit: Int = 100
+        limit: Int = 300,
+        updateCache: Boolean = true
     ): List<ChatMessage> {
         return withContext(Dispatchers.IO) {
             try {
@@ -441,8 +545,8 @@ class SupabaseChatService {
                         val messagesList = mutableListOf<ChatMessage>()
                         for (i in 0 until jsonArray.length()) {
                             val obj = jsonArray.getJSONObject(i)
-                            val sId = obj.optString("sender_id", "")
-                            val rId = obj.optString("receiver_id", "")
+                            val sId = obj.optString("sender_id", "").trim()
+                            val rId = obj.optString("receiver_id", "").trim()
                             val createdAtStr = obj.optString("created_at", "")
 
                             val partnerId = if (sId.equals(userId, ignoreCase = true)) rId else sId
@@ -456,9 +560,8 @@ class SupabaseChatService {
 
                             if (cutoffTimestamp > 0L) {
                                 val msgTimestamp = parseTimestampToMillis(createdAtStr)
-                                // Only suppress if message was created on or before the soft-delete cutoff
-                                // Any newly sent or received message (text, gift, photo) created after cutoff will NOT be skipped
-                                if (msgTimestamp in 1..cutoffTimestamp) {
+                                // Only suppress if message was created on or before the soft-delete cutoff (+ 5s skew buffer)
+                                if (msgTimestamp == 0L || msgTimestamp <= (cutoffTimestamp + 5000L)) {
                                     continue
                                 }
                             }
@@ -477,15 +580,21 @@ class SupabaseChatService {
                                 )
                             )
                         }
-                        val unread = messagesList.count { !it.isRead && it.receiverId.trim().equals(userId.trim(), ignoreCase = true) }
-                        _totalUnreadCount.value = unread
-                        
-                        // Update in-memory cache and persistent disk storage
-                        updateInMemoryMessages(userId, messagesList)
-                        if (context != null) {
-                            try {
-                                AppDataCacheManager.saveChatMessagesCache(context, userId, messagesList)
-                            } catch (_: Exception) {}
+
+                        if (updateCache) {
+                            val finalToCache = if (offset == 0) {
+                                messagesList
+                            } else {
+                                (getInMemoryMessages(userId) + messagesList).distinctBy { it.id }
+                            }
+                            val unread = finalToCache.count { !it.isRead && it.receiverId.trim().equals(userId.trim(), ignoreCase = true) }
+                            _totalUnreadCount.value = unread
+                            updateInMemoryMessages(userId, finalToCache)
+                            if (context != null) {
+                                try {
+                                    AppDataCacheManager.saveChatMessagesCache(context, userId, finalToCache)
+                                } catch (_: Exception) {}
+                            }
                         }
 
                         return@withContext messagesList

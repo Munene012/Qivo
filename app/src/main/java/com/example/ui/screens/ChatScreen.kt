@@ -114,6 +114,19 @@ data class ConversationItem(
     val isOnline: Boolean = false
 )
 
+private fun areMessageListsEqual(a: List<ChatMessage>, b: List<ChatMessage>): Boolean {
+    if (a === b) return true
+    if (a.size != b.size) return false
+    for (i in a.indices) {
+        val x = a[i]
+        val y = b[i]
+        if (x.id != y.id || x.isRead != y.isRead || x.message != y.message || x.createdAt != y.createdAt) {
+            return false
+        }
+    }
+    return true
+}
+
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
@@ -134,7 +147,12 @@ fun ChatScreen(
     val initialMessages = remember(currentUserId) {
         if (currentUserId.isNotEmpty()) {
             val inMem = SupabaseChatService.getInMemoryMessages(currentUserId)
-            if (inMem.isNotEmpty()) inMem else AppDataCacheManager.getCachedChatMessagesSync(context, currentUserId)
+            val msgs = if (inMem.isNotEmpty()) inMem else AppDataCacheManager.getCachedChatMessagesSync(context, currentUserId)
+            // Filter out any soft-deleted messages
+            msgs.filterNot { msg ->
+                val partnerId = if (msg.senderId.trim().equals(currentUserId, ignoreCase = true)) msg.receiverId.trim() else msg.senderId.trim()
+                chatService.isConversationSoftDeleted(context, currentUserId, partnerId, msg.createdAt)
+            }
         } else emptyList()
     }
     val initialProfiles = remember {
@@ -153,6 +171,8 @@ fun ChatScreen(
     var selectedChatForDelete by remember { mutableStateOf<ConversationItem?>(null) }
     var chatBannerAds by remember { mutableStateOf<List<AppAdvertisement>>(emptyList()) }
     var displayedLimit by remember { mutableStateOf(20) }
+    var isLoadingMoreChats by remember { mutableStateOf(false) }
+    var hasMoreServerChats by remember { mutableStateOf(true) }
 
     var isNotificationsEnabled by remember {
         mutableStateOf(NotificationManagerCompat.from(context).areNotificationsEnabled())
@@ -175,13 +195,15 @@ fun ChatScreen(
     val reloadData: () -> Unit = {
         scope.launch {
             if (currentUserId.isNotEmpty()) {
-                val msgs = chatService.fetchUserMessages(currentUserId, context)
-                val allProfs = profileService.fetchAllProfiles()
-                val map = allProfs.associateBy { it.id.trim() }
-                if (map.isNotEmpty() && profilesMap != map) {
-                    profilesMap = map
+                val msgs = chatService.fetchUserMessages(currentUserId, context, limit = 300)
+                if (profilesMap.isEmpty()) {
+                    val allProfs = profileService.fetchAllProfiles()
+                    val map = allProfs.associateBy { it.id.trim() }
+                    if (map.isNotEmpty() && profilesMap != map) {
+                        profilesMap = map
+                    }
                 }
-                if (messagesList != msgs) {
+                if (!areMessageListsEqual(messagesList, msgs)) {
                     messagesList = msgs
                 }
             }
@@ -196,49 +218,71 @@ fun ChatScreen(
     val pullRefreshState = rememberCustomPullRefreshState(
         onRefresh = {
             if (currentUserId.isNotEmpty()) {
-                val msgs = chatService.fetchUserMessages(currentUserId, context)
+                val msgs = chatService.fetchUserMessages(currentUserId, context, limit = 300)
                 val allProfs = profileService.fetchAllProfiles()
                 val map = allProfs.associateBy { it.id.trim() }
                 if (map.isNotEmpty() && profilesMap != map) {
                     profilesMap = map
                 }
-                if (messagesList != msgs) {
+                if (!areMessageListsEqual(messagesList, msgs)) {
                     messagesList = msgs
                 }
             }
         }
     )
 
-    // Initial load and periodic live synchronization without unnecessary UI re-rendering/blinking
+    // Initial load and periodic live synchronization without UI re-rendering or blinking
     LaunchedEffect(currentUserId) {
         if (currentUserId.isNotEmpty()) {
-            while (true) {
-                try {
-                    val msgs = chatService.fetchUserMessages(currentUserId, context)
+            // First pass: immediately ensure we have profiles and full messages
+            try {
+                val msgs = chatService.fetchUserMessages(currentUserId, context, limit = 300)
+                if (profilesMap.isEmpty()) {
                     val allProfs = profileService.fetchAllProfiles()
                     val map = allProfs.associateBy { it.id.trim() }
-                    
-                    // Only update state if data actually changed to prevent any list blinking
-                    if (map.isNotEmpty() && profilesMap != map) {
+                    if (map.isNotEmpty()) {
                         profilesMap = map
                     }
-                    if (messagesList != msgs) {
+                }
+                if (!areMessageListsEqual(messagesList, msgs)) {
+                    messagesList = msgs
+                }
+                isInitialSyncDone = true
+                isLoadingMessages = false
+            } catch (_: Exception) {
+                isInitialSyncDone = true
+                isLoadingMessages = false
+            }
+
+            // Periodic sync with smooth diff check to prevent blinking
+            while (true) {
+                kotlinx.coroutines.delay(4_000L)
+                try {
+                    val msgs = chatService.fetchUserMessages(currentUserId, context, limit = 300)
+                    
+                    // Check if there are any new partners missing in profilesMap
+                    val missingPartner = msgs.any { m ->
+                        val pId = if (m.senderId.trim().equals(currentUserId, ignoreCase = true)) m.receiverId.trim() else m.senderId.trim()
+                        pId.isNotEmpty() && !profilesMap.containsKey(pId)
+                    }
+                    if (missingPartner || profilesMap.isEmpty()) {
+                        val allProfs = profileService.fetchAllProfiles()
+                        val map = allProfs.associateBy { it.id.trim() }
+                        if (map.isNotEmpty() && profilesMap != map) {
+                            profilesMap = map
+                        }
+                    }
+
+                    if (!areMessageListsEqual(messagesList, msgs)) {
                         messagesList = msgs
                     }
-                    isInitialSyncDone = true
-                    isLoadingMessages = false
-                } catch (_: Exception) {
-                    isInitialSyncDone = true
-                    isLoadingMessages = false
-                }
-                kotlinx.coroutines.delay(4_000L)
+                } catch (_: Exception) {}
             }
         } else {
             isLoadingMessages = false
             isInitialSyncDone = true
         }
     }
-
 
     // Scroll to top on first click if scrolled down; trigger refresh if already at top / second click
     LaunchedEffect(refreshTrigger) {
@@ -269,7 +313,13 @@ fun ChatScreen(
 
         grouped.mapNotNull { (partnerId, msgs) ->
             if (msgs.isEmpty()) return@mapNotNull null
-            val latest = msgs.first()
+            val latest = msgs.maxByOrNull { chatService.parseTimestampToMillis(it.createdAt) } ?: msgs.first()
+
+            // Strictly filter out soft-deleted conversations
+            if (chatService.isConversationSoftDeleted(context, currentUserId, partnerId, latest.createdAt)) {
+                return@mapNotNull null
+            }
+
             val isSender = latest.senderId.trim().equals(currentUserId, ignoreCase = true)
 
             val partnerProfile = profilesMap[partnerId]
@@ -295,7 +345,7 @@ fun ChatScreen(
                 unreadCount = unreadCount,
                 isOnline = isOnline
             )
-        }
+        }.sortedByDescending { chatService.parseTimestampToMillis(it.timestamp) }
     }
 
     val totalUnreadCount = remember(conversations) {
@@ -306,18 +356,46 @@ fun ChatScreen(
         conversations.take(displayedLimit)
     }
 
-    // Trigger loading more conversations when scrolling near bottom
+    // Trigger loading more conversations when scrolling near bottom (20 items at a time)
     val shouldLoadMoreChats by remember {
         derivedStateOf {
             val totalItems = listState.layoutInfo.totalItemsCount
             val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            totalItems > 0 && lastVisibleItem >= totalItems - 2 && displayedLimit < conversations.size
+            totalItems > 0 && lastVisibleItem >= totalItems - 3 && (displayedLimit < conversations.size || (!isLoadingMoreChats && hasMoreServerChats))
         }
     }
 
     LaunchedEffect(shouldLoadMoreChats) {
-        if (shouldLoadMoreChats) {
-            displayedLimit += 20
+        if (shouldLoadMoreChats && !isLoadingMoreChats) {
+            if (displayedLimit < conversations.size) {
+                displayedLimit = minOf(displayedLimit + 20, conversations.size)
+            } else if (hasMoreServerChats && currentUserId.isNotEmpty()) {
+                isLoadingMoreChats = true
+                try {
+                    val nextMsgs = chatService.fetchUserMessages(
+                        userId = currentUserId,
+                        context = context,
+                        offset = messagesList.size,
+                        limit = 100,
+                        updateCache = false
+                    )
+                    if (nextMsgs.isEmpty()) {
+                        hasMoreServerChats = false
+                    } else {
+                        val combined = (messagesList + nextMsgs).distinctBy { it.id }
+                        if (combined.size != messagesList.size) {
+                            messagesList = combined
+                            displayedLimit += 20
+                        } else {
+                            hasMoreServerChats = false
+                        }
+                    }
+                } catch (_: Exception) {
+                    hasMoreServerChats = false
+                } finally {
+                    isLoadingMoreChats = false
+                }
+            }
         }
     }
 
@@ -419,9 +497,10 @@ fun ChatScreen(
 
                     items(
                         items = displayedConversations,
-                        key = { it.partnerId }
+                        key = { it.partnerId },
+                        contentType = { "conversation_item" }
                     ) { item ->
-                        val targetProfile = UserProfile(
+                        val targetProfile = profilesMap[item.partnerId] ?: UserProfile(
                             id = item.partnerId,
                             numericId = item.partnerNumericId,
                             email = "",
@@ -432,211 +511,26 @@ fun ChatScreen(
                             avatarUrl = item.partnerAvatar
                         )
 
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .combinedClickable(
-                                    onClick = {
-                                        onOpenConversation(targetProfile)
-                                    },
-                                    onLongClick = {
-                                        selectedChatForDelete = item
-                                    }
-                                ),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-                            border = null
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Profile Photo / Collectible Doll Mascot with Green Online Indicator
-                                Box(
-                                    modifier = Modifier
-                                        .size(54.dp)
-                                        .clickable {
-                                            val targetProfile = profilesMap[item.partnerId] ?: UserProfile(
-                                                id = item.partnerId,
-                                                name = item.partnerName,
-                                                avatarUrl = item.partnerAvatar,
-                                                gender = item.partnerGender,
-                                                numericId = item.partnerNumericId,
-                                                country = item.partnerCountry
-                                            )
-                                            onOpenUserDetail(targetProfile)
-                                        }
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize(),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        AvatarHelper.UserAvatarImage(
-                                            avatarUrl = item.partnerAvatar,
-                                            userId = item.partnerId,
-                                            gender = item.partnerGender,
-                                            numericId = item.partnerNumericId,
-                                            contentDescription = item.partnerName,
-                                            showFrame = true,
-                                            shape = CircleShape,
-                                            modifier = Modifier.fillMaxSize(),
-                                            contentScale = ContentScale.Crop
-                                        )
-                                    }
-
-                                    // Live Green Online Dot
-                                    if (item.isOnline) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(13.dp)
-                                                .align(Alignment.BottomEnd)
-                                                .clip(CircleShape)
-                                                .background(if (isDark) Color(0xFF18181C) else Color.White)
-                                                .padding(2.dp)
-                                                .clip(CircleShape)
-                                                .background(Color(0xFF4CAF50))
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.width(14.dp))
-
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = item.partnerName,
-                                            fontSize = 16.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = colors.textPrimary,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-
-                                        val formattedDate = remember(item.timestamp) {
-                                            if (item.timestamp.length >= 10) {
-                                                item.timestamp.substring(5, 10).replace("-", "/")
-                                            } else {
-                                                "Just now"
-                                            }
-                                        }
-
-                                        Text(
-                                            text = formattedDate,
-                                            fontSize = 11.sp,
-                                            color = colors.textSecondary
-                                        )
-                                    }
-
-                                    Spacer(modifier = Modifier.height(4.dp))
-
-                                    val previewText = remember(item.latestMessage) {
-                                        val raw = item.latestMessage
-                                            .replace(Regex("^\\[GLOBAL BLAST\\]\\s*", RegexOption.IGNORE_CASE), "")
-                                            .replace(Regex("^GLOBAL BLAST:\\s*", RegexOption.IGNORE_CASE), "")
-                                            .replace(Regex("^Global Blast:\\s*", RegexOption.IGNORE_CASE), "")
-                                            .replace(Regex("^\\[BLAST\\]\\s*", RegexOption.IGNORE_CASE), "")
-                                            .trim()
-                                        val lower = raw.lowercase()
-                                        if (lower.startsWith("[voice]") ||
-                                            lower.startsWith("voice_") ||
-                                            lower.contains("/storage/v1/object/public/voice/") ||
-                                            lower.contains("/storage/v1/object/voice/") ||
-                                            lower.contains("/voice/") ||
-                                            lower.contains(".m4a") ||
-                                            lower.contains(".aac") ||
-                                            lower.contains(".mp3") ||
-                                            lower.contains(".wav") ||
-                                            lower.contains(".ogg") ||
-                                            lower.contains(".amr") ||
-                                            lower.contains(".3gp") ||
-                                            lower.contains(".opus")
-                                        ) {
-                                            "[voice]"
-                                        } else if (raw.startsWith("[image]", ignoreCase = true) ||
-                                            raw.startsWith("[photo]", ignoreCase = true) ||
-                                            raw.startsWith("content://", ignoreCase = true) ||
-                                            raw.startsWith("file://", ignoreCase = true) ||
-                                            ((raw.startsWith("http://", ignoreCase = true) || raw.startsWith("https://", ignoreCase = true)) &&
-                                            (raw.contains("/storage/") || raw.contains("/photos/") || raw.contains("/avatars/") ||
-                                             raw.endsWith(".jpg", ignoreCase = true) || raw.endsWith(".jpeg", ignoreCase = true) ||
-                                             raw.endsWith(".png", ignoreCase = true) || raw.endsWith(".webp", ignoreCase = true) ||
-                                             raw.endsWith(".gif", ignoreCase = true)))
-                                        ) {
-                                            "[photo]"
-                                        } else if (raw.startsWith("[gift]", ignoreCase = true)) {
-                                            val giftText = raw.removePrefix("[gift]").trim()
-                                            if (giftText.isNotEmpty()) "🎁 $giftText" else "🎁 Gift"
-                                        } else {
-                                            raw
-                                        }
-                                    }
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = previewText,
-                                            fontSize = 13.sp,
-                                            color = if (item.isUnread) (if (isDark) Color.White else Color(0xFF0F172A)) else colors.textSecondary,
-                                            fontWeight = if (item.isUnread) FontWeight.Medium else FontWeight.Light,
-                                            letterSpacing = 0.15.sp,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.weight(1f, fill = false)
-                                        )
-
-                                        // Unread Counter Badge and Unread Icon Indicator
-                                        if (item.unreadCount > 0) {
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(8.dp)
-                                                        .clip(CircleShape)
-                                                        .background(Color(0xFF00E676))
-                                                )
-                                                Box(
-                                                    modifier = Modifier
-                                                        .height(18.dp)
-                                                        .widthIn(min = 18.dp)
-                                                        .clip(CircleShape)
-                                                        .background(Color(0xFFFF3D00))
-                                                        .padding(horizontal = 5.dp),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Text(
-                                                        text = if (item.unreadCount > 99) "99+" else "${item.unreadCount}",
-                                                        color = Color.White,
-                                                        fontSize = 10.sp,
-                                                        fontWeight = FontWeight.Bold
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                        ConversationItemRow(
+                            item = item,
+                            onClick = {
+                                onOpenConversation(targetProfile)
+                            },
+                            onLongClick = {
+                                selectedChatForDelete = item
+                            },
+                            onAvatarClick = {
+                                onOpenUserDetail(targetProfile)
                             }
-                        }
+                        )
                     }
 
-                    if (displayedLimit < conversations.size) {
+                    if (displayedLimit < conversations.size || isLoadingMoreChats) {
                         item(key = "chat_list_loading_more") {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 12.dp),
+                                    .padding(vertical = 14.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Row(
@@ -914,9 +808,14 @@ fun ChatScreen(
                 Button(
                     onClick = {
                         scope.launch {
-                            chatService.softDeleteConversation(context, currentUserId, chatToDelete.partnerId)
+                            val partnerId = chatToDelete.partnerId
+                            chatService.softDeleteConversation(context, currentUserId, partnerId)
+                            // Immediately remove that partner's messages from local messagesList state
+                            messagesList = messagesList.filterNot { msg ->
+                                val p = if (msg.senderId.trim().equals(currentUserId, ignoreCase = true)) msg.receiverId.trim() else msg.senderId.trim()
+                                p.equals(partnerId, ignoreCase = true)
+                            }
                             selectedChatForDelete = null
-                            reloadData()
                             AppToast.show("Chat deleted")
                         }
                     },
@@ -936,6 +835,199 @@ fun ChatScreen(
                     Text("Delete", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 }
                 Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ConversationItemRow(
+    item: ConversationItem,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onAvatarClick: () -> Unit
+) {
+    val colors = com.example.ui.theme.AppTheme.colors
+    val isDark = colors.isDark
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBg),
+        border = null
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Profile Photo / Avatar with Green Online Indicator
+            Box(
+                modifier = Modifier
+                    .size(54.dp)
+                    .clickable(onClick = onAvatarClick)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AvatarHelper.UserAvatarImage(
+                        avatarUrl = item.partnerAvatar,
+                        userId = item.partnerId,
+                        gender = item.partnerGender,
+                        numericId = item.partnerNumericId,
+                        contentDescription = item.partnerName,
+                        showFrame = true,
+                        shape = CircleShape,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+
+                // Live Green Online Dot
+                if (item.isOnline) {
+                    Box(
+                        modifier = Modifier
+                            .size(13.dp)
+                            .align(Alignment.BottomEnd)
+                            .clip(CircleShape)
+                            .background(if (isDark) Color(0xFF18181C) else Color.White)
+                            .padding(2.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF4CAF50))
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = item.partnerName,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    val formattedDate = if (item.timestamp.length >= 10) {
+                        item.timestamp.substring(5, 10).replace("-", "/")
+                    } else {
+                        "Just now"
+                    }
+
+                    Text(
+                        text = formattedDate,
+                        fontSize = 11.sp,
+                        color = colors.textSecondary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                val previewText = remember(item.latestMessage) {
+                    val raw = item.latestMessage
+                        .replace(Regex("^\\[GLOBAL BLAST\\]\\s*", RegexOption.IGNORE_CASE), "")
+                        .replace(Regex("^GLOBAL BLAST:\\s*", RegexOption.IGNORE_CASE), "")
+                        .replace(Regex("^Global Blast:\\s*", RegexOption.IGNORE_CASE), "")
+                        .replace(Regex("^\\[BLAST\\]\\s*", RegexOption.IGNORE_CASE), "")
+                        .trim()
+                    val lower = raw.lowercase()
+                    if (lower.startsWith("[voice]") ||
+                        lower.startsWith("voice_") ||
+                        lower.contains("/storage/v1/object/public/voice/") ||
+                        lower.contains("/storage/v1/object/voice/") ||
+                        lower.contains("/voice/") ||
+                        lower.contains(".m4a") ||
+                        lower.contains(".aac") ||
+                        lower.contains(".mp3") ||
+                        lower.contains(".wav") ||
+                        lower.contains(".ogg") ||
+                        lower.contains(".amr") ||
+                        lower.contains(".3gp") ||
+                        lower.contains(".opus")
+                    ) {
+                        "[voice]"
+                    } else if (raw.startsWith("[image]", ignoreCase = true) ||
+                        raw.startsWith("[photo]", ignoreCase = true) ||
+                        raw.startsWith("content://", ignoreCase = true) ||
+                        raw.startsWith("file://", ignoreCase = true) ||
+                        ((raw.startsWith("http://", ignoreCase = true) || raw.startsWith("https://", ignoreCase = true)) &&
+                        (raw.contains("/storage/") || raw.contains("/photos/") || raw.contains("/avatars/") ||
+                         raw.endsWith(".jpg", ignoreCase = true) || raw.endsWith(".jpeg", ignoreCase = true) ||
+                         raw.endsWith(".png", ignoreCase = true) || raw.endsWith(".webp", ignoreCase = true) ||
+                         raw.endsWith(".gif", ignoreCase = true)))
+                    ) {
+                        "[photo]"
+                    } else if (raw.startsWith("[gift]", ignoreCase = true)) {
+                        val giftText = raw.removePrefix("[gift]").trim()
+                        if (giftText.isNotEmpty()) "🎁 $giftText" else "🎁 Gift"
+                    } else {
+                        raw
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = previewText,
+                        fontSize = 13.sp,
+                        color = if (item.isUnread) (if (isDark) Color.White else Color(0xFF0F172A)) else colors.textSecondary,
+                        fontWeight = if (item.isUnread) FontWeight.Medium else FontWeight.Light,
+                        letterSpacing = 0.15.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+
+                    // Unread Counter Badge and Unread Icon Indicator
+                    if (item.unreadCount > 0) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF00E676))
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .height(18.dp)
+                                    .widthIn(min = 18.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFFF3D00))
+                                    .padding(horizontal = 5.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (item.unreadCount > 99) "99+" else "${item.unreadCount}",
+                                    color = Color.White,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }

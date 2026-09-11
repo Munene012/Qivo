@@ -419,7 +419,7 @@ fun MainBottomNavScaffold(
         if (isOnline && userId.isNotBlank()) {
             while (isOnline) {
                 try {
-                    val messages = chatService.fetchUserMessages(userId, context, offset = 0, limit = 30)
+                    val messages = chatService.checkRecentIncomingMessages(userId, context, limit = 30)
                     val unreadIncoming = messages.filter {
                         !it.isRead && it.receiverId.trim().equals(userId.trim(), ignoreCase = true)
                     }
