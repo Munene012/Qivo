@@ -63,6 +63,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -144,30 +145,24 @@ fun ChatScreen(
     val session = remember { UserSessionManager.getSession(context) }
     val currentUserId = session?.userId ?: ""
 
-    val initialMessages = remember(currentUserId) {
+    // Connect and synchronize background state holder
+    LaunchedEffect(currentUserId) {
         if (currentUserId.isNotEmpty()) {
-            val inMem = SupabaseChatService.getInMemoryMessages(currentUserId)
-            val msgs = if (inMem.isNotEmpty()) inMem else AppDataCacheManager.getCachedChatMessagesSync(context, currentUserId)
-            // Filter out any soft-deleted messages
-            msgs.filterNot { msg ->
-                val partnerId = if (msg.senderId.trim().equals(currentUserId, ignoreCase = true)) msg.receiverId.trim() else msg.senderId.trim()
-                chatService.isConversationSoftDeleted(context, currentUserId, partnerId, msg.createdAt)
-            }
-        } else emptyList()
-    }
-    val initialProfiles = remember {
-        val inMem = SupabaseProfileService.getInMemoryProfiles()
-        val profs = if (inMem.isNotEmpty()) inMem else {
-            val all = AppDataCacheManager.getCachedProfilesSync(context, "all")
-            if (all.isNotEmpty()) all else AppDataCacheManager.getCachedProfilesSync(context, "home")
+            com.example.data.ChatStateHolder.initialize(context, currentUserId)
         }
-        profs.associateBy { it.id.trim() }
     }
 
-    var messagesList by remember { mutableStateOf(initialMessages) }
-    var profilesMap by remember { mutableStateOf(initialProfiles) }
-    var isInitialSyncDone by remember { mutableStateOf(false) }
-    var isLoadingMessages by remember { mutableStateOf(true) }
+    val messagesListState = com.example.data.ChatStateHolder.messagesList.collectAsState()
+    val profilesMapState = com.example.data.ChatStateHolder.profilesMap.collectAsState()
+    val isSyncingState = com.example.data.ChatStateHolder.isSyncing.collectAsState()
+    val hasCompletedInitialSyncState = com.example.data.ChatStateHolder.hasCompletedInitialSync.collectAsState()
+
+    val messagesList = messagesListState.value
+    val profilesMap = profilesMapState.value
+
+    val isInitialSyncDone = hasCompletedInitialSyncState.value
+    val isLoadingMessages = !hasCompletedInitialSyncState.value
+
     var selectedChatForDelete by remember { mutableStateOf<ConversationItem?>(null) }
     var chatBannerAds by remember { mutableStateOf<List<AppAdvertisement>>(emptyList()) }
     var displayedLimit by remember { mutableStateOf(20) }
@@ -184,103 +179,39 @@ fun ChatScreen(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 isNotificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
+                if (currentUserId.isNotEmpty()) {
+                    com.example.data.ChatStateHolder.connectRealtime(currentUserId)
+                    com.example.data.ChatStateHolder.syncWithNetwork(context, currentUserId)
+                }
+            } else if (event == Lifecycle.Event.ON_PAUSE) {
+                com.example.data.ChatStateHolder.disconnect()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            com.example.data.ChatStateHolder.disconnect()
         }
     }
 
     val reloadData: () -> Unit = {
+        if (currentUserId.isNotEmpty()) {
+            com.example.data.ChatStateHolder.syncWithNetwork(context, currentUserId)
+        }
         scope.launch {
-            if (currentUserId.isNotEmpty()) {
-                val msgs = chatService.fetchUserMessages(currentUserId, context, limit = 300)
-                if (profilesMap.isEmpty()) {
-                    val allProfs = profileService.fetchAllProfiles()
-                    val map = allProfs.associateBy { it.id.trim() }
-                    if (map.isNotEmpty() && profilesMap != map) {
-                        profilesMap = map
-                    }
-                }
-                if (!areMessageListsEqual(messagesList, msgs)) {
-                    messagesList = msgs
-                }
-            }
             try {
                 chatBannerAds = adService.fetchActiveAds(context, AppAdvertisement.AD_TYPE_CHAT_BANNER, limit = 3)
             } catch (_: Exception) {}
-            isInitialSyncDone = true
-            isLoadingMessages = false
         }
     }
 
     val pullRefreshState = rememberCustomPullRefreshState(
         onRefresh = {
             if (currentUserId.isNotEmpty()) {
-                val msgs = chatService.fetchUserMessages(currentUserId, context, limit = 300)
-                val allProfs = profileService.fetchAllProfiles()
-                val map = allProfs.associateBy { it.id.trim() }
-                if (map.isNotEmpty() && profilesMap != map) {
-                    profilesMap = map
-                }
-                if (!areMessageListsEqual(messagesList, msgs)) {
-                    messagesList = msgs
-                }
+                com.example.data.ChatStateHolder.syncWithNetwork(context, currentUserId)
             }
         }
     )
-
-    // Initial load and periodic live synchronization without UI re-rendering or blinking
-    LaunchedEffect(currentUserId) {
-        if (currentUserId.isNotEmpty()) {
-            // First pass: immediately ensure we have profiles and full messages
-            try {
-                val allProfs = profileService.fetchAllProfiles()
-                val map = allProfs.associateBy { it.id.trim() }
-                if (map.isNotEmpty()) {
-                    profilesMap = map
-                }
-                val msgs = chatService.fetchUserMessages(currentUserId, context, limit = 300)
-                if (!areMessageListsEqual(messagesList, msgs)) {
-                    messagesList = msgs
-                }
-                isInitialSyncDone = true
-                isLoadingMessages = false
-            } catch (_: Exception) {
-                isInitialSyncDone = true
-                isLoadingMessages = false
-            }
-
-            // Periodic sync with smooth diff check to prevent blinking
-            while (true) {
-                kotlinx.coroutines.delay(4_000L)
-                try {
-                    val msgs = chatService.fetchUserMessages(currentUserId, context, limit = 300)
-                    
-                    // Check if there are any new partners missing in profilesMap
-                    val missingPartner = msgs.any { m ->
-                        val pId = if (m.senderId.trim().equals(currentUserId, ignoreCase = true)) m.receiverId.trim() else m.senderId.trim()
-                        pId.isNotEmpty() && !profilesMap.containsKey(pId)
-                    }
-                    if (missingPartner || profilesMap.isEmpty()) {
-                        val allProfs = profileService.fetchAllProfiles()
-                        val map = allProfs.associateBy { it.id.trim() }
-                        if (map.isNotEmpty() && profilesMap != map) {
-                            profilesMap = map
-                        }
-                    }
-
-                    if (!areMessageListsEqual(messagesList, msgs)) {
-                        messagesList = msgs
-                    }
-                } catch (_: Exception) {}
-            }
-        } else {
-            isLoadingMessages = false
-            isInitialSyncDone = true
-        }
-    }
 
     // Scroll to top on first click if scrolled down; trigger refresh if already at top / second click
     LaunchedEffect(refreshTrigger) {
@@ -309,26 +240,40 @@ fun ChatScreen(
             grouped[partnerId]?.add(msg)
         }
 
-        grouped.mapNotNull { (partnerId, msgs) ->
-            if (msgs.isEmpty()) return@mapNotNull null
-            val latest = msgs.maxByOrNull { chatService.parseTimestampToMillis(it.createdAt) } ?: msgs.first()
+        // Also add any users that we have a saved draft with, even if no messages yet
+        val draftPartners = AppDataCacheManager.getAllDraftPartners(context, currentUserId)
+        for (partnerId in draftPartners) {
+            val cleanId = partnerId.trim()
+            if (cleanId.isNotEmpty() && !grouped.containsKey(cleanId)) {
+                grouped[cleanId] = mutableListOf()
+            }
+        }
 
-            // Strictly filter out soft-deleted conversations
-            if (chatService.isConversationSoftDeleted(context, currentUserId, partnerId, latest.createdAt)) {
-                return@mapNotNull null
+        grouped.mapNotNull { (partnerId, msgs) ->
+            val draft = AppDataCacheManager.getChatDraft(context, currentUserId, partnerId)
+            if (msgs.isEmpty() && draft.isEmpty()) return@mapNotNull null
+
+            val latest = msgs.maxByOrNull { chatService.parseTimestampToMillis(it.createdAt) }
+
+            // Strictly filter out soft-deleted conversations if they only have messages
+            if (latest != null && chatService.isConversationSoftDeleted(context, currentUserId, partnerId, latest.createdAt)) {
+                if (draft.isEmpty()) return@mapNotNull null
             }
 
-            val isSender = latest.senderId.trim().equals(currentUserId, ignoreCase = true)
+            val isSender = latest?.senderId?.trim()?.equals(currentUserId, ignoreCase = true) ?: false
 
             val partnerProfile = profilesMap[partnerId]
-            val partnerName = partnerProfile?.name ?: if (isSender) latest.receiverName else latest.senderName
-            val partnerAvatar = partnerProfile?.avatarUrl ?: if (!isSender) latest.senderAvatar else ""
+            val partnerName = partnerProfile?.name ?: if (isSender) (latest?.receiverName ?: "") else (latest?.senderName ?: "")
+            val partnerAvatar = partnerProfile?.avatarUrl ?: if (!isSender) (latest?.senderAvatar ?: "") else ""
             val partnerGender = partnerProfile?.gender ?: "Male"
             val partnerNumericId = partnerProfile?.numericId ?: 0L
             val partnerCountry = partnerProfile?.country ?: "Global"
 
             val unreadCount = msgs.count { !it.isRead && it.receiverId.trim().equals(currentUserId, ignoreCase = true) }
             val isOnline = partnerProfile?.isOnline ?: false
+
+            val displayMessage = if (draft.isNotEmpty()) "Draft: $draft" else (latest?.message ?: "")
+            val displayTimestamp = latest?.createdAt ?: ""
 
             ConversationItem(
                 partnerId = partnerId,
@@ -337,13 +282,15 @@ fun ChatScreen(
                 partnerGender = partnerGender,
                 partnerNumericId = partnerNumericId,
                 partnerCountry = partnerCountry,
-                latestMessage = latest.message,
-                timestamp = latest.createdAt,
+                latestMessage = displayMessage,
+                timestamp = displayTimestamp,
                 isUnread = unreadCount > 0,
                 unreadCount = unreadCount,
                 isOnline = isOnline
             )
-        }.sortedByDescending { chatService.parseTimestampToMillis(it.timestamp) }
+        }.sortedByDescending {
+            if (it.timestamp.isEmpty()) Long.MAX_VALUE else chatService.parseTimestampToMillis(it.timestamp)
+        }
     }
 
     val totalUnreadCount = remember(conversations) {
@@ -380,9 +327,9 @@ fun ChatScreen(
                     if (nextMsgs.isEmpty()) {
                         hasMoreServerChats = false
                     } else {
-                        val combined = (messagesList + nextMsgs).distinctBy { it.id }
-                        if (combined.size != messagesList.size) {
-                            messagesList = combined
+                        val beforeSize = messagesList.size
+                        com.example.data.ChatStateHolder.appendMessages(nextMsgs)
+                        if (messagesList.size != beforeSize) {
                             displayedLimit += 20
                         } else {
                             hasMoreServerChats = false
@@ -809,10 +756,7 @@ fun ChatScreen(
                             val partnerId = chatToDelete.partnerId
                             chatService.softDeleteConversation(context, currentUserId, partnerId)
                             // Immediately remove that partner's messages from local messagesList state
-                            messagesList = messagesList.filterNot { msg ->
-                                val p = if (msg.senderId.trim().equals(currentUserId, ignoreCase = true)) msg.receiverId.trim() else msg.senderId.trim()
-                                p.equals(partnerId, ignoreCase = true)
-                            }
+                            com.example.data.ChatStateHolder.removeConversationLocally(partnerId)
                             selectedChatForDelete = null
                             AppToast.show("Chat deleted")
                         }
@@ -943,38 +887,42 @@ private fun ConversationItemRow(
                         .replace(Regex("^Global Blast:\\s*", RegexOption.IGNORE_CASE), "")
                         .replace(Regex("^\\[BLAST\\]\\s*", RegexOption.IGNORE_CASE), "")
                         .trim()
-                    val lower = raw.lowercase()
-                    if (lower.startsWith("[voice]") ||
-                        lower.startsWith("voice_") ||
-                        lower.contains("/storage/v1/object/public/voice/") ||
-                        lower.contains("/storage/v1/object/voice/") ||
-                        lower.contains("/voice/") ||
-                        lower.contains(".m4a") ||
-                        lower.contains(".aac") ||
-                        lower.contains(".mp3") ||
-                        lower.contains(".wav") ||
-                        lower.contains(".ogg") ||
-                        lower.contains(".amr") ||
-                        lower.contains(".3gp") ||
-                        lower.contains(".opus")
-                    ) {
-                        "[voice]"
-                    } else if (raw.startsWith("[image]", ignoreCase = true) ||
-                        raw.startsWith("[photo]", ignoreCase = true) ||
-                        raw.startsWith("content://", ignoreCase = true) ||
-                        raw.startsWith("file://", ignoreCase = true) ||
-                        ((raw.startsWith("http://", ignoreCase = true) || raw.startsWith("https://", ignoreCase = true)) &&
-                        (raw.contains("/storage/") || raw.contains("/photos/") || raw.contains("/avatars/") ||
-                         raw.endsWith(".jpg", ignoreCase = true) || raw.endsWith(".jpeg", ignoreCase = true) ||
-                         raw.endsWith(".png", ignoreCase = true) || raw.endsWith(".webp", ignoreCase = true) ||
-                         raw.endsWith(".gif", ignoreCase = true)))
-                    ) {
-                        "[photo]"
-                    } else if (raw.startsWith("[gift]", ignoreCase = true)) {
-                        val giftText = raw.removePrefix("[gift]").trim()
-                        if (giftText.isNotEmpty()) "🎁 $giftText" else "🎁 Gift"
-                    } else {
+                    if (raw.startsWith("Draft:", ignoreCase = true)) {
                         raw
+                    } else {
+                        val lower = raw.lowercase()
+                        if (lower.startsWith("[voice]") ||
+                            lower.startsWith("voice_") ||
+                            lower.contains("/storage/v1/object/public/voice/") ||
+                            lower.contains("/storage/v1/object/voice/") ||
+                            lower.contains("/voice/") ||
+                            lower.contains(".m4a") ||
+                            lower.contains(".aac") ||
+                            lower.contains(".mp3") ||
+                            lower.contains(".wav") ||
+                            lower.contains(".ogg") ||
+                            lower.contains(".amr") ||
+                            lower.contains(".3gp") ||
+                            lower.contains(".opus")
+                        ) {
+                            "[voice]"
+                        } else if (raw.startsWith("[image]", ignoreCase = true) ||
+                            raw.startsWith("[photo]", ignoreCase = true) ||
+                            raw.startsWith("content://", ignoreCase = true) ||
+                            raw.startsWith("file://", ignoreCase = true) ||
+                            ((raw.startsWith("http://", ignoreCase = true) || raw.startsWith("https://", ignoreCase = true)) &&
+                            (raw.contains("/storage/") || raw.contains("/photos/") || raw.contains("/avatars/") ||
+                             raw.endsWith(".jpg", ignoreCase = true) || raw.endsWith(".jpeg", ignoreCase = true) ||
+                             raw.endsWith(".png", ignoreCase = true) || raw.endsWith(".webp", ignoreCase = true) ||
+                             raw.endsWith(".gif", ignoreCase = true)))
+                        ) {
+                            "[photo]"
+                        } else if (raw.startsWith("[gift]", ignoreCase = true)) {
+                            val giftText = raw.removePrefix("[gift]").trim()
+                            if (giftText.isNotEmpty()) "🎁 $giftText" else "🎁 Gift"
+                        } else {
+                            raw
+                        }
                     }
                 }
 

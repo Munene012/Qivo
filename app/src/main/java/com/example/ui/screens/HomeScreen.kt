@@ -107,7 +107,7 @@ object HomeScreenDataStore {
     val hasMoreByGender: MutableMap<String, Boolean> = mutableMapOf()
     var savedFirstVisibleItemIndex: Int = 0
     var savedFirstVisibleItemScrollOffset: Int = 0
-    var selectedTab: String = "For You"
+    var selectedTab: String = "Recommend"
 
     fun resetScrollToTop() {
         savedFirstVisibleItemIndex = 0
@@ -173,7 +173,7 @@ fun HomeScreen(
         }
     }
 
-    var selectedTab by remember { mutableStateOf(HomeScreenDataStore.selectedTab) } // "For You" or "Nearby"
+    var selectedTab by remember { mutableStateOf(HomeScreenDataStore.selectedTab) } // "Recommend" or "Nearby"
     LaunchedEffect(selectedTab) {
         HomeScreenDataStore.selectedTab = selectedTab
     }
@@ -723,21 +723,21 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.Start,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // For You Tab
+                            // Recommend Tab
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 modifier = Modifier
-                                    .clickable { selectedTab = "For You" }
+                                    .clickable { selectedTab = "Recommend" }
                                     .padding(end = 20.dp)
                             ) {
                                 Text(
-                                    text = "For You",
+                                    text = "Recommend",
                                     fontSize = 20.sp,
-                                    fontWeight = if (selectedTab == "For You") FontWeight.Bold else FontWeight.Medium,
-                                    color = if (selectedTab == "For You") colors.textPrimary else colors.textSecondary
+                                    fontWeight = if (selectedTab == "Recommend") FontWeight.Bold else FontWeight.Medium,
+                                    color = if (selectedTab == "Recommend") colors.textPrimary else colors.textSecondary
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
-                                if (selectedTab == "For You") {
+                                if (selectedTab == "Recommend") {
                                     Box(
                                         modifier = Modifier
                                             .width(32.dp)
@@ -826,7 +826,7 @@ fun HomeScreen(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = if (selectedTab == "Nearby") "Switch to For You to view users from all countries!" else "Pull down to refresh or check back soon!",
+                                text = if (selectedTab == "Nearby") "Switch to Recommend to view users from all countries!" else "Pull down to refresh or check back soon!",
                                 fontSize = 13.sp,
                                 color = colors.textSecondary,
                                 textAlign = TextAlign.Center

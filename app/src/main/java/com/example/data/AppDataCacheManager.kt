@@ -385,6 +385,48 @@ object AppDataCacheManager {
         }
     }
 
+    fun getAllDraftPartners(context: Context, myUserId: String): List<String> {
+        if (myUserId.isBlank()) return emptyList()
+        val list = mutableListOf<String>()
+        try {
+            val prefix = "chat_draft_${myUserId.trim()}_"
+            val allPrefs = getPrefs(context).all
+            for (key in allPrefs.keys) {
+                if (key.startsWith(prefix)) {
+                    val partnerId = key.substring(prefix.length)
+                    if (partnerId.isNotBlank()) {
+                        val value = allPrefs[key] as? String
+                        if (!value.isNullOrBlank()) {
+                            list.add(partnerId)
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get all draft partners: ${e.message}")
+        }
+        return list
+    }
+
+    fun clearChatCacheOnStartup(context: Context) {
+        try {
+            val prefs = getPrefs(context)
+            val editor = prefs.edit()
+            val keys = prefs.all.keys
+            var clearedCount = 0
+            for (key in keys) {
+                if (key.startsWith(KEY_CHAT_MESSAGES_PREFIX)) {
+                    editor.remove(key)
+                    clearedCount++
+                }
+            }
+            editor.apply()
+            Log.d(TAG, "Cleared $clearedCount chat persistent caches at startup (preserving loaded profiles).")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to clear persistent chat caches on startup: ${e.message}")
+        }
+    }
+
     // Sync profiles retrieval for instant UI mounting without flicker
     fun getCachedProfilesSync(context: Context, category: String = "home"): List<UserProfile> {
         val list = mutableListOf<UserProfile>()

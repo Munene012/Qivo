@@ -91,6 +91,22 @@ class SupabaseChatService {
         if (context != null && senderId.isNotBlank() && receiverId.isNotBlank()) {
             clearSoftDelete(context, senderId, receiverId)
         }
+
+        val optimisticMsg = ChatMessage(
+            id = 0L,
+            senderId = senderId,
+            senderName = senderName,
+            senderAvatar = senderAvatar,
+            receiverId = receiverId,
+            receiverName = receiverName,
+            message = messageText,
+            createdAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'", java.util.Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
+            }.format(java.util.Date()),
+            isRead = true
+        )
+        ChatStateHolder.addOptimisticMessage(optimisticMsg)
+
         return withContext(Dispatchers.IO) {
             try {
                 val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
@@ -121,17 +137,28 @@ class SupabaseChatService {
                     .build()
 
                 var createdMsgId: Long? = null
+                var createdTimeStr: String? = null
                 val isSent = client.newCall(request).execute().use { response ->
                     val respBody = response.body?.string() ?: ""
                     if ((response.isSuccessful || response.code in 200..204) && respBody.startsWith("[")) {
                         try {
                             val arr = org.json.JSONArray(respBody)
                             if (arr.length() > 0) {
-                                createdMsgId = arr.getJSONObject(0).optLong("id", 0L)
+                                val first = arr.getJSONObject(0)
+                                createdMsgId = first.optLong("id", 0L)
+                                createdTimeStr = first.optString("created_at", "")
                             }
                         } catch (_: Exception) {}
                     }
                     response.isSuccessful || response.code == 200 || response.code == 201 || response.code == 204
+                }
+
+                if (isSent) {
+                    val finalMsg = optimisticMsg.copy(
+                        id = createdMsgId ?: 0L,
+                        createdAt = createdTimeStr ?: optimisticMsg.createdAt
+                    )
+                    ChatStateHolder.handleRealtimeMessage(finalMsg, context)
                 }
 
                 if (isSent && context != null) {
@@ -178,6 +205,21 @@ class SupabaseChatService {
             clearSoftDelete(context, senderId, receiverId)
         }
 
+        val optimisticMsg = ChatMessage(
+            id = 0L,
+            senderId = senderId,
+            senderName = senderName,
+            senderAvatar = senderAvatar,
+            receiverId = receiverId,
+            receiverName = receiverName,
+            message = messageText,
+            createdAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'", java.util.Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
+            }.format(java.util.Date()),
+            isRead = true
+        )
+        ChatStateHolder.addOptimisticMessage(optimisticMsg)
+
         return withContext(Dispatchers.IO) {
             try {
                 val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
@@ -205,15 +247,27 @@ class SupabaseChatService {
                     .post(jsonBody.toRequestBody(jsonMediaType))
                     .build()
 
+                var createdMsgId: Long? = null
+                var createdTimeStr: String? = null
                 client.newCall(request).execute().use { response ->
                     val respBody = response.body?.string() ?: ""
                     if (response.isSuccessful && respBody.startsWith("[")) {
                         val arr = org.json.JSONArray(respBody)
                         if (arr.length() > 0) {
-                            val id = arr.getJSONObject(0).optLong("id", 0L)
-                            if (id > 0L) return@withContext id
+                            val first = arr.getJSONObject(0)
+                            createdMsgId = first.optLong("id", 0L)
+                            createdTimeStr = first.optString("created_at", "")
                         }
                     }
+                }
+
+                if (createdMsgId != null && createdMsgId!! > 0L) {
+                    val finalMsg = optimisticMsg.copy(
+                        id = createdMsgId!!,
+                        createdAt = createdTimeStr ?: optimisticMsg.createdAt
+                    )
+                    ChatStateHolder.handleRealtimeMessage(finalMsg, context)
+                    return@withContext createdMsgId
                 }
                 null
             } catch (_: Exception) {

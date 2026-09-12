@@ -35,6 +35,9 @@ class QivoApplication : Application(), ImageLoaderFactory {
             AppAnalyticsService.init(this)
             AppThemeManager.init(this)
 
+            // Clear persistent caches so they won't be seen on cold boot without internet
+            com.example.data.AppDataCacheManager.clearChatCacheOnStartup(this)
+
             // Proactive periodic token refresh to ensure uninterrupted session during active use
             CoroutineScope(Dispatchers.IO).launch {
                 while (true) {
