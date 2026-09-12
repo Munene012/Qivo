@@ -11,6 +11,12 @@ import com.example.calling.ActiveCallSessionManager
 import com.example.data.PartyRoomSessionManager
 import com.example.data.UserProfile
 import com.example.data.UserSessionManager
+import com.example.data.NetworkUtils
+import com.example.data.SupabaseProfileService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class CallType {
     VOICE,
@@ -34,6 +40,12 @@ fun launchDirectCall(
     callType: CallType,
     onInsufficientCoins: () -> Unit = {}
 ) {
+    // 1. Offline prevention: Block immediately if offline!
+    if (!NetworkUtils.isOnline(context)) {
+        AppToast.show("Cannot make call. You are currently offline.", isLong = true)
+        return
+    }
+
     // Party Room Check: Cannot make calls while in a Party Room
     if (PartyRoomSessionManager.activeRoom.value != null) {
         AppToast.show("Cannot make calls while in a Party Room", isLong = true)
@@ -41,40 +53,56 @@ fun launchDirectCall(
     }
 
     val session = UserSessionManager.getSession(context)
-    val myUser = if (session != null && session.userId.isNotBlank()) {
-        UserProfile(
-            id = session.userId,
-            numericId = session.numericId,
-            email = session.email,
-            name = session.name,
-            gender = session.gender,
-            birthDate = session.birthDate,
-            country = session.country,
-            avatarUrl = session.avatarUrl,
-            coins = session.coins
-        )
-    } else {
-        val fallbackId = UserSessionManager.getUserId(context).ifBlank { "user_${System.currentTimeMillis()}" }
-        UserProfile(
-            id = fallbackId,
-            numericId = 0L,
-            email = "user@qivo.app",
-            name = "User",
-            gender = "Male",
-            birthDate = "2000-01-01",
-            country = "Kenya",
-            avatarUrl = "",
-            coins = 9999L
-        )
+    if (session == null || session.userId.isBlank()) {
+        AppToast.show("Please login to initiate a call.", isLong = true)
+        return
     }
 
-    ActiveCallSessionManager.startCall(
-        caller = myUser,
-        receiver = targetUser,
-        callType = callType,
-        context = context,
-        onInsufficientCoins = onInsufficientCoins
-    )
+    AppToast.show("Connecting call...")
+
+    // 2. Fetch coin balance directly from server asynchronously
+    val myUserId = session.userId
+    val scope = CoroutineScope(Dispatchers.IO)
+    scope.launch {
+        try {
+            val profileService = SupabaseProfileService()
+            val freshProfile = profileService.fetchProfileById(myUserId)
+            
+            withContext(Dispatchers.Main) {
+                if (freshProfile == null) {
+                    AppToast.show("Failed to verify balance with server. Please try again.", isLong = true)
+                    return@withContext
+                }
+
+                val serverCoins = freshProfile.coins
+                // Update local session with freshest server coins
+                UserSessionManager.saveCoins(context, serverCoins)
+
+                val rate = if (callType == CallType.VIDEO) 160L else 80L
+                val isCallerMale = freshProfile.gender.equals("Male", ignoreCase = true)
+
+                // 3. Strictly check server coins before making the call
+                if (isCallerMale && serverCoins < rate) {
+                    AppToast.show("Insufficient coins. $rate coins required to start a ${callType.name.lowercase()} call.", isLong = true)
+                    onInsufficientCoins()
+                    return@withContext
+                }
+
+                // If checks pass, start the call session!
+                ActiveCallSessionManager.startCall(
+                    caller = freshProfile,
+                    receiver = targetUser,
+                    callType = callType,
+                    context = context,
+                    onInsufficientCoins = onInsufficientCoins
+                )
+            }
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) {
+                AppToast.show("Network error. Failed to connect call.", isLong = true)
+            }
+        }
+    }
 }
 
 /**

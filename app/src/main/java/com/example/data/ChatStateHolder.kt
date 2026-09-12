@@ -117,11 +117,28 @@ object ChatStateHolder {
                 val allProfs = profileService.fetchAllProfiles()
                 if (allProfs.isNotEmpty()) {
                     _profilesMap.value = allProfs.associateBy { it.id.trim() }
+                    try {
+                        AppDataCacheManager.saveProfilesCache(context, allProfs, "all")
+                    } catch (_: Exception) {}
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Background sync failed: ${e.message}")
             } finally {
                 _isSyncing.value = false
+            }
+        }
+    }
+
+    fun updateSingleProfile(profile: UserProfile, context: Context? = null) {
+        val current = _profilesMap.value.toMutableMap()
+        current[profile.id.trim()] = profile
+        _profilesMap.value = current
+        if (context != null) {
+            scope.launch {
+                try {
+                    val list = current.values.toList()
+                    AppDataCacheManager.saveProfilesCache(context, list, "all")
+                } catch (_: Exception) {}
             }
         }
     }

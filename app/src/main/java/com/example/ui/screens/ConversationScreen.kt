@@ -144,7 +144,13 @@ fun ConversationScreen(
         mutableStateOf(AppDataCacheManager.getChatDraft(context, myUserId, targetUser.id))
     }
     var isSending by remember { mutableStateOf(false) }
-    var liveTargetUser by remember { mutableStateOf(targetUser) }
+    
+    // Obtain freshest available in-memory profile instantly to prevent older profile photo flicker
+    val globalProfilesMap by com.example.data.ChatStateHolder.profilesMap.collectAsState()
+    val initialProfile = remember(targetUser.id, globalProfilesMap) {
+        globalProfilesMap[targetUser.id.trim()] ?: targetUser
+    }
+    var liveTargetUser by remember(targetUser.id) { mutableStateOf(initialProfile) }
 
     // Auto-save draft as user types
     LaunchedEffect(inputMessageText, myUserId, targetUser.id) {
@@ -162,6 +168,7 @@ fun ConversationScreen(
             }
             if (fresh != null) {
                 liveTargetUser = fresh
+                com.example.data.ChatStateHolder.updateSingleProfile(fresh, context)
             }
             kotlinx.coroutines.delay(10_000L)
         }

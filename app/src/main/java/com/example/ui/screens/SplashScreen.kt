@@ -65,7 +65,18 @@ fun SplashScreen(
                     if (UserSessionManager.isTokenExpired(context)) {
                         SupabaseAuthService.refreshSessionSync(context, forceRefresh = true)
                     }
-                    UserSessionManager.getSession(context)
+                    var s = UserSessionManager.getSession(context)
+                    if (s != null && s.userId.isNotBlank()) {
+                        if (com.example.data.NetworkUtils.isOnline(context)) {
+                            val profileService = com.example.data.SupabaseProfileService()
+                            val onlineProfile = profileService.fetchProfileById(s.userId)
+                            if (onlineProfile == null) {
+                                UserSessionManager.clearSession(context)
+                                s = null
+                            }
+                        }
+                    }
+                    s
                 } catch (e: Throwable) {
                     android.util.Log.e("SplashScreen", "Async session check error: ${e.message}", e)
                     null

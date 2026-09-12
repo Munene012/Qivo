@@ -79,6 +79,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -926,16 +927,44 @@ private fun ConversationItemRow(
                     }
                 }
 
+                val isDraft = previewText.startsWith("Draft:", ignoreCase = true)
+                val displayMessageAnnotated = remember(previewText, item.isUnread, isDark, colors) {
+                    if (isDraft) {
+                        androidx.compose.ui.text.buildAnnotatedString {
+                            withStyle(androidx.compose.ui.text.SpanStyle(
+                                color = Color(0xFF00E676), // Vibrant green
+                                fontWeight = FontWeight.Bold
+                            )) {
+                                append("Draft: ")
+                            }
+                            val draftContent = previewText.removePrefix("Draft:").removePrefix("draft:")
+                            withStyle(androidx.compose.ui.text.SpanStyle(
+                                color = if (item.isUnread) (if (isDark) Color.White else Color(0xFF0F172A)) else colors.textSecondary,
+                                fontWeight = if (item.isUnread) FontWeight.Medium else FontWeight.Light
+                            )) {
+                                append(draftContent)
+                            }
+                        }
+                    } else {
+                        androidx.compose.ui.text.buildAnnotatedString {
+                            withStyle(androidx.compose.ui.text.SpanStyle(
+                                color = if (item.isUnread) (if (isDark) Color.White else Color(0xFF0F172A)) else colors.textSecondary,
+                                fontWeight = if (item.isUnread) FontWeight.Medium else FontWeight.Light
+                            )) {
+                                append(previewText)
+                            }
+                        }
+                    }
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = previewText,
+                        text = displayMessageAnnotated,
                         fontSize = 13.sp,
-                        color = if (item.isUnread) (if (isDark) Color.White else Color(0xFF0F172A)) else colors.textSecondary,
-                        fontWeight = if (item.isUnread) FontWeight.Medium else FontWeight.Light,
                         letterSpacing = 0.15.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,

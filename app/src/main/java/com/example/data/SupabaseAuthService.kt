@@ -774,8 +774,7 @@ class SupabaseAuthService {
                                     val hasGender = genderInDb.equals("Male", ignoreCase = true) ||
                                         genderInDb.equals("Female", ignoreCase = true)
                                     val hasName = nameInDb.isNotBlank() && nameInDb != "QIVO User" && nameInDb != "User"
-                                    val isBrandNewAuth = createdAt.isNotBlank() && (lastSignInAt.isBlank() || createdAt == lastSignInAt)
-                                    hasCompletedProfile = !isBrandNewAuth && hasGender && hasName
+                                    hasCompletedProfile = hasGender && hasName
                                 }
                             }
                         }

@@ -190,7 +190,9 @@ fun MainBottomNavScaffold(
                         com.example.data.NetworkUtils.showToast(context, "Unstable internet connection")
                     }
                     com.example.data.NetworkConnectionState.ONLINE_STABLE -> {
-                        // Silent when stable
+                        if (prev == com.example.data.NetworkConnectionState.OFFLINE) {
+                            com.example.data.NetworkUtils.showToast(context, "Internet connection restored!")
+                        }
                     }
                 }
             }
@@ -535,6 +537,29 @@ fun MainBottomNavScaffold(
                 .padding(bottom = if (isFullScreenOverlay) 0.dp else (56.dp + navBarBottomInset))
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
+                if (!isOnline) {
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = true,
+                        enter = androidx.compose.animation.expandVertically(),
+                        exit = androidx.compose.animation.shrinkVertically()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFFE53935))
+                                .padding(vertical = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Running in Offline Mode",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
+                    }
+                }
                 // Main screen view
                 Box(modifier = Modifier.fillMaxSize()) {
                     when (currentStep) {

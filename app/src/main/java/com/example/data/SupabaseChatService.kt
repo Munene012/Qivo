@@ -74,6 +74,14 @@ class SupabaseChatService {
         messageText: String,
         context: Context? = null
     ): Boolean {
+        // Enforce online sending restriction
+        if (context != null && !NetworkUtils.isOnline(context)) {
+            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                AppToast.show("Cannot send message. You are currently offline.", isLong = true)
+            }
+            return false
+        }
+
         // Enforce bidirectional blocking security
         if (senderId.isNotBlank() && receiverId.isNotBlank()) {
             val isBlocked = profileService.isUserBlocked(senderId, receiverId, context) ||
@@ -195,6 +203,14 @@ class SupabaseChatService {
         messageText: String,
         context: Context? = null
     ): Long? {
+        // Enforce online sending restriction
+        if (context != null && !NetworkUtils.isOnline(context)) {
+            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                AppToast.show("Cannot send message. You are currently offline.", isLong = true)
+            }
+            return null
+        }
+
         if (senderId.isNotBlank() && receiverId.isNotBlank()) {
             val isBlocked = profileService.isUserBlocked(senderId, receiverId, context) ||
                     profileService.checkIfBlockedBidirectionalRemote(senderId, receiverId, context)

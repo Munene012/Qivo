@@ -222,6 +222,12 @@ fun HomeScreen(
                         hasMoreProfiles = initial.size >= pageSize
                         HomeScreenDataStore.hasMoreByGender[targetOppositeGender] = hasMoreProfiles
                         AppDataCacheManager.saveProfilesCache(context, first15, category = "home_$targetOppositeGender")
+                    } else {
+                        realProfiles = emptyList()
+                        HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = emptyList()
+                        hasMoreProfiles = false
+                        HomeScreenDataStore.hasMoreByGender[targetOppositeGender] = false
+                        AppDataCacheManager.saveProfilesCache(context, emptyList(), category = "home_$targetOppositeGender")
                     }
                 } else {
                     // Offline fallback: if no cached data was found yet
@@ -307,6 +313,12 @@ fun HomeScreen(
                         HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = first15
                         HomeScreenDataStore.hasMoreByGender[targetOppositeGender] = hasMoreProfiles
                         AppDataCacheManager.saveProfilesCache(context, first15, category = "home_$targetOppositeGender")
+                    } else {
+                        realProfiles = emptyList()
+                        HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = emptyList()
+                        hasMoreProfiles = false
+                        HomeScreenDataStore.hasMoreByGender[targetOppositeGender] = false
+                        AppDataCacheManager.saveProfilesCache(context, emptyList(), category = "home_$targetOppositeGender")
                     }
                 } catch (e: Throwable) {
                     android.util.Log.e("HomeScreen", "Error refreshing profiles: ${e.message}", e)
