@@ -95,6 +95,14 @@ class SupabasePartyService {
         val memoryMessages = ConcurrentHashMap<String, MutableList<PartyRoomMessage>>()
         val memoryAdmins = ConcurrentHashMap<String, MutableSet<String>>() // roomId -> set of admin userIds
         val memoryMembers = ConcurrentHashMap<String, MutableMap<String, PartyRoomMember>>() // roomId -> map(userId -> member)
+
+        fun clearCache() {
+            memoryRooms.clear()
+            memorySeats.clear()
+            memoryMessages.clear()
+            memoryAdmins.clear()
+            memoryMembers.clear()
+        }
     }
 
     /**

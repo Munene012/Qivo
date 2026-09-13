@@ -363,7 +363,7 @@ fun SystemSettingsScreen(
             },
             text = {
                 Text(
-                    text = "Are you sure you want to delete your account? All your profile details, coins, messages, party rooms, and personal data will be completely and permanently erased. This cannot be undone.",
+                    text = "Are you sure you want to delete your account? This is irreversible.",
                     color = colors.textSecondary,
                     fontSize = 13.sp,
                     lineHeight = 18.sp
@@ -379,7 +379,11 @@ fun SystemSettingsScreen(
                             } catch (_: Exception) {
                                 UserSessionManager.clearSession(context)
                             }
-                            AppToast.show("Account and all data have been completely erased.")
+                            // Store a small persistent flag so MainActivity knows to show Account Deleted toast instead of general Signed Out toast
+                            try {
+                                val prefs = context.getSharedPreferences("user_session", android.content.Context.MODE_PRIVATE)
+                                prefs.edit().putBoolean("account_deleted_toast", true).apply()
+                            } catch (_: Exception) {}
                             onSignOut()
                         }
                     },

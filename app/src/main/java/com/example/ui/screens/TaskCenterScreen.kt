@@ -520,14 +520,7 @@ fun TaskCenterScreen(
                                     fontSize = 14.sp
                                 )
                             }
-                        } else if (!isOnline) {
-                            Text(
-                                text = "Offline • Connect to Internet",
-                                color = colors.textMuted,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 14.sp
-                            )
-                        } else if (isClaimedToday) {
+                        } else if (!isOnline || isClaimedToday) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -539,7 +532,7 @@ fun TaskCenterScreen(
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Text(
-                                    text = "Claimed for Today",
+                                    text = "Claimed",
                                     color = if (isDark) Color(0xFF4ADE80) else Color(0xFF16A34A),
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 15.sp

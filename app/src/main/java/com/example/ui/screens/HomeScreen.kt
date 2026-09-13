@@ -113,6 +113,12 @@ object HomeScreenDataStore {
         savedFirstVisibleItemIndex = 0
         savedFirstVisibleItemScrollOffset = 0
     }
+
+    fun clearCache() {
+        cachedProfilesByGender.clear()
+        hasMoreByGender.clear()
+        resetScrollToTop()
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -347,6 +353,15 @@ fun HomeScreen(
         }
     }
 
+    // Automatically clear cache and fetch fresh profiles on login/switch/registration
+    LaunchedEffect(currentUserId) {
+        if (currentUserId.isNotBlank()) {
+            HomeScreenDataStore.clearCache()
+            realProfiles = emptyList()
+            loadProfiles(true)
+        }
+    }
+
     // Only load initial profiles if we don't have any cached profiles yet!
     // Stops auto refreshing on tab switch or when coming back to HomeScreen.
     LaunchedEffect(targetOppositeGender) {
@@ -428,19 +443,17 @@ fun HomeScreen(
         }
 
         val genderMatched = if (isMyMale) {
-            // Male user -> ONLY see female accounts (fallback to all if no opposite gender exists yet)
-            val femaleList = otherProfiles.filter { user ->
+            // Male user -> ONLY see female accounts
+            otherProfiles.filter { user ->
                 val g = user.gender.trim().lowercase()
                 g.startsWith("f") || g.startsWith("w")
             }
-            if (femaleList.isNotEmpty()) femaleList else otherProfiles
         } else if (isMyFemale) {
-            // Female user -> ONLY see male accounts (fallback to all if no opposite gender exists yet)
-            val maleList = otherProfiles.filter { user ->
+            // Female user -> ONLY see male accounts
+            otherProfiles.filter { user ->
                 val g = user.gender.trim().lowercase()
                 g.startsWith("m")
             }
-            if (maleList.isNotEmpty()) maleList else otherProfiles
         } else {
             otherProfiles
         }

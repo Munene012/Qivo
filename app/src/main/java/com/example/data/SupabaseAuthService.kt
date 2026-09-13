@@ -573,7 +573,7 @@ class SupabaseAuthService {
                         put("email", finalEmail)
                         put("name", existingName)
                         put("gender", "") // Empty to require user to complete details
-                        put("birth_date", "")
+                        put("birth_date", "2005-01-01")
                         put("country", existingCountry)
                         put("avatar_url", existingAvatar)
                         put("coins", 0L)
@@ -789,7 +789,7 @@ class SupabaseAuthService {
                                 put("email", finalEmail)
                                 put("name", existingName)
                                 put("gender", "") // Empty to require user to complete details
-                                put("birth_date", "")
+                                put("birth_date", "2005-01-01")
                                 put("country", existingCountry)
                                 put("avatar_url", existingAvatar)
                                 put("coins", 0L)
@@ -916,7 +916,59 @@ class SupabaseAuthService {
                 val token = UserSessionManager.getAccessToken(context)
 
                 if (baseUrl.isNotBlank() && authHeader.isNotBlank()) {
-                    // 1. First attempt RPC delete_user_account if available
+                    // Zero-Out profile on server to force new account flow if database hard delete fails
+                    if (userId.isNotBlank()) {
+                        try {
+                            val resetEndpoint = "$baseUrl/rest/v1/profiles?id=eq.$userId"
+                            val patchBody = JSONObject().apply {
+                                put("name", "User")
+                                put("gender", "")
+                                put("avatar_url", "")
+                                put("coins", 0)
+                                put("diamonds", 0)
+                                put("level", 1)
+                                put("exp", 0)
+                                put("bio", "")
+                                put("photos", org.json.JSONArray())
+                                put("age", 18)
+                            }.toString()
+                            val patchReq = Request.Builder()
+                                .url(resetEndpoint)
+                                .addHeader("apikey", apiKey)
+                                .addHeader("Authorization", authHeader)
+                                .addHeader("Content-Type", "application/json")
+                                .patch(patchBody.toRequestBody(jsonMediaType))
+                                .build()
+                            client.newCall(patchReq).execute().close()
+                        } catch (_: Exception) {}
+                    }
+
+                    // 1. Invoke the Supabase Edge Function to delete the account and all user data
+                    try {
+                        val edgeFunctionUrl = if (baseUrl.contains("supabase.co")) {
+                            "$baseUrl/functions/v1/delete-account"
+                        } else {
+                            "https://nfenuymzzvbxebqmtdqz.supabase.co/functions/v1/delete-account"
+                        }
+                        val edgeBody = JSONObject().apply {
+                            put("user_id", userId)
+                            put("email", userEmail)
+                        }.toString()
+                        val edgeReq = Request.Builder()
+                            .url(edgeFunctionUrl)
+                            .addHeader("apikey", apiKey)
+                            .addHeader("Authorization", authHeader)
+                            .addHeader("Content-Type", "application/json")
+                            .post(edgeBody.toRequestBody(jsonMediaType))
+                            .build()
+                        client.newCall(edgeReq).execute().use { response ->
+                            android.util.Log.d("SupabaseAuth", "Edge delete-account response: ${response.code}")
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("SupabaseAuth", "Edge delete-account failed: ${e.message}")
+                    }
+
+                    // 2. Fallback attempt RPC delete_user_account if available
                     try {
                         val rpcUrl = "$baseUrl/rest/v1/rpc/delete_user_account"
                         val req = Request.Builder()
@@ -929,19 +981,31 @@ class SupabaseAuthService {
                         client.newCall(req).execute().close()
                     } catch (_: Exception) {}
 
-                    // 2. Direct cascade delete user data from tables if userId is present
+                    // 3. Direct cascade delete user data from tables if userId is present (Strict Dependency Order)
                     if (userId.isNotBlank()) {
                         val tablesToDelete = listOf(
-                            "profiles?id=eq.$userId",
-                            "messages?sender_id=eq.$userId",
-                            "messages?receiver_id=eq.$userId",
-                            "party_rooms?host_id=eq.$userId",
+                            "coin_transactions?user_id=eq.$userId",
+                            "diamond_transactions?user_id=eq.$userId",
+                            "user_follows?follower_id=eq.$userId",
+                            "user_follows?following_id=eq.$userId",
+                            "profile_visitors?visitor_id=eq.$userId",
+                            "profile_visitors?visited_id=eq.$userId",
+                            "blocked_users?blocker_id=eq.$userId",
+                            "blocked_users?blocked_id=eq.$userId",
+                            "user_reports?reporter_id=eq.$userId",
+                            "user_reports?reported_id=eq.$userId",
+                            "user_frames?user_id=eq.$userId",
+                            "user_avatar_frames?user_id=eq.$userId",
+                            "fcm_device_tokens?user_id=eq.$userId",
                             "party_room_members?user_id=eq.$userId",
                             "party_room_seats?user_id=eq.$userId",
                             "party_room_admins?user_id=eq.$userId",
+                            "party_rooms?host_id=eq.$userId",
                             "agency_members?user_id=eq.$userId",
                             "agency_applications?user_id=eq.$userId",
-                            "fcm_device_tokens?user_id=eq.$userId"
+                            "messages?sender_id=eq.$userId",
+                            "messages?receiver_id=eq.$userId",
+                            "profiles?id=eq.$userId"
                         )
 
                         for (path in tablesToDelete) {

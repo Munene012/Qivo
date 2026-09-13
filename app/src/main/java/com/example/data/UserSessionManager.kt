@@ -237,7 +237,7 @@ object UserSessionManager {
         cachedUserId = userId
 
         try {
-            val isComplete = isProfileCompleted ?: (finalGender.equals("Female", ignoreCase = true) || finalGender.equals("Male", ignoreCase = true))
+            val isComplete = (finalGender.equals("Female", ignoreCase = true) || finalGender.equals("Male", ignoreCase = true))
             getPrefs(context)?.edit()?.apply {
                 putBoolean(KEY_IS_LOGGED_IN, true)
                 putBoolean(KEY_PROFILE_COMPLETED, isComplete)
@@ -496,13 +496,6 @@ object UserSessionManager {
         val currentToken = getAccessToken(targetContext)
         if (currentToken.isNotBlank()) {
             return "Bearer $currentToken"
-        }
-
-        val apiKey = SupabaseConfig.supabaseAnonKey.trim().ifEmpty { SupabaseConfig.supabaseApiKey.trim() }
-
-        // Fallback to Supabase Anon key ONLY for unauthenticated public/guest queries
-        if (apiKey.isNotBlank()) {
-            return "Bearer $apiKey"
         }
 
         return ""
@@ -770,9 +763,11 @@ object UserSessionManager {
     fun getLastCheckInDate(context: Context, userId: String = "", email: String = ""): String {
         return try {
             val prefs = getPrefs(context) ?: return ""
-            val effectiveUserId = userId.ifEmpty { getSession(context)?.userId ?: "global" }
-            val userDate = prefs.getString("last_checkin_date_$effectiveUserId", "") ?: ""
-            if (userDate.isNotEmpty()) return userDate
+            val effectiveUserId = userId.ifEmpty { getSession(context)?.userId ?: "" }
+            if (effectiveUserId.isNotEmpty()) {
+                val userDate = prefs.getString("last_checkin_date_$effectiveUserId", "") ?: ""
+                if (userDate.isNotEmpty()) return userDate
+            }
 
             val effectiveEmail = email.ifEmpty { getSession(context)?.email ?: "" }
             if (effectiveEmail.isNotEmpty()) {
@@ -780,7 +775,7 @@ object UserSessionManager {
                 if (emailDate.isNotEmpty()) return emailDate
             }
 
-            prefs.getString("last_checkin_date_global", "") ?: ""
+            ""
         } catch (_: Exception) {
             ""
         }
@@ -789,9 +784,11 @@ object UserSessionManager {
     fun getLastCheckInDay(context: Context, userId: String = "", email: String = ""): Int {
         return try {
             val prefs = getPrefs(context) ?: return 0
-            val effectiveUserId = userId.ifEmpty { getSession(context)?.userId ?: "global" }
-            val userDay = prefs.getInt("last_checkin_day_$effectiveUserId", 0)
-            if (userDay > 0) return userDay
+            val effectiveUserId = userId.ifEmpty { getSession(context)?.userId ?: "" }
+            if (effectiveUserId.isNotEmpty()) {
+                val userDay = prefs.getInt("last_checkin_day_$effectiveUserId", 0)
+                if (userDay > 0) return userDay
+            }
 
             val effectiveEmail = email.ifEmpty { getSession(context)?.email ?: "" }
             if (effectiveEmail.isNotEmpty()) {
@@ -799,7 +796,7 @@ object UserSessionManager {
                 if (emailDay > 0) return emailDay
             }
 
-            prefs.getInt("last_checkin_day_global", 0)
+            0
         } catch (_: Exception) {
             0
         }
@@ -873,8 +870,7 @@ object UserSessionManager {
         val userExp = prefs.getLong(KEY_USER_EXP_PREFIX + userId, prefs.getLong(KEY_USER_EXP, 0L))
 
         val savedGender = prefs.getString(KEY_USER_GENDER, "") ?: ""
-        val isProfileCompleted = prefs.getBoolean(KEY_PROFILE_COMPLETED, false) ||
-            (savedGender.equals("Female", ignoreCase = true) || savedGender.equals("Male", ignoreCase = true))
+        val isProfileCompleted = (savedGender.equals("Female", ignoreCase = true) || savedGender.equals("Male", ignoreCase = true))
 
         return SessionData(
             email = safeEmail,
@@ -1121,6 +1117,15 @@ object UserSessionManager {
         cachedRefreshToken = ""
         cachedTokenExpiresAt = 0L
         cachedUserId = ""
+
+        // Reset in-memory cache layers instantly to prevent profile data mismatches on account switches
+        try {
+            SupabaseProfileService.clearCache()
+            SupabaseChatService.clearCache()
+            SupabasePartyService.clearCache()
+            SupabaseAgencyService.clearCache()
+            com.example.ui.screens.HomeScreenDataStore.clearCache()
+        } catch (_: Exception) {}
 
         try {
             getPrefs(context)?.edit()?.apply {

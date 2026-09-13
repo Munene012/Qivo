@@ -37,6 +37,11 @@ class SupabaseChatService {
 
         private val _cachedUserMessages = java.util.concurrent.ConcurrentHashMap<String, List<ChatMessage>>()
 
+        fun clearCache() {
+            _cachedUserMessages.clear()
+            _totalUnreadCount.value = 0
+        }
+
         fun getInMemoryMessages(userId: String): List<ChatMessage> {
             if (userId.isBlank()) return emptyList()
             return _cachedUserMessages[userId.trim()] ?: emptyList()

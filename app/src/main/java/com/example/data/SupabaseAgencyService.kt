@@ -91,6 +91,13 @@ class SupabaseAgencyService {
         val memoryApplications = ConcurrentHashMap<String, MutableList<AgencyApplication>>() // agencyId -> applications
         val memoryMembers = ConcurrentHashMap<String, MutableList<AgencyMember>>() // agencyId -> members
         val memoryGroupMessages = ConcurrentHashMap<String, MutableList<AgencyGroupMessage>>() // agencyId -> group messages
+
+        fun clearCache() {
+            memoryAgencies.clear()
+            memoryApplications.clear()
+            memoryMembers.clear()
+            memoryGroupMessages.clear()
+        }
     }
 
     private fun getAuthHeader(context: Context? = null): String {

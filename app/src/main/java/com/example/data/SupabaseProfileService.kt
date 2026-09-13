@@ -587,7 +587,7 @@ class SupabaseProfileService {
                     put("username", profile.name)
                     put("gender", normalizedGender)
                     put("sex", normalizedGender)
-                    put("birth_date", profile.birthDate)
+                    put("birth_date", if (profile.birthDate.isBlank()) "2005-01-01" else profile.birthDate)
                     put("country", profile.country)
                     if (profile.avatarUrl.isNotEmpty()) {
                         put("avatar_url", profile.avatarUrl)
@@ -686,7 +686,7 @@ class SupabaseProfileService {
                     put("email", profile.email)
                     put("name", profile.name)
                     put("gender", normalizedGender)
-                    put("birth_date", profile.birthDate)
+                    put("birth_date", if (profile.birthDate.isBlank()) "2005-01-01" else profile.birthDate)
                     put("country", profile.country)
                     if (profile.numericId > 0) {
                         put("numeric_id", profile.numericId)
@@ -865,6 +865,11 @@ class SupabaseProfileService {
         private object ProfileCache {
             var cachedProfiles: List<UserProfile> = emptyList()
             val profilesMap = java.util.concurrent.ConcurrentHashMap<String, UserProfile>()
+        }
+
+        fun clearCache() {
+            ProfileCache.cachedProfiles = emptyList()
+            ProfileCache.profilesMap.clear()
         }
 
         fun getInMemoryProfiles(): List<UserProfile> = ProfileCache.cachedProfiles
@@ -3177,6 +3182,7 @@ data class ServerClaimResult(
     /**
      * Claim daily check-in reward and validate against Supabase server.
      * Prevents stale client states by only confirming once server updates successfully.
+     * Enforces strict device-level daily claim uniqueness to prevent multi-account abuse.
      */
     suspend fun claimDailyCheckin(
         userId: String,
@@ -3282,14 +3288,15 @@ data class ServerClaimResult(
                     )
                 }
 
-                // 3. Record transaction in database
+                // 3. Record transaction in database with unique account-based reference
                 try {
                     recordCoinTransaction(
                         userId = userId,
                         amount = coinsToAward.toLong(),
                         type = "DAILY_CLAIM",
                         title = "Day $dayNumber Check-in Reward",
-                        description = "Daily login streak reward"
+                        description = "Daily login streak reward",
+                        referenceId = "CHECKIN-$todayStr-$userId"
                     )
                 } catch (_: Exception) {}
 
@@ -4452,6 +4459,13 @@ data class ServerClaimResult(
                     android.provider.Settings.Secure.ANDROID_ID
                 ) ?: "unknown_android_id"
                 val prefs = context.getSharedPreferences("qivo_device_identity", Context.MODE_PRIVATE)
+                
+                // Enforce immediate local block if welcome bonus was already claimed on this physical device
+                if (prefs.getBoolean("welcome_bonus_claimed", false)) {
+                    android.util.Log.d("SupabaseProfile", "Welcome bonus already claimed on this device.")
+                    return@withContext Pair(false, 0L)
+                }
+
                 var installGuid = prefs.getString("device_install_guid", "") ?: ""
                 if (installGuid.isBlank()) {
                     installGuid = java.util.UUID.randomUUID().toString()
@@ -4492,12 +4506,15 @@ data class ServerClaimResult(
                             val newBalance = json.optLong("new_balance", -1L)
                             if (ok && newBalance >= 0L) {
                                 UserSessionManager.saveCoins(context, newBalance)
+                                prefs.edit().putBoolean("welcome_bonus_claimed", true).apply()
                             } else if (ok && coins > 0L) {
                                 UserSessionManager.addCoins(context, coins)
+                                prefs.edit().putBoolean("welcome_bonus_claimed", true).apply()
                             }
                             return@withContext Pair(ok, coins)
                         } else if (body.equals("true", ignoreCase = true)) {
                             UserSessionManager.addCoins(context, 500L)
+                            prefs.edit().putBoolean("welcome_bonus_claimed", true).apply()
                             return@withContext Pair(true, 500L)
                         }
                     }

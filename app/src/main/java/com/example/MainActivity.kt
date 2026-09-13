@@ -197,7 +197,7 @@ fun QivoApp(notificationIntent: Intent? = null) {
                         )
                         if (authRes is com.example.data.AuthResult.Success) {
                             val session = UserSessionManager.getSession(context)
-                            val isNew = authRes.isNewUser || session == null || !session.isProfileCompleted
+                            val isNew = authRes.isNewUser || session == null || !session.isProfileCompleted || session.gender.isBlank()
                             if (isNew) {
                                 val detectedCountry = session?.country?.ifBlank {
                                     com.example.data.CountryDetector.detectCountry(context)?.first ?: "Kenya"
@@ -268,7 +268,7 @@ fun QivoApp(notificationIntent: Intent? = null) {
             isAuthenticatingOAuth = false
             if (res is com.example.data.AuthResult.Success) {
                 val session = UserSessionManager.getSession(context)
-                val isNew = res.isNewUser || session == null || !session.isProfileCompleted
+                val isNew = res.isNewUser || session == null || !session.isProfileCompleted || session.gender.isBlank()
                 if (isNew) {
                     val detectedCountry = session?.country?.ifBlank {
                         com.example.data.CountryDetector.detectCountry(context)?.first ?: "Kenya"
@@ -323,7 +323,7 @@ fun QivoApp(notificationIntent: Intent? = null) {
                     onSplashFinished = { session ->
                         try {
                             if (session != null && !session.userId.isNullOrBlank()) {
-                                val isNewAccount = !session.isProfileCompleted
+                                val isNewAccount = !session.isProfileCompleted || session.gender.isBlank()
                                 if (isNewAccount) {
                                     val detectedCountry = session.country?.ifBlank { "Kenya" } ?: "Kenya"
                                     currentScreen = Screen.CreateAccount(
@@ -394,21 +394,28 @@ fun QivoApp(notificationIntent: Intent? = null) {
                     onAuthSuccess = { email, userId ->
                         // Persistent login: session saved in EmailAuthScreen
                         val session = UserSessionManager.getSession(context)
-                        val emailName = if (email.contains("@")) email.substringBefore("@") else "User"
-                        val resolvedName = when {
-                            !session?.name.isNullOrBlank() && session?.name != "QIVO User" -> session.name
-                            !session?.name.isNullOrBlank() -> session.name
-                            else -> emailName
+                        val isNew = session == null || !session.isProfileCompleted || session.gender.isBlank()
+                        if (isNew) {
+                            val emailName = if (email.contains("@")) email.substringBefore("@") else ""
+                            val detectedCountry = session?.country?.ifBlank { "Kenya" } ?: "Kenya"
+                            currentScreen = Screen.CreateAccount(
+                                email = email,
+                                userId = userId,
+                                initialName = if (!session?.name.isNullOrBlank() && session?.name != "QIVO User" && session?.name != "User") session!!.name else emailName,
+                                initialAvatarUrl = session?.avatarUrl ?: "",
+                                initialCountry = detectedCountry
+                            )
+                        } else {
+                            currentScreen = Screen.MainApp(
+                                email = email,
+                                userId = userId,
+                                name = session.name,
+                                gender = session.gender,
+                                country = session.country,
+                                avatarUrl = session.avatarUrl,
+                                numericId = session.numericId
+                            )
                         }
-                        currentScreen = Screen.MainApp(
-                            email = email,
-                            userId = userId,
-                            name = resolvedName,
-                            gender = session?.gender ?: "Male",
-                            country = session?.country ?: "United States",
-                            avatarUrl = session?.avatarUrl ?: "",
-                            numericId = session?.numericId ?: 0L
-                        )
                     },
                     onNavigateToCreateAccount = { email, userId, initialName ->
                         currentScreen = Screen.CreateAccount(
@@ -508,7 +515,16 @@ fun QivoApp(notificationIntent: Intent? = null) {
                             }
                             authService.signOut(context)
                         }
-                        AppToast.show("Signed out from QIVO")
+                        
+                        val prefs = context.getSharedPreferences("user_session", android.content.Context.MODE_PRIVATE)
+                        val isDeleted = prefs.getBoolean("account_deleted_toast", false)
+                        if (isDeleted) {
+                            prefs.edit().remove("account_deleted_toast").apply()
+                            AppToast.show("Account deleted successfully.")
+                        } else {
+                            AppToast.show("Signed out from QIVO")
+                        }
+                        
                         currentScreen = Screen.Welcome
                     }
                 )
