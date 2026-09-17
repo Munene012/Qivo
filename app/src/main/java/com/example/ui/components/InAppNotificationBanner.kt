@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.InAppNotification
+import com.example.ui.theme.QivoOrange
 
 /**
  * Floating In-App Heads-Up Notification Banner (Matching screenshot design).
@@ -167,11 +168,11 @@ fun InAppNotificationBanner(
                             )
                         }
 
-                        // 3. Purple "Reply" Action Button
+                        // 3. Champagne Bronze "Reply" Action Button
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0xFF9333EA))
+                                .background(QivoOrange)
                                 .clickable { onReplyClick(notification) }
                                 .padding(horizontal = 16.dp, vertical = 7.dp)
                                 .testTag("in_app_notification_reply_button"),

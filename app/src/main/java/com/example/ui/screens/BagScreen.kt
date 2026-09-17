@@ -69,6 +69,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import com.example.ui.theme.QivoOrange
+import com.example.ui.theme.QivoGold
+import com.example.ui.theme.QivoGoldDark
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -306,7 +309,7 @@ fun BagScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             CircularProgressIndicator(
-                                color = Color(0xFF9333EA),
+                                color = QivoGold,
                                 strokeWidth = 3.dp
                             )
                         }
@@ -554,19 +557,19 @@ fun BagScreen(
                                                 text = "Want more exclusive frames?",
                                                 fontSize = 15.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = Color(0xFF6B21A8)
+                                                color = QivoGoldDark
                                             )
                                             Text(
                                                 text = "Visit the Avatar Frame Store",
                                                 fontSize = 13.sp,
-                                                color = Color(0xFF9333EA)
+                                                color = QivoGold
                                             )
                                         }
                                         Text(
                                             text = "Explore →",
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF7E22CE)
+                                            color = QivoGoldDark
                                         )
                                     }
                                 }
@@ -662,7 +665,7 @@ fun BagScreen(
                                     AppToast.show("Now wearing ${frame.name}!")
                                 }
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9333EA)),
+                            colors = ButtonDefaults.buttonColors(containerColor = QivoOrange),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier
                                 .weight(1f)
@@ -764,7 +767,7 @@ fun BagScreen(
                                                 onNavigateToStore()
                                             },
                                             shape = RoundedCornerShape(10.dp),
-                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9333EA)),
+                                            colors = ButtonDefaults.buttonColors(containerColor = QivoOrange),
                                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                                         ) {
                                             Text("Re-acquire", fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -852,7 +855,7 @@ private fun WearingFrameCard(
                 text = "Tap to Unwear",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
-                color = Color(0xFF9333EA)
+                color = QivoOrange
             )
         }
     }
@@ -877,12 +880,12 @@ private fun AvailableFrameGridCard(
         Card(
             shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(
-                containerColor = if (isWearing) Color(0xFFFDF4FF) else Color.White
+                containerColor = if (isWearing) Color(0xFFFDFBF7) else Color.White
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = if (isWearing) 3.dp else 1.5.dp),
             border = BorderStroke(
                 width = if (isWearing) 1.5.dp else 1.dp,
-                color = if (isWearing) Color(0xFFC084FC) else Color(0xFFF3F4F6)
+                color = if (isWearing) QivoGold else Color(0xFFF3F4F6)
             ),
             modifier = Modifier
                 .fillMaxWidth()
@@ -890,7 +893,7 @@ private fun AvailableFrameGridCard(
                 .shadow(
                     elevation = if (isWearing) 6.dp else 3.dp,
                     shape = RoundedCornerShape(18.dp),
-                    spotColor = if (isWearing) Color(0x33A855F7) else Color(0x14000000)
+                    spotColor = if (isWearing) Color(0x33C5A059) else Color(0x14000000)
                 )
                 .clickable { onClick() }
         ) {
@@ -932,7 +935,7 @@ private fun AvailableFrameGridCard(
                             .align(Alignment.TopEnd)
                             .padding(6.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFF9333EA))
+                            .background(QivoOrange)
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(

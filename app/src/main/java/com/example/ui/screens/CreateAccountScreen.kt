@@ -1,5 +1,6 @@
 package com.example.ui.screens
 import com.example.ui.components.AppToast
+import com.example.ui.theme.QivoOrange
 
 import android.widget.Toast
 import androidx.compose.foundation.Image
@@ -519,7 +520,7 @@ fun CreateAccountScreen(
                         .weight(1f)
                         .height(180.dp)
                         .then(
-                            if (isFemaleSelected) Modifier.border(2.5.dp, Color(0xFFE91E63), RoundedCornerShape(28.dp))
+                            if (isFemaleSelected) Modifier.border(2.5.dp, QivoOrange, RoundedCornerShape(28.dp))
                             else Modifier
                         ),
                     shape = RoundedCornerShape(28.dp),
@@ -547,7 +548,7 @@ fun CreateAccountScreen(
                             Icon(
                                 imageVector = Icons.Default.Female,
                                 contentDescription = "Female",
-                                tint = Color(0xFFE91E63),
+                                tint = QivoOrange,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))

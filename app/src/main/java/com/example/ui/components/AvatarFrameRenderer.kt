@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.compose.ui.unit.dp
+import com.example.data.AvatarFrameManager
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -85,22 +86,22 @@ fun AvatarFrameRenderer(
         val cy = h / 2f
         val r = (minOf(w, h) / 2f) * 0.72f // Avatar base radius matching 72% inner scale
 
-        when (frameId.trim().lowercase()) {
-            "vip4" -> drawVip4Frame(cx, cy, r, pulse)
-            "svip1" -> drawSvip1Frame(cx, cy, r, pulse)
-            "acquaintance" -> drawAcquaintanceFrame(cx, cy, r, pulse)
-            "vip1" -> drawVip1Frame(cx, cy, r, pulse)
-            "vip3" -> drawVip3Frame(cx, cy, r, pulse)
-            "helicopter" -> drawHelicopterFrame(cx, cy, r, rotorRotation, pulse)
-            "flowers" -> drawFlowersGardenFrame(cx, cy, r, pulse)
-            "golden_king" -> drawGoldenKingFrame(cx, cy, r, pulse)
-            "violet_eye" -> drawVioletEyeFrame(cx, cy, r, pulse)
-            "lightning" -> drawLightningFrame(cx, cy, r, rotation, pulse)
-            "green_space" -> drawGreenSpaceFrame(cx, cy, r, rotation, pulse)
-            "angel_wings" -> drawAngelWingsFrame(cx, cy, r, pulse)
-            "lion" -> drawLionFrame(cx, cy, r, pulse)
-            "cyber_dragon" -> drawCyberDragonFrame(cx, cy, r, pulse)
-            "star_tiara" -> drawStarTiaraFrame(cx, cy, r, rotation, pulse)
+        when (AvatarFrameManager.normalizeFrameId(frameId)) {
+            "amethyst_sovereign" -> drawVip4Frame(cx, cy, r, pulse)
+            "diamond_luminary" -> drawSvip1Frame(cx, cy, r, pulse)
+            "aurora_starlight" -> drawAcquaintanceFrame(cx, cy, r, pulse)
+            "azure_sentinel" -> drawVip1Frame(cx, cy, r, pulse)
+            "sapphire_phoenix" -> drawVip3Frame(cx, cy, r, pulse)
+            "sky_aviator" -> drawHelicopterFrame(cx, cy, r, rotorRotation, pulse)
+            "enchanted_flora" -> drawFlowersGardenFrame(cx, cy, r, pulse)
+            "solar_monarch" -> drawGoldenKingFrame(cx, cy, r, pulse)
+            "mystic_oculus" -> drawVioletEyeFrame(cx, cy, r, pulse)
+            "volt_tempest" -> drawLightningFrame(cx, cy, r, rotation, pulse)
+            "emerald_matrix" -> drawGreenSpaceFrame(cx, cy, r, rotation, pulse)
+            "seraphim_grace" -> drawAngelWingsFrame(cx, cy, r, pulse)
+            "imperial_leo" -> drawLionFrame(cx, cy, r, pulse)
+            "crimson_drake" -> drawCyberDragonFrame(cx, cy, r, pulse)
+            "astral_diadem" -> drawStarTiaraFrame(cx, cy, r, rotation, pulse)
             "new_user", "new", "newbie", "welcome_new" -> drawNewUserFrame(cx, cy, r, pulse, rotation)
             else -> drawGoldenKingFrame(cx, cy, r, pulse)
         }
@@ -162,9 +163,9 @@ private fun DrawScope.drawHelicopterFrame(cx: Float, cy: Float, r: Float, rotor:
     drawPath(crownPath, Brush.verticalGradient(listOf(Color(0xFFFFF9C4), Color(0xFFFFB300))))
     drawPath(crownPath, Color(0xFFFF6F00), style = Stroke(width = 1.dp.toPx()))
 
-    // Pink Heart / Ruby Gem
+    // Golden Gem
     drawCircle(
-        brush = Brush.radialGradient(listOf(Color(0xFFFF80AB), Color(0xFFF50057), Color(0xFFC51162))),
+        brush = Brush.radialGradient(listOf(Color(0xFFFFD54F), Color(0xFFC5A059), Color(0xFFA37E30))),
         radius = 5.dp.toPx(),
         center = Offset(cx, topY - 2.dp.toPx())
     )
@@ -348,9 +349,9 @@ private fun DrawScope.drawFlowersGardenFrame(cx: Float, cy: Float, r: Float, pul
         val fy = cy + (r + 4.dp.toPx()) * sin(angle).toFloat()
 
         val roseGradient = when (idx % 3) {
-            0 -> listOf(Color(0xFFFF8A80), Color(0xFFFF5252), Color(0xFFD50000)) // Pastel Coral Rose
+            0 -> listOf(Color(0xFFFFE082), Color(0xFFFFB300), Color(0xFFC5A059)) // Warm Amber Blossom
             1 -> listOf(Color(0xFFFFF59D), Color(0xFFFFD54F), Color(0xFFFFB300)) // Golden Blossom
-            else -> listOf(Color(0xFFF48FB1), Color(0xFFEC407A), Color(0xFFAD1457)) // Soft Pink Rose
+            else -> listOf(Color(0xFFD6B574), Color(0xFFC5A059), Color(0xFFA37E30)) // Bronze Rose
         }
         val petalRadius = 4.5.dp.toPx()
         // Draw multi-petal rose

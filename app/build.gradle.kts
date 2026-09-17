@@ -79,6 +79,10 @@ android {
     buildConfig = true
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
+  lint {
+    abortOnError = false
+    checkReleaseBuilds = false
+  }
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true

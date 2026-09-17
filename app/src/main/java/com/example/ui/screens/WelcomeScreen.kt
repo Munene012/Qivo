@@ -176,15 +176,15 @@ fun WelcomeScreen(
         label = "float_offset"
     )
 
-    // Splash-matching Refined Pale Warm Sunset Orange & Peach Canvas Gradient
+    // Splash-matching Refined Emerald Green Canvas Gradient
     val welcomeBgGradient = Brush.verticalGradient(
         colors = listOf(
-            Color(0xFFFF9E79), // Soft Warm Coral Peach
-            Color(0xFFFFAE8D), // Pale Amber Orange
-            Color(0xFFFFBEA2), // Soft Apricot
-            Color(0xFFFFCFAF), // Luminous Pale Sunset
-            Color(0xFFFFDFC8), // Warm Creamy Amber
-            Color(0xFFFFF5EC)  // Soft Warm Base
+            Color(0xFF009639), // Deep Emerald Top
+            Color(0xFF00B04A), // Rich Jewel Jade
+            Color(0xFF00C853), // Vivid Emerald
+            Color(0xFF26E06D), // Luminous Mint Emerald
+            Color(0xFFE8F5EE), // Soft Jade Tint
+            Color(0xFFF7FAF8)  // Crisp Soft White Tint
         )
     )
 

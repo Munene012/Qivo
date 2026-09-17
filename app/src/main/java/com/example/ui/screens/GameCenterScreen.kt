@@ -167,12 +167,26 @@ fun GameCenterScreen(
         }
         val payout = (bet * multiplier).toLong()
         val netChange = payout - bet
-        val newBalance = (userCoins + netChange).coerceAtLeast(0L)
-        userCoins = newBalance
-        UserSessionManager.saveCoins(context, newBalance)
 
         if (userId.isNotBlank()) {
-            profileService.updateUserCoinsDirect(userId, newBalance)
+            val res = profileService.adjustCoinsServer(
+                userId = userId,
+                amount = netChange,
+                type = "GAME_OUTCOME",
+                title = "$gameName Outcome",
+                description = if (netChange >= 0) "Won $payout coins in $gameName" else "Bet $bet coins in $gameName"
+            )
+            if (res.first) {
+                userCoins = res.second
+                UserSessionManager.saveCoins(context, res.second)
+            } else {
+                NetworkUtils.showToast(context, "Failed to record game transaction on server.")
+                return 0L
+            }
+        } else {
+            val newBalance = (userCoins + netChange).coerceAtLeast(0L)
+            userCoins = newBalance
+            UserSessionManager.saveCoins(context, newBalance)
         }
 
         val isWin = payout > bet

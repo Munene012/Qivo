@@ -6,7 +6,7 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Warm Vibrant Sunset Orange to Yellow Gradient Base -->
+    <!-- Luxury Emerald & Jade Gradient Base -->
     <path
         android:pathData="M0,0h108v108h-108z">
         <aapt:attr name="android:fillColor">
@@ -16,15 +16,15 @@
                 android:endX="54"
                 android:endY="108"
                 android:type="linear">
-                <item android:offset="0.0" android:color="#FFFF6500" />
-                <item android:offset="0.45" android:color="#FFFF8D00" />
-                <item android:offset="0.85" android:color="#FFFFB800" />
-                <item android:offset="1.0" android:color="#FFFFC400" />
+                <item android:offset="0.0" android:color="#FF007E33" />
+                <item android:offset="0.4" android:color="#FF009639" />
+                <item android:offset="0.75" android:color="#FF00C853" />
+                <item android:offset="1.0" android:color="#FF00E676" />
             </gradient>
         </aapt:attr>
     </path>
 
-    <!-- Warm Golden Ambient Core Radial Glow -->
+    <!-- Luminous Mint Ambient Core Radial Glow -->
     <path
         android:pathData="M54,12 A42,42 0 1,1 53.99,12 Z">
         <aapt:attr name="android:fillColor">
@@ -33,8 +33,8 @@
                 android:centerY="46"
                 android:gradientRadius="46"
                 android:type="radial">
-                <item android:offset="0.0" android:color="#44FFE082" />
-                <item android:offset="0.6" android:color="#22FFA000" />
+                <item android:offset="0.0" android:color="#55B9F6CA" />
+                <item android:offset="0.6" android:color="#2269F0AE" />
                 <item android:offset="1.0" android:color="#00000000" />
             </gradient>
         </aapt:attr>

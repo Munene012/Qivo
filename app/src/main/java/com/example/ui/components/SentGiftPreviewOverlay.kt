@@ -273,7 +273,7 @@ fun GiftDetailPreviewDialog(
             color = Color(0xFF1E182A),
             border = androidx.compose.foundation.BorderStroke(
                 1.5.dp,
-                Brush.linearGradient(listOf(Color(0xFFFFD54F), Color(0xFFE91E63), Color(0xFF7C4DFF)))
+                Brush.linearGradient(listOf(Color(0xFFFFD54F), Color(0xFF7FFF00), Color(0xFF5AB800)))
             ),
             shadowElevation = 16.dp
         ) {

@@ -650,7 +650,7 @@ private fun VisitorItemCard(
                     val isFemale = user.gender.equals("Female", true)
                     Surface(
                         shape = RoundedCornerShape(6.dp),
-                        color = if (isFemale) Color(0xFFF8A4EC) else Color(0xFF72C2F8)
+                        color = if (isFemale) Color(0xFFE2C485) else Color(0xFFD4C8B8)
                     ) {
                         Text(
                             text = if (isFemale) "♀" else "♂",

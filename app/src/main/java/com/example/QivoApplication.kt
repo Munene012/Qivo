@@ -35,6 +35,18 @@ class QivoApplication : Application(), ImageLoaderFactory {
             AppAnalyticsService.init(this)
             AppThemeManager.init(this)
 
+            // Setup Push Notification Channels and Firebase initialization
+            try {
+                com.example.data.SupabaseFcmService.createNotificationChannels(this)
+                com.example.data.SupabaseFcmService.ensureFirebaseInitialized(this)
+                val existingSession = UserSessionManager.getSession(this)
+                if (existingSession != null && existingSession.userId.isNotBlank()) {
+                    com.example.data.SupabaseFcmService.initializeFcm(this, existingSession.userId)
+                }
+            } catch (fcmInitErr: Throwable) {
+                Log.w("QivoApplication", "FCM setup warning on startup: ${fcmInitErr.message}")
+            }
+
             // Clear persistent caches so they won't be seen on cold boot without internet
             com.example.data.AppDataCacheManager.clearChatCacheOnStartup(this)
 

@@ -102,6 +102,8 @@ import com.example.ui.components.Coin3DIcon
 import com.example.ui.components.Diamond3DIcon
 import com.example.ui.components.DiamondHostReward3DIcon
 import com.example.ui.theme.AppTheme
+import com.example.ui.theme.QivoGoldLight
+import com.example.ui.theme.QivoGoldDark
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.util.Locale
@@ -821,7 +823,7 @@ fun IncomeScreen(
                                 Icon(
                                     imageVector = Icons.Default.Shield,
                                     contentDescription = null,
-                                    tint = if (isDark) Color(0xFF38BDF8) else Color(0xFF0284C7),
+                                    tint = if (isDark) QivoGoldLight else QivoGoldDark,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))

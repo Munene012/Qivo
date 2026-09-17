@@ -103,6 +103,7 @@ import com.example.ui.theme.QivoYellow
 import kotlinx.coroutines.launch
 
 object HomeScreenDataStore {
+    var lastUserId: String = ""
     val cachedProfilesByGender: MutableMap<String, List<UserProfile>> = mutableMapOf()
     val hasMoreByGender: MutableMap<String, Boolean> = mutableMapOf()
     var savedFirstVisibleItemIndex: Int = 0
@@ -186,11 +187,19 @@ fun HomeScreen(
 
     val pageSize = 15
 
-    // Instant memory / cache retrieval to prevent blank screen or flickering loading states (strictly first 15)
+    // Instant memory / cache retrieval to prevent blank screen or flickering loading states
     val initialCachedProfiles = remember(targetOppositeGender) {
-        val cached = HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender]
-            ?: AppDataCacheManager.getCachedProfilesSync(context, category = "home_$targetOppositeGender")
-        cached.take(pageSize)
+        val inMemory = HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender]
+        if (!inMemory.isNullOrEmpty()) {
+            inMemory
+        } else {
+            val cached = AppDataCacheManager.getCachedProfilesSync(context, category = "home_$targetOppositeGender")
+            val batch = cached.take(pageSize)
+            if (batch.isNotEmpty()) {
+                HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = batch
+            }
+            batch
+        }
     }
     var realProfiles by remember(targetOppositeGender) { mutableStateOf<List<UserProfile>>(initialCachedProfiles) }
     var isLoadingProfiles by remember(targetOppositeGender) { mutableStateOf(initialCachedProfiles.isEmpty()) }
@@ -300,7 +309,6 @@ fun HomeScreen(
             HomeScreenDataStore.savedFirstVisibleItemIndex = 0
             HomeScreenDataStore.savedFirstVisibleItemScrollOffset = 0
             if (!NetworkUtils.isOnline(context)) {
-                NetworkUtils.showToast(context, "Offline mode: Showing cached data")
                 scope.launch {
                     val cached = AppDataCacheManager.getCachedProfiles(context, category = "home_$targetOppositeGender")
                     if (cached.isNotEmpty()) {
@@ -356,9 +364,14 @@ fun HomeScreen(
     // Automatically clear cache and fetch fresh profiles on login/switch/registration
     LaunchedEffect(currentUserId) {
         if (currentUserId.isNotBlank()) {
-            HomeScreenDataStore.clearCache()
-            realProfiles = emptyList()
-            loadProfiles(true)
+            if (HomeScreenDataStore.lastUserId != currentUserId) {
+                HomeScreenDataStore.lastUserId = currentUserId
+                HomeScreenDataStore.clearCache()
+                realProfiles = emptyList()
+                loadProfiles(true)
+            } else if (realProfiles.isEmpty()) {
+                loadProfiles(false)
+            }
         }
     }
 
@@ -539,9 +552,9 @@ fun HomeScreen(
                     .height(statusBarTopInset)
                     .background(
                         if (isDark) {
-                            Color(0xFF1E0F07)
+                            Color(0xFF09120B)
                         } else {
-                            Color(0xFFFF9E79) // Exact match with splash screen faded sunset coral peach
+                            Color(0xFF009639)
                         }
                     )
             )
@@ -559,7 +572,7 @@ fun HomeScreen(
                     Box(
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        // Top signature faded sunset amber & peach aesthetic banner extending 3/4 way behind the buttons
+                        // Top signature emerald green aesthetic banner extending 3/4 way behind the buttons
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -569,17 +582,17 @@ fun HomeScreen(
                                     if (isDark) {
                                         Brush.verticalGradient(
                                             listOf(
-                                                Color(0xFF1E0F07),
-                                                Color(0xFF140B05)
+                                                Color(0xFF09120B),
+                                                Color(0xFF050A06)
                                             )
                                         )
                                     } else {
                                         Brush.verticalGradient(
                                             listOf(
-                                                Color(0xFFFF9E79), // Soft Warm Coral Peach
-                                                Color(0xFFFFAE8D), // Pale Amber Orange
-                                                Color(0xFFFFBEA2), // Soft Apricot
-                                                Color(0xFFFFCFAF)  // Luminous Pale Sunset
+                                                Color(0xFF009639), // Deep Emerald
+                                                Color(0xFF00B04A), // Jewel Jade
+                                                Color(0xFF00C853), // Vivid Emerald
+                                                Color(0xFF26E06D)  // Mint Emerald
                                             )
                                         )
                                     }
@@ -607,7 +620,7 @@ fun HomeScreen(
                                         .clickable { onOpenMessageBlast() },
                                     shape = RoundedCornerShape(14.dp),
                                     colors = CardDefaults.cardColors(
-                                        containerColor = if (isDark) Color(0xFF38140B) else Color(0xFFFFF3EE)
+                                        containerColor = if (isDark) Color(0xFF2C241B) else Color(0xFFFAF7F2)
                                     ),
                                     elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 4.dp else 2.5.dp)
                                 ) {
@@ -616,8 +629,8 @@ fun HomeScreen(
                                             .fillMaxSize()
                                             .background(
                                                 Brush.verticalGradient(
-                                                    colors = if (isDark) listOf(Color(0xFF6B1D0E), Color(0xFF3A0D05))
-                                                    else listOf(Color(0xFFFFFAF8), Color(0xFFFFECE5))
+                                                    colors = if (isDark) listOf(Color(0xFF3B3022), Color(0xFF201A12))
+                                                    else listOf(Color(0xFFFCFAF7), Color(0xFFF2ECE1))
                                                 )
                                             )
                                             .padding(7.dp)
@@ -625,7 +638,7 @@ fun HomeScreen(
                                         Column(modifier = Modifier.align(Alignment.TopStart).padding(start = 2.dp, top = 2.dp)) {
                                             Text(
                                                 text = "Message\nBlast",
-                                                color = if (isDark) Color(0xFFFFCCBC) else Color(0xFFD83818),
+                                                color = if (isDark) Color(0xFFDFD0BA) else Color(0xFF9E7B40),
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 lineHeight = 15.sp
@@ -640,7 +653,7 @@ fun HomeScreen(
                                     }
                                 }
 
-                                // Card 2: Game Center (Luxury 24k Gold Glass Card)
+                                // Card 2: Game Center (Luxury Champagne Gold Glass Card)
                                 Card(
                                     modifier = Modifier
                                         .weight(1f)
@@ -652,7 +665,7 @@ fun HomeScreen(
                                         },
                                     shape = RoundedCornerShape(14.dp),
                                     colors = CardDefaults.cardColors(
-                                        containerColor = if (isDark) Color(0xFF362805) else Color(0xFFFFFBEA)
+                                        containerColor = if (isDark) Color(0xFF2F2716) else Color(0xFFFDFBF7)
                                     ),
                                     elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 4.dp else 2.5.dp)
                                 ) {
@@ -661,8 +674,8 @@ fun HomeScreen(
                                             .fillMaxSize()
                                             .background(
                                                 Brush.verticalGradient(
-                                                    colors = if (isDark) listOf(Color(0xFF684B05), Color(0xFF382602))
-                                                    else listOf(Color(0xFFFFFDF5), Color(0xFFFFF8E1))
+                                                    colors = if (isDark) listOf(Color(0xFF45391E), Color(0xFF221A0C))
+                                                    else listOf(Color(0xFFFFFDF8), Color(0xFFF5EFE0))
                                                 )
                                             )
                                             .padding(7.dp)
@@ -670,7 +683,7 @@ fun HomeScreen(
                                         Column(modifier = Modifier.align(Alignment.TopStart).padding(start = 2.dp, top = 2.dp)) {
                                             Text(
                                                 text = "Game\nCenter",
-                                                color = if (isDark) Color(0xFFFFECB3) else Color(0xFFB77900),
+                                                color = if (isDark) Color(0xFFE8D7B5) else Color(0xFFB38E3F),
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 lineHeight = 15.sp
@@ -685,7 +698,7 @@ fun HomeScreen(
                                     }
                                 }
 
-                                // Card 3: Tasks Center (Radiant Electric Purple Glass Card)
+                                // Card 3: Tasks Center (Refined Warm Titanium Neutral Glass Card)
                                 Card(
                                     modifier = Modifier
                                         .weight(1f)
@@ -693,7 +706,7 @@ fun HomeScreen(
                                         .clickable { onOpenTaskCenter() },
                                     shape = RoundedCornerShape(14.dp),
                                     colors = CardDefaults.cardColors(
-                                        containerColor = if (isDark) Color(0xFF28113D) else Color(0xFFFBF6FF)
+                                        containerColor = if (isDark) Color(0xFF262524) else Color(0xFFF8F8F7)
                                     ),
                                     elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 4.dp else 2.5.dp)
                                 ) {
@@ -702,8 +715,8 @@ fun HomeScreen(
                                             .fillMaxSize()
                                             .background(
                                                 Brush.verticalGradient(
-                                                    colors = if (isDark) listOf(Color(0xFF561A82), Color(0xFF2A0B44))
-                                                    else listOf(Color(0xFFFAF4FF), Color(0xFFF2E5FF))
+                                                    colors = if (isDark) listOf(Color(0xFF383633), Color(0xFF1E1D1C))
+                                                    else listOf(Color(0xFFFAF9F8), Color(0xFFEDECE9))
                                                 )
                                             )
                                             .padding(7.dp)
@@ -711,7 +724,7 @@ fun HomeScreen(
                                         Column(modifier = Modifier.align(Alignment.TopStart).padding(start = 2.dp, top = 2.dp)) {
                                             Text(
                                                 text = "Tasks\nCenter",
-                                                color = if (isDark) Color(0xFFF3E5F5) else Color(0xFF7C3AED),
+                                                color = if (isDark) Color(0xFFD4D1CA) else Color(0xFF7E776C),
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 lineHeight = 15.sp
@@ -1076,7 +1089,7 @@ fun HomeScreen(
                                 }
                             },
                             shape = CircleShape,
-                            color = Color(0xFFFF9E79),
+                            color = Color(0xFF00C853),
                             enabled = !isSendingMessage
                         ) {
                             Box(
@@ -1084,9 +1097,9 @@ fun HomeScreen(
                                     .background(
                                         Brush.horizontalGradient(
                                             listOf(
-                                                Color(0xFFFF9E79), // Soft Warm Coral Peach
-                                                Color(0xFFFFAE8D), // Pale Amber Orange
-                                                Color(0xFFFF8A65)  // Rich Warm Sunset Coral
+                                                Color(0xFF009639), // Deep Emerald
+                                                Color(0xFF00C853), // Vivid Emerald
+                                                Color(0xFF26E06D)  // Mint Emerald
                                             )
                                         )
                                     )
@@ -1130,15 +1143,17 @@ private fun RealProfileCard(
     val colors = com.example.ui.theme.AppTheme.colors
 
     Card(
-        modifier = modifier
-            .height(200.dp)
-            .clickable { onCardClick() },
+        modifier = modifier.height(200.dp),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = colors.cardBg),
         border = null,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable { onCardClick() }
+        ) {
             // Profile image or doll mascot - rendered with RoundedCornerShape to display photos in full without clipping
             AvatarHelper.UserAvatarImage(
                 avatarUrl = user.avatarUrl,
@@ -1165,12 +1180,13 @@ private fun RealProfileCard(
                 )
             }
 
-            // Top Right Custom Compact 3D CHAT Badge Button (Subtle & proportional accent)
+            // Top Right Custom Compact 3D CHAT Badge Button at the corner of the profile card
             Chat3DBadgeButton(
                 onClick = onChatClick,
                 modifier = Modifier
                     .padding(top = 8.dp, end = 8.dp)
                     .align(Alignment.TopEnd)
+                    .testTag("btn_chat_profile_card_${user.numericId}")
             )
 
             // Bottom Content Overlay with smooth vertical gradient scrim & breathing room
@@ -1213,7 +1229,7 @@ private fun RealProfileCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         val isFemale = user.gender.equals("Female", ignoreCase = true) || user.gender.equals("F", ignoreCase = true)
-                        val genderBgColor = if (isFemale) Color(0xFFF8A4EC) else Color(0xFF72C2F8)
+                        val genderBgColor = if (isFemale) Color(0xFFE2C485) else Color(0xFFD4C8B8)
 
                         Surface(
                             shape = RoundedCornerShape(6.dp),

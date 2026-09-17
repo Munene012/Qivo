@@ -21,13 +21,13 @@ import androidx.core.view.WindowCompat
 private val DarkColorScheme =
   darkColorScheme(
     primary = QivoOrange,
-    secondary = QivoYellow,
-    tertiary = Pink80,
-    background = Color(0xFF000000),
-    surface = Color(0xFF0D0D0D),
+    secondary = QivoGold,
+    tertiary = QivoGoldLight,
+    background = Color(0xFF0B100D),
+    surface = Color(0xFF101913),
     onPrimary = Color.White,
     onSecondary = Color.Black,
-    onTertiary = Color.White,
+    onTertiary = Color.Black,
     onBackground = Color.White,
     onSurface = Color.White
   )
@@ -35,15 +35,15 @@ private val DarkColorScheme =
 private val LightColorScheme =
   lightColorScheme(
     primary = QivoOrange,
-    secondary = PurpleGrey40,
-    tertiary = Pink40,
-    background = Color(0xFFFAFAFA),
+    secondary = QivoGoldDark,
+    tertiary = QivoGold,
+    background = Color(0xFFF7FAF8),
     surface = Color.White,
     onPrimary = Color.White,
     onSecondary = Color.White,
     onTertiary = Color.White,
-    onBackground = Color(0xFF111827),
-    onSurface = Color(0xFF111827)
+    onBackground = Color(0xFF111813),
+    onSurface = Color(0xFF111813)
   )
 
 private fun android.content.Context.findActivity(): Activity? {

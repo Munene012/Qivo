@@ -31,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -50,6 +51,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.calling.ActiveCallSessionManager
 import com.example.data.AppAdvertisement
 import com.example.data.CoinPackage
@@ -167,6 +171,31 @@ fun MainBottomNavScaffold(
         }
         // Initialize FCM registration with Supabase
         SupabaseFcmService.initializeFcm(context, userId)
+    }
+
+    // App-wide global chat listener & real-time synchronization so new messages update instantly across all tabs/screens
+    LaunchedEffect(userId) {
+        if (userId.isNotBlank()) {
+            com.example.data.ChatStateHolder.initialize(context, userId)
+            com.example.data.ChatStateHolder.connectRealtime(userId)
+            com.example.data.ChatStateHolder.syncWithNetwork(context, userId)
+        }
+    }
+
+    val scaffoldLifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(scaffoldLifecycleOwner, userId) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                if (userId.isNotBlank()) {
+                    com.example.data.ChatStateHolder.connectRealtime(userId)
+                    com.example.data.ChatStateHolder.syncWithNetwork(context, userId)
+                }
+            }
+        }
+        scaffoldLifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            scaffoldLifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     // Live Unread Messages Count Observation
@@ -305,6 +334,8 @@ fun MainBottomNavScaffold(
     }
 
     val homeListState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val chatListState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val partyGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
 
     // Always ensure cold start begins at the top of the Home screen
     LaunchedEffect(Unit) {
@@ -500,6 +531,11 @@ fun MainBottomNavScaffold(
                 }
             } else if (tab == MainTab.CHAT) {
                 chatRefreshTrigger = System.currentTimeMillis()
+                scope.launch {
+                    try {
+                        chatListState.animateScrollToItem(0)
+                    } catch (_: Exception) {}
+                }
             }
             return
         }
@@ -537,29 +573,6 @@ fun MainBottomNavScaffold(
                 .padding(bottom = if (isFullScreenOverlay) 0.dp else (56.dp + navBarBottomInset))
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                if (!isOnline) {
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = true,
-                        enter = androidx.compose.animation.expandVertically(),
-                        exit = androidx.compose.animation.shrinkVertically()
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0xFFE53935))
-                                .padding(vertical = 4.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Running in Offline Mode",
-                                color = Color.White,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                            )
-                        }
-                    }
-                }
                 // Main screen view
                 Box(modifier = Modifier.fillMaxSize()) {
                     when (currentStep) {
@@ -942,6 +955,7 @@ fun MainBottomNavScaffold(
                             }
                         )
                         MainTab.PARTY -> PartyScreen(
+                            gridState = partyGridState,
                             onOpenPartyRoom = { room ->
                                 navigateTo(AppNavStep.PartyRoomDetailStep(room))
                             },
@@ -951,6 +965,7 @@ fun MainBottomNavScaffold(
                         )
                         MainTab.CHAT -> ChatScreen(
                             refreshTrigger = chatRefreshTrigger,
+                            listState = chatListState,
                             onOpenUserDetail = { user ->
                                 navigateTo(AppNavStep.UserDetailStep(user))
                             },

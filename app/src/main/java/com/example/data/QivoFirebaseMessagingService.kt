@@ -48,6 +48,7 @@ class QivoFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onCreate() {
         super.onCreate()
+        SupabaseFcmService.createNotificationChannels(this)
         createNotificationChannels()
     }
 
@@ -69,26 +70,31 @@ class QivoFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
-        Log.d(TAG, "From: ${remoteMessage.from}, data: ${remoteMessage.data}")
+        Log.d(TAG, "From: ${remoteMessage.from}, data: ${remoteMessage.data}, notif: ${remoteMessage.notification?.title}")
 
         val data = remoteMessage.data
-        if (data.isEmpty()) return
+        val notification = remoteMessage.notification
+        if (data.isEmpty() && notification == null) return
 
         // 1. Strict validation: MUST be only CHAT_MESSAGE or INCOMING_CALL
         val rawType = data["type"] ?: data["notification_type"] ?: ""
         val notificationType = when (rawType.uppercase()) {
-            SupabaseFcmService.TYPE_CHAT_MESSAGE, "NEW_CHAT_MESSAGE", "CHAT" -> SupabaseFcmService.TYPE_CHAT_MESSAGE
-            SupabaseFcmService.TYPE_INCOMING_CALL, "CALL", "CALL_INCOMING" -> SupabaseFcmService.TYPE_INCOMING_CALL
+            SupabaseFcmService.TYPE_CHAT_MESSAGE, "NEW_CHAT_MESSAGE", "CHAT", "MESSAGE" -> SupabaseFcmService.TYPE_CHAT_MESSAGE
+            SupabaseFcmService.TYPE_INCOMING_CALL, "CALL", "CALL_INCOMING", "INCOMING_CALL" -> SupabaseFcmService.TYPE_INCOMING_CALL
             else -> {
-                Log.d(TAG, "Ignored unsupported push notification type: $rawType")
-                return
+                if (rawType.isBlank() && (data.containsKey("message_text") || data.containsKey("message") || notification != null)) {
+                    SupabaseFcmService.TYPE_CHAT_MESSAGE
+                } else {
+                    Log.d(TAG, "Ignored unsupported push notification type: $rawType")
+                    return
+                }
             }
         }
 
         // 2. Authentication Verification: Verify recipient is currently logged in
         val session = UserSessionManager.getSession(this)
         val currentUserId = session?.userId ?: ""
-        val recipientUserId = data["recipient_user_id"] ?: data["receiver_id"] ?: ""
+        val recipientUserId = data["recipient_user_id"] ?: data["receiver_id"] ?: data["recipient_id"] ?: data["user_id"] ?: ""
 
         if (currentUserId.isBlank() || (recipientUserId.isNotBlank() && !currentUserId.equals(recipientUserId, ignoreCase = true))) {
             Log.d(TAG, "Ignored notification: recipient mismatch or user not logged in (current: $currentUserId, target: $recipientUserId)")
@@ -96,18 +102,18 @@ class QivoFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         // 3. Blocking Security Verification: Ensure sender is not blocked
-        val senderId = data["sender_id"] ?: data["caller_id"] ?: ""
-        if (senderId.isBlank()) return
+        val senderId = data["sender_id"] ?: data["caller_id"] ?: data["from_user_id"] ?: "qivo_chat"
 
         val profileService = SupabaseProfileService()
-        if (profileService.isUserBlocked(currentUserId, senderId, this) ||
+        if (senderId != "qivo_chat" && (
+            profileService.isUserBlocked(currentUserId, senderId, this) ||
             profileService.isUserBlocked(senderId, currentUserId, this)
-        ) {
+        )) {
             Log.d(TAG, "Ignored notification: sender $senderId is blocked")
             return
         }
 
-        val rawSenderName = data["sender_name"] ?: data["caller_name"] ?: remoteMessage.notification?.title ?: "QIVO User"
+        val rawSenderName = data["sender_name"] ?: data["caller_name"] ?: notification?.title ?: "QIVO User"
         val senderName = if (rawSenderName.contains("update", ignoreCase = true) || rawSenderName.isBlank()) "QIVO User" else rawSenderName
         val senderAvatar = data["sender_avatar"] ?: data["caller_avatar"] ?: ""
 
@@ -117,7 +123,7 @@ class QivoFirebaseMessagingService : FirebaseMessagingService() {
         // 4. Handle verified notification types
         when (notificationType) {
             SupabaseFcmService.TYPE_CHAT_MESSAGE -> {
-                val rawMessage = data["message_text"] ?: data["message"] ?: data["body"] ?: remoteMessage.notification?.body ?: "Sent you a message"
+                val rawMessage = data["message_text"] ?: data["message"] ?: data["body"] ?: notification?.body ?: "Sent you a message"
                 val filteredMessage = if (rawMessage.contains("you have an update", ignoreCase = true) || rawMessage.isBlank()) "Sent you a message" else rawMessage
                 val messageText = SupabaseFcmService.formatNotificationText(filteredMessage)
                 // If user is currently looking at this conversation, do not show notification
@@ -242,6 +248,8 @@ class QivoFirebaseMessagingService : FirebaseMessagingService() {
                 .setBigContentTitle(senderName)
             )
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
 

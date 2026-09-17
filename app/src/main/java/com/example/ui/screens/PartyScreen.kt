@@ -67,6 +67,7 @@ object PartyScreenDataStore {
 
 @Composable
 fun PartyScreen(
+    gridState: androidx.compose.foundation.lazy.grid.LazyGridState = rememberLazyGridState(),
     onOpenPartyRoom: (PartyRoom) -> Unit = {},
     onOpenCreateRoom: () -> Unit = {}
 ) {
@@ -74,7 +75,6 @@ fun PartyScreen(
     val scope = rememberCoroutineScope()
     val partyService = remember { SupabasePartyService() }
     val colors = AppTheme.colors
-    val gridState = rememberLazyGridState()
 
     var selectedCategory by remember { mutableStateOf(PartyScreenDataStore.selectedCategory) }
     LaunchedEffect(selectedCategory) {
@@ -214,17 +214,17 @@ fun PartyScreen(
                     if (colors.isDark) {
                         Brush.verticalGradient(
                             listOf(
-                                Color(0xFF1E0F07),
-                                Color(0xFF140B05)
+                                Color(0xFF09120B),
+                                Color(0xFF050A06)
                             )
                         )
                     } else {
                         Brush.verticalGradient(
                             listOf(
-                                Color(0xFFFF9E79), // Soft Warm Coral Peach
-                                Color(0xFFFFAE8D), // Pale Amber Orange
-                                Color(0xFFFFBEA2), // Soft Apricot
-                                Color(0xFFFFCFAF)  // Luminous Pale Sunset
+                                Color(0xFF009639), // Deep Emerald
+                                Color(0xFF00B04A), // Jewel Jade
+                                Color(0xFF00C853), // Vivid Emerald
+                                Color(0xFF26E06D)  // Mint Emerald
                             )
                         )
                     }

@@ -359,14 +359,14 @@ fun GiftBox3DIcon(
             cornerRadius = CornerRadius(w * 0.10f, w * 0.10f)
         )
 
-        // 2. Box base container (Ruby / Magenta Gradient)
+        // 2. Box base container (Emerald & Jade Gradient)
         drawRoundRect(
             brush = Brush.verticalGradient(
                 listOf(
-                    Color(0xFFFF4081),
-                    Color(0xFFE91E63),
-                    Color(0xFFC2185B),
-                    Color(0xFF880E4F)
+                    Color(0xFF00E676),
+                    Color(0xFF00C853),
+                    Color(0xFF007E33),
+                    Color(0xFF004D20)
                 )
             ),
             topLeft = Offset(w * 0.18f, h * 0.40f),
@@ -387,9 +387,9 @@ fun GiftBox3DIcon(
         drawRoundRect(
             brush = Brush.verticalGradient(
                 listOf(
-                    Color(0xFFFF80AB),
-                    Color(0xFFFF4081),
-                    Color(0xFFD81B60)
+                    Color(0xFF69F0AE),
+                    Color(0xFF00C853),
+                    Color(0xFF007E33)
                 )
             ),
             topLeft = Offset(w * 0.12f, h * 0.26f),
@@ -612,7 +612,7 @@ fun Conversation3DSendButton(
             .shadow(
                 elevation = if (isEnabled) 5.dp else 1.dp,
                 shape = CircleShape,
-                spotColor = if (isEnabled) Color(0xFFFF9E79).copy(alpha = 0.6f) else Color.Transparent
+                spotColor = if (isEnabled) Color(0xFF00C853).copy(alpha = 0.5f) else Color.Transparent
             )
             .testTag("chat_send_button")
     ) {
@@ -623,9 +623,9 @@ fun Conversation3DSendButton(
                     if (isEnabled) {
                         Brush.verticalGradient(
                             listOf(
-                                Color(0xFFFF9E79), // Soft Warm Coral Peach (App signature)
-                                Color(0xFFFFAE8D), // Pale Amber Orange
-                                Color(0xFFFF7D54)  // Rich Warm Sunset Coral
+                                Color(0xFF00E676), // Electric Mint Emerald
+                                Color(0xFF00C853), // Vivid Emerald Green
+                                Color(0xFF007E33)  // Deep Jade
                             )
                         )
                     } else {

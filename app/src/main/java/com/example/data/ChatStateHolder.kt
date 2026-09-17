@@ -11,6 +11,18 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
+object GlobalChatState {
+    val unreadCount: StateFlow<Int> = SupabaseChatService.totalUnreadCount
+
+    fun setUnreadCount(count: Int) {
+        SupabaseChatService.setUnreadCount(count)
+    }
+
+    fun decrementUnreadCount(amount: Int = 1) {
+        SupabaseChatService.decrementUnreadCount(amount)
+    }
+}
+
 object ChatStateHolder {
     private const val TAG = "ChatStateHolder"
 
@@ -34,6 +46,15 @@ object ChatStateHolder {
     private var connectedUserId: String = ""
     private var isSubscribed = false
 
+    private fun setMessagesList(list: List<ChatMessage>) {
+        _messagesList.value = list
+        if (connectedUserId.isNotBlank()) {
+            val unread = list.count { !it.isRead && it.receiverId.trim().equals(connectedUserId, ignoreCase = true) }
+            SupabaseChatService.setUnreadCount(unread)
+            Log.d(TAG, "Global unread count changed: $unread")
+        }
+    }
+
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)
@@ -52,7 +73,7 @@ object ChatStateHolder {
 
     fun initialize(context: Context, currentUserId: String) {
         if (currentUserId.isBlank()) {
-            _messagesList.value = emptyList()
+            setMessagesList(emptyList())
             _hasCompletedInitialSync.value = false
             disconnect()
             return
@@ -76,24 +97,27 @@ object ChatStateHolder {
 
         // Immediately load from in-memory cache or persistent database cache
         scope.launch {
-            val inMem = SupabaseChatService.getInMemoryMessages(currentUserId)
-            val msgs = if (inMem.isNotEmpty()) {
-                inMem
-            } else {
-                if (isNetworkAvailable(context)) {
-                    AppDataCacheManager.getCachedChatMessagesSync(context, currentUserId)
+            try {
+                val inMem = SupabaseChatService.getInMemoryMessages(currentUserId)
+                val msgs = if (inMem.isNotEmpty()) {
+                    inMem
                 } else {
-                    emptyList()
+                    AppDataCacheManager.getCachedChatMessagesSync(context, currentUserId)
                 }
+                
+                // Filter out deleted messages
+                val filteredMsgs = msgs.filterNot { msg ->
+                    val partnerId = if (msg.senderId.trim().equals(currentUserId, ignoreCase = true)) msg.receiverId.trim() else msg.senderId.trim()
+                    chatService.isConversationSoftDeleted(context, currentUserId, partnerId, msg.createdAt)
+                }
+                if (filteredMsgs.isNotEmpty()) {
+                    setMessagesList(filteredMsgs)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading initial chat messages: ${e.message}")
+            } finally {
+                _hasCompletedInitialSync.value = true
             }
-            
-            // Filter out deleted messages
-            val filteredMsgs = msgs.filterNot { msg ->
-                val partnerId = if (msg.senderId.trim().equals(currentUserId, ignoreCase = true)) msg.receiverId.trim() else msg.senderId.trim()
-                chatService.isConversationSoftDeleted(context, currentUserId, partnerId, msg.createdAt)
-            }
-            _messagesList.value = filteredMsgs
-            _hasCompletedInitialSync.value = true
 
             // Sync from network in the background
             syncWithNetwork(context, currentUserId)
@@ -101,6 +125,31 @@ object ChatStateHolder {
 
         // Establish real-time subscription
         connectRealtime(currentUserId)
+    }
+
+    fun appendOrUpdateMessages(newMsgs: List<ChatMessage>) {
+        if (newMsgs.isEmpty()) return
+        val current = _messagesList.value.toMutableList()
+        val optimistic = current.filter { it.id == 0L }
+        val combined = (optimistic + newMsgs)
+            .distinctBy { if (it.id == 0L) it.hashCode().toLong() else it.id }
+            .sortedByDescending { chatService.parseTimestampToMillis(it.createdAt) }
+        if (!areMessageListsEqual(_messagesList.value, combined)) {
+            setMessagesList(combined)
+        }
+    }
+
+    fun areMessageListsEqual(a: List<ChatMessage>, b: List<ChatMessage>): Boolean {
+        if (a === b) return true
+        if (a.size != b.size) return false
+        for (i in a.indices) {
+            val x = a[i]
+            val y = b[i]
+            if (x.id != y.id || x.isRead != y.isRead || x.message != y.message || x.createdAt != y.createdAt || x.senderId != y.senderId || x.receiverId != y.receiverId) {
+                return false
+            }
+        }
+        return true
     }
 
     fun syncWithNetwork(context: Context, userId: String) {
@@ -111,7 +160,7 @@ object ChatStateHolder {
             try {
                 val msgs = chatService.fetchUserMessages(userId, context, limit = 300)
                 if (msgs.isNotEmpty()) {
-                    _messagesList.value = msgs
+                    appendOrUpdateMessages(msgs)
                 }
 
                 val allProfs = profileService.fetchAllProfiles()
@@ -121,6 +170,7 @@ object ChatStateHolder {
                         AppDataCacheManager.saveProfilesCache(context, allProfs, "all")
                     } catch (_: Exception) {}
                 }
+                _hasCompletedInitialSync.value = true
             } catch (e: Exception) {
                 Log.e(TAG, "Background sync failed: ${e.message}")
             } finally {
@@ -163,13 +213,13 @@ object ChatStateHolder {
                 current.add(0, msg)
             }
         }
-        _messagesList.value = current.distinctBy { if (it.id == 0L) it.hashCode() else it.id }
+        setMessagesList(current.distinctBy { if (it.id == 0L) it.hashCode() else it.id })
     }
 
     fun appendMessages(msgs: List<ChatMessage>) {
         val current = _messagesList.value.toMutableList()
         current.addAll(msgs)
-        _messagesList.value = current.distinctBy { if (it.id == 0L) it.hashCode() else it.id }
+        setMessagesList(current.distinctBy { if (it.id == 0L) it.hashCode() else it.id })
     }
 
     fun removeConversationLocally(partnerId: String) {
@@ -177,7 +227,7 @@ object ChatStateHolder {
             val p = if (msg.senderId.trim().equals(connectedUserId, ignoreCase = true)) msg.receiverId.trim() else msg.senderId.trim()
             p.equals(partnerId, ignoreCase = true)
         }
-        _messagesList.value = current
+        setMessagesList(current)
         SupabaseChatService.updateInMemoryMessages(connectedUserId, current)
     }
 
@@ -212,7 +262,7 @@ object ChatStateHolder {
             .sortedByDescending { m ->
                 chatService.parseTimestampToMillis(m.createdAt)
             }
-        _messagesList.value = sorted
+        setMessagesList(sorted)
 
         // Push updates to chat service's in-memory storage and app persistence cache
         SupabaseChatService.updateInMemoryMessages(connectedUserId, sorted)
@@ -232,7 +282,7 @@ object ChatStateHolder {
                 msg.copy(isRead = true)
             } else msg
         }
-        _messagesList.value = current
+        setMessagesList(current)
         SupabaseChatService.updateInMemoryMessages(connectedUserId, current)
         if (context != null) {
             scope.launch {
@@ -251,6 +301,14 @@ object ChatStateHolder {
 
     fun connectRealtime(userId: String) {
         if (userId.isBlank()) return
+        if (connectedUserId == userId && isSubscribed && activeWebSocket != null) {
+            Log.d(TAG, "Realtime subscription already active for user $userId, skipping duplicate connection.")
+            return
+        }
+
+        connectedUserId = userId
+        Log.d(TAG, "Realtime subscription started for user $userId")
+
         val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
         val apiKey = SupabaseConfig.supabaseAnonKey.trim()
         if (baseUrl.isBlank() || apiKey.isBlank()) return
@@ -260,10 +318,15 @@ object ChatStateHolder {
 
         scope.launch {
             try {
+                // Close existing socket if any before reconnecting
+                try {
+                    activeWebSocket?.close(1000, "Reconnecting new socket")
+                } catch (_: Exception) {}
+
                 val request = Request.Builder().url(wsUrl).build()
                 activeWebSocket = httpClient.newWebSocket(request, object : WebSocketListener() {
                     override fun onOpen(webSocket: WebSocket, response: Response) {
-                        Log.d(TAG, "Chat socket open, joining realtime channel")
+                        Log.d(TAG, "Realtime subscription status: opened successfully, joining realtime channel")
                         
                         val joinTopic = "realtime:public:messages"
                         val joinMsg = JSONObject().apply {
@@ -308,18 +371,23 @@ object ChatStateHolder {
                                             val senderAvatar = newObj.optString("sender_avatar", "")
                                             val receiverName = newObj.optString("receiver_name", "User")
 
-                                            val chatMessage = ChatMessage(
-                                                id = id,
-                                                senderId = senderId,
-                                                senderName = senderName,
-                                                senderAvatar = senderAvatar,
-                                                receiverId = receiverId,
-                                                receiverName = receiverName,
-                                                message = message,
-                                                createdAt = createdAt,
-                                                isRead = isRead
-                                            )
-                                            handleRealtimeMessage(chatMessage, null)
+                                            Log.d(TAG, "Incoming INSERT received: id=$id, sender=$senderId, receiver=$receiverId")
+
+                                            if (senderId.equals(connectedUserId, ignoreCase = true) || receiverId.equals(connectedUserId, ignoreCase = true)) {
+                                                Log.d(TAG, "Incoming message identified as belonging to current user ($connectedUserId)")
+                                                val chatMessage = ChatMessage(
+                                                    id = id,
+                                                    senderId = senderId,
+                                                    senderName = senderName,
+                                                    senderAvatar = senderAvatar,
+                                                    receiverId = receiverId,
+                                                    receiverName = receiverName,
+                                                    message = message,
+                                                    createdAt = createdAt,
+                                                    isRead = isRead
+                                                )
+                                                handleRealtimeMessage(chatMessage, null)
+                                            }
                                         }
                                     }
                                 }
@@ -330,22 +398,37 @@ object ChatStateHolder {
                     }
 
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                        Log.w(TAG, "WebSocket failure: ${t.message}")
+                        Log.w(TAG, "WebSocket failure: ${t.message}, scheduling realtime reconnect...")
                         isSubscribed = false
+                        scheduleReconnect()
                     }
 
                     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                        Log.d(TAG, "WebSocket closed")
+                        Log.d(TAG, "Subscription stopped / WebSocket closed: $reason, scheduling realtime reconnect...")
                         isSubscribed = false
+                        scheduleReconnect()
                     }
                 })
             } catch (e: Exception) {
                 Log.e(TAG, "Error initiating WebSocket: ${e.message}")
+                scheduleReconnect()
+            }
+        }
+    }
+
+    private fun scheduleReconnect() {
+        if (connectedUserId.isBlank()) return
+        scope.launch {
+            delay(4000L) // wait 4 seconds before reconnecting
+            if (connectedUserId.isNotBlank() && !isSubscribed) {
+                Log.d(TAG, "Realtime reconnecting...")
+                connectRealtime(connectedUserId)
             }
         }
     }
 
     fun disconnect() {
+        Log.d(TAG, "Subscription stopped / Disconnect called")
         try {
             activeWebSocket?.close(1000, "Disconnect called")
         } catch (_: Exception) {}

@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -43,6 +44,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.clipToBounds
 import com.example.ui.components.QivoBackgroundStamp
 import com.example.ui.theme.QivoOrange
+import com.example.ui.theme.QivoOrangeDark
+import com.example.ui.theme.QivoGoldLight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Close
@@ -102,73 +105,39 @@ import com.example.ui.components.CustomRefreshHeaderItem
 import com.example.ui.components.rememberCustomPullRefreshState
 import kotlinx.coroutines.launch
 
-data class ConversationItem(
-    val partnerId: String,
-    val partnerName: String,
-    val partnerAvatar: String,
-    val partnerGender: String,
-    val partnerNumericId: Long,
-    val partnerCountry: String,
-    val latestMessage: String,
-    val timestamp: String,
-    val isUnread: Boolean,
-    val unreadCount: Int = 0,
-    val isOnline: Boolean = false
-)
-
-private fun areMessageListsEqual(a: List<ChatMessage>, b: List<ChatMessage>): Boolean {
-    if (a === b) return true
-    if (a.size != b.size) return false
-    for (i in a.indices) {
-        val x = a[i]
-        val y = b[i]
-        if (x.id != y.id || x.isRead != y.isRead || x.message != y.message || x.createdAt != y.createdAt) {
-            return false
-        }
-    }
-    return true
-}
-
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
     refreshTrigger: Long = 0L,
+    listState: LazyListState = rememberLazyListState(),
+    viewModel: ChatListViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
     onOpenUserDetail: (UserProfile) -> Unit = {},
     onOpenConversation: (UserProfile) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val listState = rememberLazyListState()
 
-    val chatService = remember { SupabaseChatService() }
-    val profileService = remember { SupabaseProfileService() }
-    val adService = remember { SupabaseAdService() }
     val session = remember { UserSessionManager.getSession(context) }
     val currentUserId = session?.userId ?: ""
 
-    // Connect and synchronize background state holder
+    // Initialize ViewModel once with user ID; stays active throughout the user's session
     LaunchedEffect(currentUserId) {
-        if (currentUserId.isNotEmpty()) {
-            com.example.data.ChatStateHolder.initialize(context, currentUserId)
+        if (currentUserId.isNotBlank()) {
+            viewModel.initialize(currentUserId)
         }
     }
 
-    val messagesListState = com.example.data.ChatStateHolder.messagesList.collectAsState()
-    val profilesMapState = com.example.data.ChatStateHolder.profilesMap.collectAsState()
-    val isSyncingState = com.example.data.ChatStateHolder.isSyncing.collectAsState()
-    val hasCompletedInitialSyncState = com.example.data.ChatStateHolder.hasCompletedInitialSync.collectAsState()
-
-    val messagesList = messagesListState.value
-    val profilesMap = profilesMapState.value
-
-    val isInitialSyncDone = hasCompletedInitialSyncState.value
-    val isLoadingMessages = !hasCompletedInitialSyncState.value
+    val conversations by viewModel.conversations.collectAsState()
+    val initialLoading by viewModel.initialLoading.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
+    val displayedLimit by viewModel.displayedLimit.collectAsState()
+    val isLoadingMoreChats by viewModel.isLoadingMoreChats.collectAsState()
+    val hasMoreServerChats by viewModel.hasMoreServerChats.collectAsState()
+    val chatBannerAds by viewModel.bannerAds.collectAsState()
+    val profilesMap by viewModel.profilesMap.collectAsState()
+    val totalUnreadCount by viewModel.totalUnreadCount.collectAsState()
 
     var selectedChatForDelete by remember { mutableStateOf<ConversationItem?>(null) }
-    var chatBannerAds by remember { mutableStateOf<List<AppAdvertisement>>(emptyList()) }
-    var displayedLimit by remember { mutableStateOf(20) }
-    var isLoadingMoreChats by remember { mutableStateOf(false) }
-    var hasMoreServerChats by remember { mutableStateOf(true) }
 
     var isNotificationsEnabled by remember {
         mutableStateOf(NotificationManagerCompat.from(context).areNotificationsEnabled())
@@ -180,37 +149,18 @@ fun ChatScreen(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 isNotificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
-                if (currentUserId.isNotEmpty()) {
-                    com.example.data.ChatStateHolder.connectRealtime(currentUserId)
-                    com.example.data.ChatStateHolder.syncWithNetwork(context, currentUserId)
-                }
-            } else if (event == Lifecycle.Event.ON_PAUSE) {
-                com.example.data.ChatStateHolder.disconnect()
+                viewModel.onScreenResumed()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            com.example.data.ChatStateHolder.disconnect()
-        }
-    }
-
-    val reloadData: () -> Unit = {
-        if (currentUserId.isNotEmpty()) {
-            com.example.data.ChatStateHolder.syncWithNetwork(context, currentUserId)
-        }
-        scope.launch {
-            try {
-                chatBannerAds = adService.fetchActiveAds(context, AppAdvertisement.AD_TYPE_CHAT_BANNER, limit = 3)
-            } catch (_: Exception) {}
         }
     }
 
     val pullRefreshState = rememberCustomPullRefreshState(
         onRefresh = {
-            if (currentUserId.isNotEmpty()) {
-                com.example.data.ChatStateHolder.syncWithNetwork(context, currentUserId)
-            }
+            viewModel.pullToRefresh()
         }
     )
 
@@ -222,80 +172,9 @@ fun ChatScreen(
                 listState.animateScrollToItem(0)
             } else {
                 pullRefreshState.triggerRefresh(scope)
-            }
-            reloadData()
-        }
-    }
-
-    // Group messages into distinct conversations by contact partner & count unread
-    val conversations = remember(messagesList, profilesMap, currentUserId) {
-        val grouped = mutableMapOf<String, MutableList<ChatMessage>>()
-        for (msg in messagesList) {
-            val isSender = msg.senderId.trim().equals(currentUserId, ignoreCase = true)
-            val partnerId = if (isSender) msg.receiverId.trim() else msg.senderId.trim()
-            if (partnerId.isEmpty()) continue
-
-            if (!grouped.containsKey(partnerId)) {
-                grouped[partnerId] = mutableListOf()
-            }
-            grouped[partnerId]?.add(msg)
-        }
-
-        // Also add any users that we have a saved draft with, even if no messages yet
-        val draftPartners = AppDataCacheManager.getAllDraftPartners(context, currentUserId)
-        for (partnerId in draftPartners) {
-            val cleanId = partnerId.trim()
-            if (cleanId.isNotEmpty() && !grouped.containsKey(cleanId)) {
-                grouped[cleanId] = mutableListOf()
+                viewModel.pullToRefresh()
             }
         }
-
-        grouped.mapNotNull { (partnerId, msgs) ->
-            val draft = AppDataCacheManager.getChatDraft(context, currentUserId, partnerId)
-            if (msgs.isEmpty() && draft.isEmpty()) return@mapNotNull null
-
-            val latest = msgs.maxByOrNull { chatService.parseTimestampToMillis(it.createdAt) }
-
-            // Strictly filter out soft-deleted conversations if they only have messages
-            if (latest != null && chatService.isConversationSoftDeleted(context, currentUserId, partnerId, latest.createdAt)) {
-                if (draft.isEmpty()) return@mapNotNull null
-            }
-
-            val isSender = latest?.senderId?.trim()?.equals(currentUserId, ignoreCase = true) ?: false
-
-            val partnerProfile = profilesMap[partnerId]
-            val partnerName = partnerProfile?.name ?: if (isSender) (latest?.receiverName ?: "") else (latest?.senderName ?: "")
-            val partnerAvatar = partnerProfile?.avatarUrl ?: if (!isSender) (latest?.senderAvatar ?: "") else ""
-            val partnerGender = partnerProfile?.gender ?: "Male"
-            val partnerNumericId = partnerProfile?.numericId ?: 0L
-            val partnerCountry = partnerProfile?.country ?: "Global"
-
-            val unreadCount = msgs.count { !it.isRead && it.receiverId.trim().equals(currentUserId, ignoreCase = true) }
-            val isOnline = partnerProfile?.isOnline ?: false
-
-            val displayMessage = if (draft.isNotEmpty()) "Draft: $draft" else (latest?.message ?: "")
-            val displayTimestamp = latest?.createdAt ?: ""
-
-            ConversationItem(
-                partnerId = partnerId,
-                partnerName = partnerName.ifBlank { "QIVO User" },
-                partnerAvatar = partnerAvatar,
-                partnerGender = partnerGender,
-                partnerNumericId = partnerNumericId,
-                partnerCountry = partnerCountry,
-                latestMessage = displayMessage,
-                timestamp = displayTimestamp,
-                isUnread = unreadCount > 0,
-                unreadCount = unreadCount,
-                isOnline = isOnline
-            )
-        }.sortedByDescending {
-            if (it.timestamp.isEmpty()) Long.MAX_VALUE else chatService.parseTimestampToMillis(it.timestamp)
-        }
-    }
-
-    val totalUnreadCount = remember(conversations) {
-        conversations.sumOf { it.unreadCount }
     }
 
     val displayedConversations = remember(conversations, displayedLimit) {
@@ -313,35 +192,7 @@ fun ChatScreen(
 
     LaunchedEffect(shouldLoadMoreChats) {
         if (shouldLoadMoreChats && !isLoadingMoreChats) {
-            if (displayedLimit < conversations.size) {
-                displayedLimit = minOf(displayedLimit + 20, conversations.size)
-            } else if (hasMoreServerChats && currentUserId.isNotEmpty()) {
-                isLoadingMoreChats = true
-                try {
-                    val nextMsgs = chatService.fetchUserMessages(
-                        userId = currentUserId,
-                        context = context,
-                        offset = messagesList.size,
-                        limit = 100,
-                        updateCache = false
-                    )
-                    if (nextMsgs.isEmpty()) {
-                        hasMoreServerChats = false
-                    } else {
-                        val beforeSize = messagesList.size
-                        com.example.data.ChatStateHolder.appendMessages(nextMsgs)
-                        if (messagesList.size != beforeSize) {
-                            displayedLimit += 20
-                        } else {
-                            hasMoreServerChats = false
-                        }
-                    }
-                } catch (_: Exception) {
-                    hasMoreServerChats = false
-                } finally {
-                    isLoadingMoreChats = false
-                }
-            }
+            viewModel.loadMoreChats()
         }
     }
 
@@ -358,7 +209,7 @@ fun ChatScreen(
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            if (isLoadingMessages) {
+            if (initialLoading && conversations.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -367,7 +218,7 @@ fun ChatScreen(
                 ) {
                     com.example.ui.components.AppLoadingSpinner(size = 36.dp)
                 }
-            } else if (conversations.isEmpty() && isInitialSyncDone) {
+            } else if (conversations.isEmpty()) {
 
                 // Empty State with top padding for header
                 Column(
@@ -508,17 +359,17 @@ fun ChatScreen(
                     if (isDark) {
                         Brush.verticalGradient(
                             listOf(
-                                Color(0xFF1E0F07),
-                                Color(0xFF140B05)
+                                Color(0xFF09120B),
+                                Color(0xFF050A06)
                             )
                         )
                     } else {
                         Brush.verticalGradient(
                             listOf(
-                                Color(0xFFFF9E79), // Soft Warm Coral Peach
-                                Color(0xFFFFAE8D), // Pale Amber Orange
-                                Color(0xFFFFBEA2), // Soft Apricot
-                                Color(0xFFFFCFAF)  // Luminous Pale Sunset
+                                Color(0xFF009639), // Deep Emerald
+                                Color(0xFF00B04A), // Jewel Jade
+                                Color(0xFF00C853), // Vivid Emerald
+                                Color(0xFF26E06D)  // Mint Emerald
                             )
                         )
                     }
@@ -607,8 +458,8 @@ fun ChatScreen(
                         width = 1.dp,
                         brush = Brush.horizontalGradient(
                             listOf(
-                                Color(0xFFFF7A00).copy(alpha = 0.5f),
-                                Color(0xFF9333EA).copy(alpha = 0.5f)
+                                QivoOrange.copy(alpha = 0.5f),
+                                QivoGoldLight.copy(alpha = 0.5f)
                             )
                         ),
                         shape = RoundedCornerShape(18.dp)
@@ -628,8 +479,8 @@ fun ChatScreen(
                             .background(
                                 Brush.linearGradient(
                                     listOf(
-                                        Color(0xFFFF7A00),
-                                        Color(0xFFFF0055)
+                                        QivoOrange,
+                                        QivoOrangeDark
                                     )
                                 )
                             ),
@@ -691,7 +542,7 @@ fun ChatScreen(
                         },
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF9333EA)
+                            containerColor = QivoOrange
                         ),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                         modifier = Modifier.height(34.dp)
@@ -753,14 +604,10 @@ fun ChatScreen(
                 Spacer(modifier = Modifier.height(20.dp))
                 Button(
                     onClick = {
-                        scope.launch {
-                            val partnerId = chatToDelete.partnerId
-                            chatService.softDeleteConversation(context, currentUserId, partnerId)
-                            // Immediately remove that partner's messages from local messagesList state
-                            com.example.data.ChatStateHolder.removeConversationLocally(partnerId)
-                            selectedChatForDelete = null
-                            AppToast.show("Chat deleted")
-                        }
+                        val partnerId = chatToDelete.partnerId
+                        viewModel.deleteConversation(partnerId)
+                        selectedChatForDelete = null
+                        AppToast.show("Chat deleted")
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3D00)),
                     shape = RoundedCornerShape(12.dp),

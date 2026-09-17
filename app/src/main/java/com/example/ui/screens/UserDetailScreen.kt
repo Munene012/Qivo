@@ -424,7 +424,7 @@ fun UserDetailScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             // Gender + Age Chip
-                            val genderBgColor = if (isFemale) Color(0xFFF8A4EC) else Color(0xFF72C2F8)
+                            val genderBgColor = if (isFemale) Color(0xFFE2C485) else Color(0xFFD4C8B8)
                             Surface(
                                 shape = RoundedCornerShape(6.dp),
                                 color = genderBgColor
@@ -762,13 +762,13 @@ fun UserDetailScreen(
                                 modifier = Modifier
                                     .size(44.dp)
                                     .clip(CircleShape)
-                                    .background(Brush.linearGradient(listOf(Color(0xFFFF4081), Color(0xFFFF6E40)))),
+                                    .background(Brush.linearGradient(listOf(Color(0xFF7FFF00), Color(0xFF5AB800)))),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Favorite,
                                     contentDescription = "Social Goal",
-                                    tint = Color.White,
+                                    tint = Color(0xFF0D0F0D),
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
@@ -778,7 +778,7 @@ fun UserDetailScreen(
                                     text = "LOOKING FOR",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = Color(0xFFFF4081),
+                                    color = Color(0xFF5AB800),
                                     letterSpacing = 1.sp
                                 )
                                 Spacer(modifier = Modifier.height(3.dp))
@@ -1275,6 +1275,32 @@ fun UserDetailScreen(
                                 )
                             }
                         }
+                    } else if (!isCurrentUser) {
+                        Surface(
+                            onClick = {
+                                if (isBlockedByMe) {
+                                    AppToast.show("You blocked this user.")
+                                } else if (isBlocked || isBlockedByThem) {
+                                    AppToast.show("You have been blocked.")
+                                } else {
+                                    onStartChat(liveUser)
+                                }
+                            },
+                            shape = CircleShape,
+                            color = if (scrollProgress > 0.55f) Color.Transparent else Color.Black.copy(alpha = 0.45f),
+                            modifier = Modifier
+                                .size(42.dp)
+                                .testTag("btn_user_detail_chat_top")
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Chat,
+                                    contentDescription = "Chat",
+                                    tint = if (scrollProgress > 0.55f) colors.textPrimary else Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                     }
 
                     // 3 Dots Options Button (Always fixed and accessible on the right)
@@ -1763,7 +1789,7 @@ private fun getLifestyleDetails(user: UserProfile): List<ProfileDetailItem> {
         items.add(ProfileDetailItem(Icons.Default.LocalBar, listOf(Color(0xFFAB47BC), Color(0xFF7B1FA2)), "Liquor", user.liquor))
     }
     if (isFieldSet(user.musicPreference)) {
-        items.add(ProfileDetailItem(Icons.Default.MusicNote, listOf(Color(0xFFEC407A), Color(0xFFC2185B)), "Music", user.musicPreference))
+        items.add(ProfileDetailItem(Icons.Default.MusicNote, listOf(Color(0xFF7FFF00), Color(0xFF5AB800)), "Music", user.musicPreference))
     }
     if (isFieldSet(user.superpower)) {
         items.add(ProfileDetailItem(Icons.Default.AutoAwesome, listOf(Color(0xFFFFB300), Color(0xFFF57C00)), "Superpower", user.superpower))
@@ -1777,7 +1803,7 @@ private fun getBackgroundDetails(user: UserProfile): List<ProfileDetailItem> {
     val items = mutableListOf<ProfileDetailItem>()
 
     if (isFieldSet(user.country)) {
-        items.add(ProfileDetailItem(Icons.Default.Public, listOf(Color(0xFF42A5F5), Color(0xFF1E88E5)), "Country / Region", user.country))
+        items.add(ProfileDetailItem(Icons.Default.Public, listOf(Color(0xFF8C827A), Color(0xFF635B54)), "Country / Region", user.country))
     }
     if (isFieldSet(user.birthDate)) {
         val ageVal = try {
@@ -1787,23 +1813,23 @@ private fun getBackgroundDetails(user: UserProfile): List<ProfileDetailItem> {
         } catch (e: Exception) {
             "23"
         }
-        items.add(ProfileDetailItem(Icons.Default.Cake, listOf(Color(0xFFFF5722), Color(0xFFE64A19)), "Age", "$ageVal years"))
+        items.add(ProfileDetailItem(Icons.Default.Cake, listOf(Color(0xFF00C853), Color(0xFF007E33)), "Age", "$ageVal years"))
     }
     if (isFieldSet(user.gender)) {
         items.add(
             ProfileDetailItem(
                 if (user.gender.equals("Female", true)) Icons.Default.Female else Icons.Default.Male,
-                if (user.gender.equals("Female", true)) listOf(Color(0xFFEC407A), Color(0xFFD81B60)) else listOf(Color(0xFF42A5F5), Color(0xFF1976D2)),
+                if (user.gender.equals("Female", true)) listOf(Color(0xFF00C853), Color(0xFF007E33)) else listOf(Color(0xFF009639), Color(0xFF004D20)),
                 "Gender",
                 user.gender
             )
         )
     }
     if (isFieldSet(user.height)) {
-        items.add(ProfileDetailItem(Icons.Default.Height, listOf(Color(0xFF26C6DA), Color(0xFF00ACC1)), "Height", user.height))
+        items.add(ProfileDetailItem(Icons.Default.Height, listOf(Color(0xFF7D776F), Color(0xFF5E5952)), "Height", user.height))
     }
     if (isFieldSet(user.languages)) {
-        items.add(ProfileDetailItem(Icons.Default.Language, listOf(Color(0xFF7E57C2), Color(0xFF5E35B1)), "Languages", user.languages))
+        items.add(ProfileDetailItem(Icons.Default.Language, listOf(Color(0xFF9E8B6D), Color(0xFF7A6B53)), "Languages", user.languages))
     }
     if (isFieldSet(user.relationshipStatus)) {
         items.add(ProfileDetailItem(Icons.Default.Favorite, listOf(Color(0xFFEF5350), Color(0xFFE53935)), "Relationship", user.relationshipStatus))

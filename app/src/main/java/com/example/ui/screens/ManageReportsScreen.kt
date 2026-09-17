@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.SupabaseProfileService
 import com.example.data.UserReportItem
 import com.example.ui.theme.AppTheme
+import com.example.ui.theme.QivoOrange
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -150,8 +151,8 @@ fun ManageReportsScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF201316) else Color(0xFFFFEBEE)),
-                    border = BorderStroke(1.5.dp, Color(0xFFE11D48))
+                    colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF201A13) else Color(0xFFFFF8E1)),
+                    border = BorderStroke(1.5.dp, QivoOrange)
                 ) {
                     Row(
                         modifier = Modifier
@@ -163,7 +164,7 @@ fun ManageReportsScreen(
                             modifier = Modifier
                                 .size(46.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFFE11D48)),
+                                .background(QivoOrange),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
@@ -207,7 +208,7 @@ fun ManageReportsScreen(
             if (isLoading) {
                 item {
                     Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Color(0xFFE11D48))
+                        CircularProgressIndicator(color = QivoOrange)
                     }
                 }
             } else if (reportsList.isEmpty()) {

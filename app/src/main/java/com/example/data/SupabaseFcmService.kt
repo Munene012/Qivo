@@ -54,11 +54,76 @@ object SupabaseFcmService {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     /**
+     * Create high-priority system notification channels for QIVO Push Notifications.
+     * Must be called during Application startup.
+     */
+    fun createNotificationChannels(context: Context) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager ?: return
+
+            // 1. Chat Messages Channel
+            val chatChannel = android.app.NotificationChannel(
+                "qivo_chat_notifications",
+                "Chat Messages",
+                android.app.NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Direct chat messages and replies"
+                enableLights(true)
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 250, 150, 250)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
+            }
+            notificationManager.createNotificationChannel(chatChannel)
+
+            // 2. Incoming Calls Channel
+            val ringtoneUri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE)
+                ?: android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
+            val audioAttributes = android.media.AudioAttributes.Builder()
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                .build()
+
+            val callChannel = android.app.NotificationChannel(
+                "qivo_call_notifications",
+                "Incoming Calls",
+                android.app.NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Incoming 1-on-1 voice and video calls"
+                enableLights(true)
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 500, 250, 500, 250, 500)
+                setSound(ringtoneUri, audioAttributes)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+            }
+            notificationManager.createNotificationChannel(callChannel)
+        }
+    }
+
+    /**
+     * Ensure FirebaseApp instance is initialized before invoking Firebase APIs
+     */
+    fun ensureFirebaseInitialized(context: Context): Boolean {
+        return try {
+            val apps = com.google.firebase.FirebaseApp.getApps(context)
+            if (apps.isNotEmpty()) {
+                true
+            } else {
+                val app = com.google.firebase.FirebaseApp.initializeApp(context)
+                app != null
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "FirebaseApp initialization check: ${e.message}")
+            false
+        }
+    }
+
+    /**
      * Initialize FCM: Retrieve current device token and register it in Supabase
      */
     fun initializeFcm(context: Context, userId: String) {
         if (userId.isBlank()) return
         try {
+            ensureFirebaseInitialized(context)
             FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
                 if (task.isSuccessful && !task.result.isNullOrBlank()) {
                     val token = task.result
@@ -68,16 +133,16 @@ object SupabaseFcmService {
                         registerTokenInSupabase(context, userId, token)
                     }
                 } else {
-                    Log.w(TAG, "Fetching FCM registration token failed", task.exception)
+                    Log.w(TAG, "Fetching FCM registration token failed: ${task.exception?.message}")
                 }
             }
         } catch (e: Throwable) {
-            Log.e(TAG, "Error initializing FCM", e)
+            Log.e(TAG, "Error initializing FCM: ${e.message}")
         }
     }
 
     /**
-     * Store FCM device token securely in Supabase table "fcm_device_tokens" with RLS
+     * Store FCM device token securely in Supabase tables "fcm_device_tokens" and "fcm_tokens" with RLS
      */
     suspend fun registerTokenInSupabase(context: Context, userId: String, token: String): Boolean {
         if (userId.isBlank() || token.isBlank()) return false
@@ -87,42 +152,46 @@ object SupabaseFcmService {
                 val apiKey = SupabaseConfig.supabaseAnonKey.trim()
                 if (baseUrl.isEmpty() || apiKey.isEmpty()) return@withContext false
 
-                val endpoint = "$baseUrl/rest/v1/fcm_device_tokens?on_conflict=device_token"
                 val isoDate = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
                     timeZone = java.util.TimeZone.getTimeZone("UTC")
                 }.format(Date())
 
-                val jsonBody = JSONObject().apply {
+                val userToken = UserSessionManager.getValidAccessToken(context).ifBlank {
+                    UserSessionManager.getAccessToken(context)
+                }
+                val authHeader = if (userToken.isNotBlank()) "Bearer $userToken" else "Bearer $apiKey"
+
+                // 1. Save to fcm_device_tokens (schema: user_id, device_token, platform, updated_at)
+                val deviceTokensBody = JSONObject().apply {
                     put("user_id", userId)
                     put("device_token", token)
                     put("platform", "android")
-                    put("app_version", "1.0")
                     put("updated_at", isoDate)
                 }.toString()
 
-                val userToken = UserSessionManager.getValidAccessToken(context)
-                val authHeader = if (userToken.isNotBlank()) "Bearer $userToken" else UserSessionManager.getAuthHeader(context)
-
-                val request = Request.Builder()
-                    .url(endpoint)
+                val endpoint1 = "$baseUrl/rest/v1/fcm_device_tokens?on_conflict=device_token"
+                val request1 = Request.Builder()
+                    .url(endpoint1)
                     .addHeader("apikey", apiKey)
                     .addHeader("Authorization", authHeader)
                     .addHeader("Content-Type", "application/json")
                     .addHeader("Prefer", "resolution=merge-duplicates,return=minimal")
-                    .post(jsonBody.toRequestBody(jsonMediaType))
+                    .post(deviceTokensBody.toRequestBody(jsonMediaType))
                     .build()
 
-                val response = httpClient.newCall(request).execute()
-                val success = response.isSuccessful || response.code in 200..204
-                val code = response.code
-                response.close()
+                var success = false
+                httpClient.newCall(request1).execute().use { response ->
+                    val code = response.code
+                    if (response.isSuccessful || code in 200..204) {
+                        Log.d(TAG, "Successfully registered FCM token in fcm_device_tokens for user $userId")
+                        success = true
+                    } else {
+                        Log.w(TAG, "fcm_device_tokens upsert returned HTTP $code")
+                    }
+                }
 
-                if (success) {
-                    Log.d(TAG, "Registered device token in Supabase for user $userId")
-                    true
-                } else {
-                    Log.w(TAG, "Registration returned HTTP $code, attempting clean delete-then-insert")
-                    // If conflict exists on user_id or device_token, delete existing entries for this token then re-insert
+                // If merge-duplicate upsert failed, attempt delete old token record and re-insert
+                if (!success) {
                     try {
                         val delEndpoint = "$baseUrl/rest/v1/fcm_device_tokens?device_token=eq.$token"
                         val delReq = Request.Builder()
@@ -133,22 +202,45 @@ object SupabaseFcmService {
                             .build()
                         httpClient.newCall(delReq).execute().close()
 
-                        // Re-insert clean row
                         val reinsertReq = Request.Builder()
                             .url("$baseUrl/rest/v1/fcm_device_tokens")
                             .addHeader("apikey", apiKey)
                             .addHeader("Authorization", authHeader)
                             .addHeader("Content-Type", "application/json")
-                            .post(jsonBody.toRequestBody(jsonMediaType))
+                            .post(deviceTokensBody.toRequestBody(jsonMediaType))
                             .build()
-                        val reinsertResp = httpClient.newCall(reinsertReq).execute()
-                        val reinsertOk = reinsertResp.isSuccessful || reinsertResp.code in 200..204
-                        reinsertResp.close()
-                        reinsertOk
-                    } catch (_: Exception) {
-                        false
-                    }
+                        httpClient.newCall(reinsertReq).execute().use { reinsertResp ->
+                            success = reinsertResp.isSuccessful || reinsertResp.code in 200..204
+                        }
+                    } catch (_: Exception) {}
                 }
+
+                // 2. Also save to fcm_tokens (schema: user_id, token, updated_at) for complete backward compatibility
+                try {
+                    val fcmTokensBody = JSONObject().apply {
+                        put("user_id", userId)
+                        put("token", token)
+                        put("updated_at", isoDate)
+                    }.toString()
+
+                    val endpoint2 = "$baseUrl/rest/v1/fcm_tokens?on_conflict=token"
+                    val request2 = Request.Builder()
+                        .url(endpoint2)
+                        .addHeader("apikey", apiKey)
+                        .addHeader("Authorization", authHeader)
+                        .addHeader("Content-Type", "application/json")
+                        .addHeader("Prefer", "resolution=merge-duplicates,return=minimal")
+                        .post(fcmTokensBody.toRequestBody(jsonMediaType))
+                        .build()
+
+                    httpClient.newCall(request2).execute().use { response2 ->
+                        if (response2.isSuccessful || response2.code in 200..204) {
+                            Log.d(TAG, "Synced token in fcm_tokens table")
+                        }
+                    }
+                } catch (_: Exception) {}
+
+                success
             } catch (e: Exception) {
                 Log.e(TAG, "Exception registering token in Supabase", e)
                 false
@@ -262,7 +354,8 @@ object SupabaseFcmService {
                 if (baseUrl.isEmpty() || apiKey.isEmpty()) return@withContext false
 
                 val edgeFunctionUrl = "$baseUrl/functions/v1/send-push-notification"
-                val authHeader = UserSessionManager.getAuthHeader(context)
+                val rawAuth = UserSessionManager.getAuthHeader(context)
+                val authHeader = if (rawAuth.isNotBlank()) rawAuth else "Bearer $apiKey"
 
                 val payload = JSONObject().apply {
                     put("type", TYPE_CHAT_MESSAGE)
@@ -292,7 +385,14 @@ object SupabaseFcmService {
                     .build()
 
                 httpClient.newCall(request).execute().use { response ->
-                    response.isSuccessful || response.code in 200..204
+                    val isOk = response.isSuccessful || response.code in 200..204
+                    if (!isOk) {
+                        val respBody = response.body?.string() ?: ""
+                        Log.w(TAG, "send-push-notification for chat returned HTTP ${response.code}: $respBody")
+                    } else {
+                        Log.d(TAG, "send-push-notification for chat delivered successfully to recipient $receiverId")
+                    }
+                    isOk
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error invoking send-push-notification Edge Function for chat", e)
@@ -332,7 +432,8 @@ object SupabaseFcmService {
                 if (baseUrl.isEmpty() || apiKey.isEmpty()) return@withContext false
 
                 val edgeFunctionUrl = "$baseUrl/functions/v1/send-push-notification"
-                val authHeader = UserSessionManager.getAuthHeader(context)
+                val rawAuth = UserSessionManager.getAuthHeader(context)
+                val authHeader = if (rawAuth.isNotBlank()) rawAuth else "Bearer $apiKey"
 
                 val payload = JSONObject().apply {
                     put("type", TYPE_INCOMING_CALL)
@@ -356,7 +457,14 @@ object SupabaseFcmService {
                     .build()
 
                 httpClient.newCall(request).execute().use { response ->
-                    response.isSuccessful || response.code in 200..204
+                    val isOk = response.isSuccessful || response.code in 200..204
+                    if (!isOk) {
+                        val respBody = response.body?.string() ?: ""
+                        Log.w(TAG, "send-push-notification for call returned HTTP ${response.code}: $respBody")
+                    } else {
+                        Log.d(TAG, "send-push-notification for call delivered successfully to recipient $receiverId")
+                    }
+                    isOk
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error invoking send-push-notification Edge Function for call", e)

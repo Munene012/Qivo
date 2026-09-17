@@ -1442,10 +1442,10 @@ fun Generic3DGiftBoxIcon(
             size = Size(w * 0.76f, h * 0.16f)
         )
 
-        // 3D Gift Box Main Container (Rich Ruby & Royal Magenta)
+        // 3D Gift Box Main Container (Emerald & Jade Gradient)
         drawRoundRect(
             brush = Brush.linearGradient(
-                listOf(Color(0xFFFF4081), Color(0xFFE91E63), Color(0xFFC2185B), Color(0xFF4A001E)),
+                listOf(Color(0xFF00E676), Color(0xFF00C853), Color(0xFF007E33), Color(0xFF004D20)),
                 start = Offset(w * 0.15f, h * 0.36f),
                 end = Offset(w * 0.85f, h * 0.84f)
             ),
@@ -1457,7 +1457,7 @@ fun Generic3DGiftBoxIcon(
         // 3D Overhanging Box Lid
         drawRoundRect(
             brush = Brush.linearGradient(
-                listOf(Color(0xFFFF80AB), Color(0xFFFF4081), Color(0xFFAD1457)),
+                listOf(Color(0xFF69F0AE), Color(0xFF00C853), Color(0xFF007E33)),
                 start = Offset(w * 0.10f, h * 0.22f),
                 end = Offset(w * 0.90f, h * 0.38f)
             ),

@@ -59,18 +59,18 @@ fun CustomerSupportScreen(
                         if (isDark) {
                             Brush.verticalGradient(
                                 listOf(
-                                    Color(0xFF2C160B),
-                                    Color(0xFF1E0F07),
-                                    Color(0xFF140B05)
+                                    Color(0xFF09120B),
+                                    Color(0xFF0E1A11),
+                                    Color(0xFF050A06)
                                 )
                             )
                         } else {
                             Brush.verticalGradient(
                                 listOf(
-                                    Color(0xFFFF9E79), // Soft Warm Coral Peach
-                                    Color(0xFFFFAE8D), // Pale Amber Orange
-                                    Color(0xFFFFBEA2), // Soft Apricot
-                                    Color(0xFFFFCFAF)  // Luminous Pale Sunset
+                                    Color(0xFF009639), // Deep Emerald
+                                    Color(0xFF00B04A), // Jewel Jade
+                                    Color(0xFF00C853), // Vivid Emerald
+                                    Color(0xFF26E06D)  // Mint Emerald
                                 )
                             )
                         }

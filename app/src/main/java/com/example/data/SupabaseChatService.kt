@@ -288,6 +288,21 @@ class SupabaseChatService {
                         createdAt = createdTimeStr ?: optimisticMsg.createdAt
                     )
                     ChatStateHolder.handleRealtimeMessage(finalMsg, context)
+
+                    if (context != null) {
+                        try {
+                            SupabaseFcmService.sendChatPushNotification(
+                                context = context,
+                                senderId = senderId,
+                                senderName = senderName,
+                                senderAvatar = senderAvatar,
+                                receiverId = receiverId,
+                                messageText = messageText
+                            )
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
                     return@withContext createdMsgId
                 }
                 null

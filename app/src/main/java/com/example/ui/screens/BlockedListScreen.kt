@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import com.example.ui.theme.QivoOrange
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -371,7 +372,7 @@ private fun BlockedUserRow(
                     val isMale = user.gender.equals("Male", ignoreCase = true)
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = if (isMale) Color(0xFF1E88E5) else Color(0xFFE91E63)
+                        color = if (isMale) Color(0xFF38521F) else QivoOrange
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),

@@ -56,8 +56,8 @@ data class AppColors(
     val accentAmber: Color = QivoOrange,
     val accentOrange: Color = QivoOrange,
     val accentCoral: Color = QivoSunsetCoral,
-    val accentGreen: Color = Color(0xFF00C853),
-    val accentNeon: Color = Color(0xFFB3FF00)
+    val accentGreen: Color = QivoOrange,
+    val accentNeon: Color = QivoNeon
 )
 
 val LocalAppColors = compositionLocalOf {
@@ -66,38 +66,38 @@ val LocalAppColors = compositionLocalOf {
 
 fun lightAppColors() = AppColors(
     isDark = false,
-    screenBg = Color.White,
+    screenBg = Color(0xFFF7FAF8), // Crisp clean canvas with subtle jade undertone
     surfaceBg = Color.White,
     cardBg = Color.White,
-    cardBgElevated = Color(0xFFFFFBF7),
-    cardBorder = Color(0xFFEBEBF0),
-    cardGoldBorder = Color(0xFFFFE0B2),
-    textPrimary = Color(0xFF111827),
-    textSecondary = Color(0xFF6B7280),
-    textMuted = Color(0xFF9CA3AF),
-    divider = Color(0xFFF3F4F6),
-    inputBg = Color(0xFFF3F4F6),
+    cardBgElevated = Color(0xFFF0F6F2),
+    cardBorder = Color(0xFFE0ECE4),
+    cardGoldBorder = Color(0xFFA5D6A7),
+    textPrimary = Color(0xFF111813),
+    textSecondary = Color(0xFF4D5E53),
+    textMuted = Color(0xFF7D8F83),
+    divider = Color(0xFFE8F0EB),
+    inputBg = Color(0xFFEFF5F1),
     bottomNavBg = Color.White,
-    bottomNavBorder = Color(0xFFEBEBF0),
-    topBarBg = Color.White
+    bottomNavBorder = Color(0xFFE0ECE4),
+    topBarBg = Color(0xFFF7FAF8)
 )
 
 fun darkAppColors() = AppColors(
     isDark = true,
-    screenBg = Color(0xFF0A0A0E),         // Deep obsidian canvas
-    surfaceBg = Color(0xFF101015),        // Deep luxury surface
-    cardBg = Color(0xFF16161D),           // Sleek obsidian card container
-    cardBgElevated = Color(0xFF1E1E28),   // Elevated obsidian surface
-    cardBorder = Color(0xFF282834),       // Subtle dark metallic border
-    cardGoldBorder = Color(0xFF4A3E26),   // Subtle warm gold border
-    textPrimary = Color(0xFFFFFFFF),      // Crisp white
-    textSecondary = Color(0xFFA1A1AA),    // High-legibility neutral grey
-    textMuted = Color(0xFF71717A),        // Muted grey
-    divider = Color(0xFF20202A),          // Dark divider
-    inputBg = Color(0xFF1A1A22),          // Dark input field background
-    bottomNavBg = Color(0xFF0B0B0F),      // Pitch black bottom navigation bar
-    bottomNavBorder = Color(0xFF1E1E26),
-    topBarBg = Color(0xFF0A0A0E)          // Pitch black top header bar
+    screenBg = Color(0xFF0B100D),         // Deep rich onyx canvas
+    surfaceBg = Color(0xFF101913),        // Deep jade surface
+    cardBg = Color(0xFF152219),           // Refined dark jade card
+    cardBgElevated = Color(0xFF1B2D21),   // Elevated card container
+    cardBorder = Color(0xFF233A2B),       // Emerald rim border
+    cardGoldBorder = Color(0xFF1F4A2E),   // Rich emerald accent border
+    textPrimary = Color(0xFFFFFFFF),      // Pure crisp white
+    textSecondary = Color(0xFFA2B5A8),    // Clean legible muted jade grey
+    textMuted = Color(0xFF6B8072),        // Muted text
+    divider = Color(0xFF1B2B20),          // Dark divider
+    inputBg = Color(0xFF132017),          // Dark input field background
+    bottomNavBg = Color(0xFF0B100D),      // Obsidian bottom navigation bar
+    bottomNavBorder = Color(0xFF1B2B20),
+    topBarBg = Color(0xFF0B100D)          // Obsidian top header bar
 )
 
 object AppTheme {

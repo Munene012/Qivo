@@ -485,19 +485,19 @@ fun MeScreen(
                                 if (isDark) {
                                     Brush.verticalGradient(
                                         listOf(
-                                            Color(0xFF2B1204), // Deep Warm Amber Night
-                                            Color(0xFF3D1A06), // Rich Sunset Terracotta
-                                            Color(0xFF4A1F08), // Warm Sunset Amber
-                                            Color(0xFF1E0D03)  // Deep Amber Glow
+                                            Color(0xFF09120B),
+                                            Color(0xFF0E1A11),
+                                            Color(0xFF132417),
+                                            Color(0xFF09120B)
                                         )
                                     )
                                 } else {
                                     Brush.verticalGradient(
                                         listOf(
-                                            Color(0xFFFF9E79), // Soft Warm Coral Peach
-                                            Color(0xFFFFAE8D), // Pale Amber Orange
-                                            Color(0xFFFFBEA2), // Soft Apricot
-                                            Color(0xFFFFCFAF)  // Luminous Pale Sunset
+                                            Color(0xFF009639), // Deep Emerald
+                                            Color(0xFF00B04A), // Jewel Jade
+                                            Color(0xFF00C853), // Vivid Emerald
+                                            Color(0xFF26E06D)  // Mint Emerald
                                         )
                                     )
                                 }
@@ -553,7 +553,7 @@ fun MeScreen(
                             // Badges Row: Gender/Age + Country + Verification
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 val isFemale = liveGender.equals("Female", ignoreCase = true) || liveGender.equals("F", ignoreCase = true)
-                                val genderBgColor = if (isFemale) Color(0xFFF8A4EC) else Color(0xFF72C2F8)
+                                val genderBgColor = if (isFemale) Color(0xFFE2C485) else Color(0xFFD4C8B8)
 
                                 // Gender & Age Badge
                                 Surface(
@@ -1579,25 +1579,25 @@ fun MeScreen(
                 .fillMaxWidth()
                 .shadow(
                     elevation = 6.dp,
-                    spotColor = Color(0xFFFF9E79).copy(alpha = 0.4f)
+                    spotColor = Color(0xFF00C853).copy(alpha = 0.35f)
                 )
                 .background(
                     if (isDark) {
                         Brush.horizontalGradient(
                             listOf(
-                                Color(0xFF2B1204),
-                                Color(0xFF4A1F08),
-                                Color(0xFF3D1A06),
-                                Color(0xFF2B1204)
+                                Color(0xFF09120B),
+                                Color(0xFF0E1A11),
+                                Color(0xFF132417),
+                                Color(0xFF09120B)
                             )
                         )
                     } else {
                         Brush.horizontalGradient(
                             listOf(
-                                Color(0xFFFF9E79), // Soft Warm Coral Peach
-                                Color(0xFFFFAE8D), // Pale Amber Orange
-                                Color(0xFFFFBEA2), // Soft Apricot
-                                Color(0xFFFFCFAF)  // Luminous Pale Sunset
+                                Color(0xFF009639), // Deep Emerald
+                                Color(0xFF00B04A), // Jewel Jade
+                                Color(0xFF00C853), // Vivid Emerald
+                                Color(0xFF26E06D)  // Mint Emerald
                             )
                         )
                     }

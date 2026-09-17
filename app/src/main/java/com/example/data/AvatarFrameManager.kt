@@ -15,6 +15,19 @@ data class AvatarFrameItem(
     val isPopular: Boolean = false
 )
 
+data class BuyAvatarFrameResponse(
+    val success: Boolean = false,
+    val frameId: String = "",
+    val frameName: String = "",
+    val priceCoins: Long = 0L,
+    val coinsDeducted: Long = 0L,
+    val newBalance: Long = -1L,
+    val remainingCoins: Long = -1L,
+    val newCoins: Long = -1L,
+    val expiresAt: String = "",
+    val message: String = ""
+)
+
 data class UserOwnedFrame(
     val id: String = "",
     val userId: String,
@@ -99,7 +112,7 @@ object AvatarFrameManager {
 
     val ALL_FRAMES: List<AvatarFrameItem> = listOf(
         AvatarFrameItem(
-            id = "vip4",
+            id = "amethyst_sovereign",
             name = "Amethyst Sovereign",
             priceCoins = 4990L,
             validityDays = 7,
@@ -107,7 +120,7 @@ object AvatarFrameManager {
             isPopular = true
         ),
         AvatarFrameItem(
-            id = "svip1",
+            id = "diamond_luminary",
             name = "Diamond Luminary",
             priceCoins = 5990L,
             validityDays = 7,
@@ -115,7 +128,7 @@ object AvatarFrameManager {
             isPopular = true
         ),
         AvatarFrameItem(
-            id = "acquaintance",
+            id = "aurora_starlight",
             name = "Aurora Starlight",
             priceCoins = 990L,
             validityDays = 7,
@@ -123,7 +136,7 @@ object AvatarFrameManager {
             isPopular = true
         ),
         AvatarFrameItem(
-            id = "vip1",
+            id = "azure_sentinel",
             name = "Azure Sentinel",
             priceCoins = 1990L,
             validityDays = 7,
@@ -131,7 +144,7 @@ object AvatarFrameManager {
             isPopular = true
         ),
         AvatarFrameItem(
-            id = "vip3",
+            id = "sapphire_phoenix",
             name = "Sapphire Phoenix",
             priceCoins = 3990L,
             validityDays = 7,
@@ -139,7 +152,7 @@ object AvatarFrameManager {
             isPopular = true
         ),
         AvatarFrameItem(
-            id = "helicopter",
+            id = "sky_aviator",
             name = "Sky Aviator",
             priceCoins = 4990L,
             validityDays = 7,
@@ -147,7 +160,7 @@ object AvatarFrameManager {
             isPopular = true
         ),
         AvatarFrameItem(
-            id = "flowers",
+            id = "enchanted_flora",
             name = "Enchanted Flora",
             priceCoins = 290L,
             validityDays = 7,
@@ -155,7 +168,7 @@ object AvatarFrameManager {
             isPopular = true
         ),
         AvatarFrameItem(
-            id = "golden_king",
+            id = "solar_monarch",
             name = "Solar Monarch",
             priceCoins = 3990L,
             validityDays = 7,
@@ -163,49 +176,49 @@ object AvatarFrameManager {
             isPopular = true
         ),
         AvatarFrameItem(
-            id = "violet_eye",
+            id = "mystic_oculus",
             name = "Mystic Oculus",
             priceCoins = 3990L,
             validityDays = 7,
             description = "Majestic winged flame gold frame with a glowing magenta jewel eye and top crown."
         ),
         AvatarFrameItem(
-            id = "lightning",
+            id = "volt_tempest",
             name = "Volt Tempest",
             priceCoins = 1990L,
             validityDays = 7,
             description = "Futuristic cyber armor ring with pulsing electric cyan plasma arcs."
         ),
         AvatarFrameItem(
-            id = "green_space",
+            id = "emerald_matrix",
             name = "Emerald Matrix",
             priceCoins = 1990L,
             validityDays = 7,
             description = "Holographic emerald sci-fi orbital ring with glowing tech nodes."
         ),
         AvatarFrameItem(
-            id = "angel_wings",
+            id = "seraphim_grace",
             name = "Seraphim Grace",
             priceCoins = 3990L,
             validityDays = 7,
             description = "Heavenly golden halo flanked by pure white feathered angel wings and purple ribbon."
         ),
         AvatarFrameItem(
-            id = "lion",
+            id = "imperial_leo",
             name = "Imperial Leo",
             priceCoins = 4990L,
             validityDays = 7,
             description = "Imperial gold lion emperor head atop a baroque gold filigree shield."
         ),
         AvatarFrameItem(
-            id = "cyber_dragon",
+            id = "crimson_drake",
             name = "Crimson Drake",
             priceCoins = 3490L,
             validityDays = 7,
             description = "Neon crimson dragon aura with glowing embers and horn crest."
         ),
         AvatarFrameItem(
-            id = "star_tiara",
+            id = "astral_diadem",
             name = "Astral Diadem",
             priceCoins = 1490L,
             validityDays = 7,
@@ -279,9 +292,37 @@ object AvatarFrameManager {
         return emptyList()
     }
 
+    /**
+     * Normalizes any raw frame input (display name, old id, or canonical id)
+     * strictly to the exact server-side avatar frame catalog ID.
+     */
+    fun normalizeFrameId(input: String): String {
+        val clean = input.trim().lowercase()
+        return when (clean) {
+            "enchanted_flora", "flowers", "enchanted flora" -> "enchanted_flora"
+            "amethyst_sovereign", "vip4", "amethyst sovereign" -> "amethyst_sovereign"
+            "diamond_luminary", "svip1", "diamond luminary" -> "diamond_luminary"
+            "aurora_starlight", "acquaintance", "aurora starlight" -> "aurora_starlight"
+            "azure_sentinel", "vip1", "azure sentinel" -> "azure_sentinel"
+            "sapphire_phoenix", "vip3", "sapphire phoenix" -> "sapphire_phoenix"
+            "sky_aviator", "helicopter", "sky aviator" -> "sky_aviator"
+            "solar_monarch", "golden_king", "solar monarch" -> "solar_monarch"
+            "mystic_oculus", "violet_eye", "mystic oculus" -> "mystic_oculus"
+            "volt_tempest", "lightning", "volt tempest" -> "volt_tempest"
+            "emerald_matrix", "green_space", "emerald matrix" -> "emerald_matrix"
+            "seraphim_grace", "angel_wings", "seraphim grace" -> "seraphim_grace"
+            "imperial_leo", "lion", "imperial leo" -> "imperial_leo"
+            "crimson_drake", "cyber_dragon", "crimson drake" -> "crimson_drake"
+            "astral_diadem", "star_tiara", "astral diadem" -> "astral_diadem"
+            "new_user", "new", "newbie", "welcome_new" -> "new_user"
+            else -> clean.replace(" ", "_")
+        }
+    }
+
     fun getFrameById(id: String): AvatarFrameItem? {
-        val clean = id.trim().lowercase()
-        return ALL_FRAMES.firstOrNull { it.id.equals(clean, ignoreCase = true) }
+        val canonical = normalizeFrameId(id)
+        return ALL_FRAMES.firstOrNull { it.id.equals(canonical, ignoreCase = true) }
+            ?: ALL_FRAMES.firstOrNull { it.id.equals(id.trim(), ignoreCase = true) }
     }
 
     fun isFrameValid(frameId: String, expiresAt: String): Boolean {

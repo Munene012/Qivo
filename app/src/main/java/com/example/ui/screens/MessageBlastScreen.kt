@@ -351,18 +351,25 @@ fun MessageBlastScreen(
 
                     scope.launch {
                         isBlasting = true
-                        val newBalance = (userCoins - totalCost).coerceAtLeast(0L)
-                        userCoins = newBalance
-                        UserSessionManager.saveCoins(context, newBalance)
 
-                        // 1. Record coin deduction
-                        profileService.recordCoinTransaction(
+                        // Deduct coins strictly server-side via RPC first
+                        val res = profileService.adjustCoinsServer(
                             userId = userId,
                             amount = -totalCost.toLong(),
                             type = "MESSAGE_BLAST",
                             title = "Message Blast ($targetUsersCount Users)",
                             description = "Broadcast message sent to $targetUsersCount users (-$totalCost coins)"
                         )
+
+                        if (!res.first) {
+                            isBlasting = false
+                            AppToast.show("Server rejected coin deduction. Insufficient balance or error.")
+                            return@launch
+                        }
+
+                        // Local balance updates ONLY after confirmed by server
+                        userCoins = res.second
+                        UserSessionManager.saveCoins(context, res.second)
 
                         // 2. Query target opposite-gender profiles to distribute individual direct messages
                         val targetGender = if (myGender.equals("Male", ignoreCase = true)) "Female" else "Male"

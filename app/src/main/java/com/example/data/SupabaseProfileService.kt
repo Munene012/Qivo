@@ -1251,174 +1251,46 @@ class SupabaseProfileService {
 
                 val authHeader = getAuthHeader(context)
 
-                // 1. Try secure Postgres RPC award_coins first
-                try {
-                    val rpcUrl = "$baseUrl/rest/v1/rpc/award_coins"
-                    val rpcJson = JSONObject().apply {
-                        put("p_sender_id", senderUserId)
-                        put("p_sender_numeric_id", senderNumericId)
-                        put("p_is_admin", isAdmin)
-                        put("p_is_coinseller", isCoinSeller)
-                        put("p_target_numeric_id", targetNumericId)
-                        put("p_amount", amount)
-                        put("p_reason", reason)
-                    }.toString()
+                // Execute secure Postgres RPC award_coins
+                val rpcUrl = "$baseUrl/rest/v1/rpc/award_coins"
+                val rpcJson = JSONObject().apply {
+                    put("p_sender_id", senderUserId)
+                    put("p_sender_numeric_id", senderNumericId)
+                    put("p_is_admin", isAdmin)
+                    put("p_is_coinseller", isCoinSeller)
+                    put("p_target_numeric_id", targetNumericId)
+                    put("p_amount", amount)
+                    put("p_reason", reason)
+                }.toString()
 
-                    val rpcReq = Request.Builder()
-                        .url(rpcUrl)
-                        .addHeader("apikey", apiKey)
-                        .addHeader("Authorization", authHeader)
-                        .addHeader("Content-Type", "application/json")
-                        .post(rpcJson.toRequestBody(jsonMediaType))
-                        .build()
-
-                    client.newCall(rpcReq).execute().use { res ->
-                        if (res.isSuccessful || res.code == 200) {
-                            val bodyStr = res.body?.string() ?: ""
-                            val json = JSONObject(bodyStr)
-                            if (json.optBoolean("success", false)) {
-                                val msg = json.optString("message", "Successfully awarded %,d coins.".format(amount))
-                                val sellerNewCoins = json.optLong("seller_coins", -1L)
-                                if (sellerNewCoins >= 0 && context != null) {
-                                    UserSessionManager.saveCoins(context, sellerNewCoins)
-                                }
-                                return@withContext Pair(true, msg)
-                            } else {
-                                val errMsg = json.optString("error", "Failed to transfer coins.")
-                                return@withContext Pair(false, errMsg)
-                            }
-                        }
-                    }
-                } catch (_: Exception) {}
-
-                // 2. Fetch authoritative TARGET user directly from server
-                val targetReq = Request.Builder()
-                    .url("$baseUrl/rest/v1/profiles?numeric_id=eq.$targetNumericId&select=*")
-                    .addHeader("apikey", apiKey)
-                    .addHeader("Authorization", authHeader)
-                    .get()
-                    .build()
-
-                val targetProfile = client.newCall(targetReq).execute().use { resp ->
-                    val body = resp.body?.string() ?: ""
-                    if (resp.isSuccessful && body.startsWith("[")) {
-                        val arr = JSONArray(body)
-                        if (arr.length() > 0) parseUserProfile(arr.getJSONObject(0)) else null
-                    } else null
-                } ?: return@withContext Pair(false, "User with Numeric ID $targetNumericId not found.")
-
-                // 2. If sender is a Coin Seller (and not admin), check and deduct sender balance from fresh server data
-                var newSellerCoins = 0L
-                if (!isAdmin && isCoinSeller) {
-                    val cleanSenderId = senderUserId.trim()
-                    val senderUrl = if (cleanSenderId.isNotBlank()) {
-                        "$baseUrl/rest/v1/profiles?id=eq.$cleanSenderId&select=*"
-                    } else {
-                        "$baseUrl/rest/v1/profiles?numeric_id=eq.$senderNumericId&select=*"
-                    }
-
-                    val senderReq = Request.Builder()
-                        .url(senderUrl)
-                        .addHeader("apikey", apiKey)
-                        .addHeader("Authorization", authHeader)
-                        .get()
-                        .build()
-
-                    val senderProfile = client.newCall(senderReq).execute().use { resp ->
-                        val body = resp.body?.string() ?: ""
-                        if (resp.isSuccessful && body.startsWith("[")) {
-                            val arr = JSONArray(body)
-                            if (arr.length() > 0) parseUserProfile(arr.getJSONObject(0)) else null
-                        } else null
-                    }
-
-                    val currentSellerCoins = senderProfile?.coins ?: 0L
-                    if (currentSellerCoins < amount) {
-                        return@withContext Pair(false, "Insufficient balance! You have %,d coins available.".format(currentSellerCoins))
-                    }
-
-                    newSellerCoins = currentSellerCoins - amount
-                    val updateSellerUrl = if (cleanSenderId.isNotBlank()) {
-                        "$baseUrl/rest/v1/profiles?id=eq.$cleanSenderId"
-                    } else {
-                        "$baseUrl/rest/v1/profiles?numeric_id=eq.$senderNumericId"
-                    }
-                    val sellerUpdateBody = JSONObject().apply { put("coins", newSellerCoins) }.toString()
-
-                    val updateSellerReq = Request.Builder()
-                        .url(updateSellerUrl)
-                        .addHeader("apikey", apiKey)
-                        .addHeader("Authorization", authHeader)
-                        .addHeader("Content-Type", "application/json")
-                        .addHeader("Prefer", "return=minimal")
-                        .patch(sellerUpdateBody.toRequestBody(jsonMediaType))
-                        .build()
-
-                    client.newCall(updateSellerReq).execute().close()
-
-                    // Sync sender cache and local session
-                    if (senderProfile != null) {
-                        val updatedSender = senderProfile.copy(coins = newSellerCoins)
-                        ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.filter { it.id != senderProfile.id && it.numericId != senderProfile.numericId } + updatedSender
-                    }
-                    if (context != null) {
-                        UserSessionManager.saveCoins(context, newSellerCoins)
-                    }
-
-                    // Record sender transaction
-                    recordCoinTransaction(
-                        userId = cleanSenderId.ifBlank { senderProfile?.id ?: senderNumericId.toString() },
-                        amount = -amount,
-                        type = "TRANSFER",
-                        title = "Coins Transferred",
-                        description = "Transferred %,d coins to %s (ID: %d)".format(amount, targetProfile.name, targetNumericId)
-                    )
-                }
-
-                // 3. Credit TARGET user balance accurately: current live server coins + amount
-                val currentTargetCoins = targetProfile.coins
-                val newTargetCoins = currentTargetCoins + amount
-                val updateTargetUrl = if (targetProfile.id.isNotBlank()) {
-                    "$baseUrl/rest/v1/profiles?id=eq.${targetProfile.id}"
-                } else {
-                    "$baseUrl/rest/v1/profiles?numeric_id=eq.$targetNumericId"
-                }
-                val targetUpdateBody = JSONObject().apply { put("coins", newTargetCoins) }.toString()
-
-                val updateTargetReq = Request.Builder()
-                    .url(updateTargetUrl)
+                val rpcReq = Request.Builder()
+                    .url(rpcUrl)
                     .addHeader("apikey", apiKey)
                     .addHeader("Authorization", authHeader)
                     .addHeader("Content-Type", "application/json")
-                    .addHeader("Prefer", "return=minimal")
-                    .patch(targetUpdateBody.toRequestBody(jsonMediaType))
+                    .post(rpcJson.toRequestBody(jsonMediaType))
                     .build()
 
-                val success = client.newCall(updateTargetReq).execute().use { response ->
-                    response.isSuccessful || response.code == 200 || response.code == 204
-                }
-
-                if (success) {
-                    // Update cache for target user
-                    val updatedTarget = targetProfile.copy(coins = newTargetCoins)
-                    ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.filter { it.id != targetProfile.id && it.numericId != targetNumericId } + updatedTarget
-
-                    // If the current logged-in user on this device is the target, sync session
-                    if (context != null && (senderUserId == targetProfile.id || targetProfile.id == UserSessionManager.getSession(context)?.userId)) {
-                        UserSessionManager.saveCoins(context, newTargetCoins)
+                client.newCall(rpcReq).execute().use { res ->
+                    val bodyStr = res.body?.string() ?: ""
+                    if (res.isSuccessful || res.code == 200) {
+                        val json = JSONObject(bodyStr)
+                        if (json.optBoolean("success", false)) {
+                            val msg = json.optString("message", "Successfully awarded %,d coins.".format(amount))
+                            val sellerNewCoins = json.optLong("seller_coins", -1L)
+                            if (sellerNewCoins >= 0 && context != null) {
+                                UserSessionManager.saveCoins(context, sellerNewCoins)
+                            }
+                            // Refresh cache
+                            fetchProfileByNumericId(targetNumericId)
+                            return@withContext Pair(true, msg)
+                        } else {
+                            val errMsg = json.optString("message", json.optString("error", "Failed to transfer coins."))
+                            return@withContext Pair(false, errMsg)
+                        }
+                    } else {
+                        return@withContext Pair(false, "Server error (${res.code}). Transfer failed.")
                     }
-
-                    // Record target transaction
-                    recordCoinTransaction(
-                        userId = targetProfile.id,
-                        amount = amount,
-                        type = if (isAdmin) "AWARD" else "TRANSFER",
-                        title = if (isAdmin) "Admin Coin Award" else "P2P Coin Transfer",
-                        description = if (reason.isNotBlank()) reason else (if (isAdmin) "Awarded by Administrator" else "Received from Seller ID $senderNumericId")
-                    )
-                    Pair(true, "Successfully awarded %,d coins to %s! New balance: %,d coins.".format(amount, targetProfile.name, newTargetCoins))
-                } else {
-                    Pair(false, "Failed to update target user coin balance on server.")
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -1801,144 +1673,203 @@ class SupabaseProfileService {
         return withContext(Dispatchers.IO) {
             val cleanId = userId.trim()
             try {
-                val frame = AvatarFrameManager.getFrameById(frameId)
-                val frameName = frame?.name ?: frameId.replaceFirstChar { it.uppercase() }
+                val canonicalFrameId = AvatarFrameManager.normalizeFrameId(frameId)
+                val frame = AvatarFrameManager.getFrameById(canonicalFrameId)
+                val frameName = frame?.name ?: canonicalFrameId.replaceFirstChar { it.uppercase() }
 
-                val currentProfile = if (cleanId.isNotBlank()) fetchProfileById(cleanId) else null
-                val userEmail = currentProfile?.email ?: (context?.let { UserSessionManager.getSession(it)?.email } ?: "")
-                val userNumericId = currentProfile?.numericId ?: (context?.let { UserSessionManager.getSession(it)?.numericId } ?: 0L)
-
-                val serverCoins = if (cleanId.isNotBlank()) fetchCoins(cleanId) else 0L
-
-                if (serverCoins < priceCoins) {
-                    return@withContext Triple(false, "Insufficient coin balance. You need %,d coins.".format(priceCoins), serverCoins)
-                }
-
-                val expCalendar = java.util.Calendar.getInstance()
-                expCalendar.add(java.util.Calendar.DAY_OF_YEAR, validityDays)
-                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
-                    timeZone = java.util.TimeZone.getTimeZone("UTC")
-                }
-                val expiresAtISO = sdf.format(expCalendar.time)
-
-                val newCoins = (serverCoins - priceCoins).coerceAtLeast(0L)
                 val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
                 val apiKey = SupabaseConfig.supabaseAnonKey.trim()
 
-                if (baseUrl.isNotEmpty() && apiKey.isNotEmpty() && cleanId.isNotEmpty()) {
-                    val authHeader = getAuthHeader(context)
-
-                    // 1. Direct coin deduction on profiles table (core column guaranteed)
-                    val coinUpdateBody = JSONObject().apply {
-                        put("coins", newCoins)
-                    }.toString()
-
-                    val targetEndpoints = mutableListOf("$baseUrl/rest/v1/profiles?id=eq.$cleanId")
-                    if (userEmail.isNotBlank() && !userEmail.equals(cleanId, ignoreCase = true)) {
-                        targetEndpoints.add("$baseUrl/rest/v1/profiles?email=eq.$userEmail")
-                    }
-                    if (userNumericId > 0L) {
-                        targetEndpoints.add("$baseUrl/rest/v1/profiles?numeric_id=eq.$userNumericId")
-                    }
-
-                    for (endpoint in targetEndpoints) {
-                        try {
-                            val patchReq = Request.Builder()
-                                .url(endpoint)
-                                .addHeader("apikey", apiKey)
-                                .addHeader("Authorization", authHeader)
-                                .addHeader("Content-Type", "application/json")
-                                .addHeader("Prefer", "return=minimal")
-                                .patch(coinUpdateBody.toRequestBody(jsonMediaType))
-                                .build()
-                            client.newCall(patchReq).execute().close()
-                        } catch (_: Exception) {}
-                    }
-
-                    // 2. Try optional active_frame_id update on profiles if column exists
-                    try {
-                        val framePatchBody = JSONObject().apply {
-                            put("active_frame_id", frameId)
-                            put("frame_expires_at", expiresAtISO)
-                        }.toString()
-                        val framePatchReq = Request.Builder()
-                            .url("$baseUrl/rest/v1/profiles?id=eq.$cleanId")
-                            .addHeader("apikey", apiKey)
-                            .addHeader("Authorization", authHeader)
-                            .addHeader("Content-Type", "application/json")
-                            .addHeader("Prefer", "return=minimal")
-                            .patch(framePatchBody.toRequestBody(jsonMediaType))
-                            .build()
-                        client.newCall(framePatchReq).execute().close()
-                    } catch (_: Exception) {}
-
-                    // 3. Insert into user_frames table so user owns multiple frames
-                    val userFramesEndpoints = listOf(
-                        "$baseUrl/rest/v1/user_frames",
-                        "$baseUrl/rest/v1/user_avatar_frames"
-                    )
-                    val userFrameBody = JSONObject().apply {
-                        put("user_id", cleanId)
-                        put("frame_id", frameId)
-                        put("price_paid", priceCoins)
-                        put("expires_at", expiresAtISO)
-                        put("is_active", true)
-                    }.toString()
-
-                    for (ep in userFramesEndpoints) {
-                        try {
-                            val frameReq = Request.Builder()
-                                .url(ep)
-                                .addHeader("apikey", apiKey)
-                                .addHeader("Authorization", authHeader)
-                                .addHeader("Content-Type", "application/json")
-                                .addHeader("Prefer", "return=minimal")
-                                .post(userFrameBody.toRequestBody(jsonMediaType))
-                                .build()
-                            client.newCall(frameReq).execute().close()
-                        } catch (_: Exception) {}
-                    }
+                if (baseUrl.isEmpty() || apiKey.isEmpty() || cleanId.isEmpty()) {
+                    return@withContext Triple(false, "Invalid configuration or user ID.", 0L)
                 }
 
-                // Record transaction
-                try {
-                    recordCoinTransaction(
-                        userId = cleanId,
-                        amount = -priceCoins,
-                        type = "FRAME_PURCHASE",
-                        title = "Avatar Frame Purchase",
-                        description = "Purchased $frameName Frame ($validityDays Days)"
-                    )
-                } catch (_: Exception) {}
-
-                // Update local session
-                if (context != null) {
-                    UserSessionManager.saveCoins(context, newCoins)
-                    UserSessionManager.savePurchasedFrame(context, frameId, expiresAtISO, priceCoins, targetUserId = cleanId)
-                    UserSessionManager.saveActiveFrame(context, frameId, expiresAtISO, targetUserId = cleanId)
+                val authHeader = getAuthHeader(context)
+                if (authHeader.isBlank()) {
+                    val serverCoins = fetchCoins(cleanId)
+                    return@withContext Triple(false, "Authentication required. Please sign in to purchase avatar frames.", serverCoins)
                 }
 
-                Triple(true, "Successfully purchased $frameName Frame for $validityDays Days!", newCoins)
+                // 1. Execute Server-Side RPC: buy_avatar_frame
+                // The server RPC expects ONLY the frame ID as 'p_frame_id'.
+                // Do NOT send price, coin amount, or duration from the client.
+                val rpcUrl = "$baseUrl/rest/v1/rpc/buy_avatar_frame"
+                val rpcBody = JSONObject().apply {
+                    put("p_frame_id", canonicalFrameId)
+                }.toString()
+
+                android.util.Log.d("SupabaseProfileService", "buy_avatar_frame request -> URL: $rpcUrl, Payload: $rpcBody")
+
+                val rpcReq = Request.Builder()
+                    .url(rpcUrl)
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", authHeader)
+                    .addHeader("Content-Type", "application/json")
+                    .addHeader("Prefer", "return=representation")
+                    .post(rpcBody.toRequestBody(jsonMediaType))
+                    .build()
+
+                client.newCall(rpcReq).execute().use { resp ->
+                    val respStr = resp.body?.string()?.trim() ?: ""
+                    android.util.Log.d("SupabaseProfileService", "buy_avatar_frame response -> Code: ${resp.code}, Body: $respStr")
+
+                    if (resp.isSuccessful || resp.code in 200..299) {
+                        val json = when {
+                            respStr.startsWith("{") -> JSONObject(respStr)
+                            respStr.startsWith("[") -> {
+                                val arr = JSONArray(respStr)
+                                if (arr.length() > 0) arr.optJSONObject(0) ?: JSONObject() else JSONObject()
+                            }
+                            else -> JSONObject()
+                        }
+
+                        val parsedResponse = BuyAvatarFrameResponse(
+                            success = json.optBoolean("success", false),
+                            frameId = json.optString("frame_id", canonicalFrameId),
+                            frameName = json.optString("frame_name", frameName),
+                            priceCoins = json.optLong("price_coins", priceCoins),
+                            coinsDeducted = when {
+                                json.has("coins_deducted") && !json.isNull("coins_deducted") -> json.optLong("coins_deducted", 0L)
+                                json.has("amount_to_be_deducted") && !json.isNull("amount_to_be_deducted") -> json.optLong("amount_to_be_deducted", 0L)
+                                json.has("price_coins") && !json.isNull("price_coins") -> json.optLong("price_coins", 0L)
+                                else -> 0L
+                            },
+                            newBalance = when {
+                                json.has("new_balance") && !json.isNull("new_balance") -> json.optLong("new_balance", -1L)
+                                json.has("remaining_coins") && !json.isNull("remaining_coins") -> json.optLong("remaining_coins", -1L)
+                                json.has("new_coins") && !json.isNull("new_coins") -> json.optLong("new_coins", -1L)
+                                json.has("coins") && !json.isNull("coins") -> json.optLong("coins", -1L)
+                                else -> -1L
+                            },
+                            remainingCoins = json.optLong("remaining_coins", -1L),
+                            newCoins = json.optLong("new_coins", -1L),
+                            expiresAt = json.optString("expires_at", ""),
+                            message = json.optString("message", "")
+                        )
+
+                        val serverFrameId = parsedResponse.frameId.ifBlank { canonicalFrameId }
+                        val expiresAtISO = parsedResponse.expiresAt
+                        val coinsDeducted = parsedResponse.coinsDeducted
+
+                        if (parsedResponse.success) {
+                            // Update local session & cache ONLY after authoritative server response
+                            val finalCoins = if (parsedResponse.newBalance >= 0L) {
+                                parsedResponse.newBalance
+                            } else {
+                                fetchCoins(cleanId)
+                            }
+
+                            if (context != null) {
+                                UserSessionManager.saveCoins(context, finalCoins)
+                                UserSessionManager.savePurchasedFrame(
+                                    context = context,
+                                    frameId = serverFrameId,
+                                    expiresAt = expiresAtISO,
+                                    pricePaid = coinsDeducted,
+                                    targetUserId = cleanId
+                                )
+                                UserSessionManager.saveActiveFrame(
+                                    context = context,
+                                    frameId = serverFrameId,
+                                    expiresAt = expiresAtISO,
+                                    targetUserId = cleanId
+                                )
+                            }
+                            ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
+                                if (p.id == cleanId) p.copy(
+                                    coins = finalCoins,
+                                    activeFrameId = serverFrameId,
+                                    frameExpiresAt = expiresAtISO
+                                ) else p
+                            }
+                            ProfileCache.profilesMap[cleanId]?.let { p ->
+                                ProfileCache.profilesMap[cleanId] = p.copy(
+                                    coins = finalCoins,
+                                    activeFrameId = serverFrameId,
+                                    frameExpiresAt = expiresAtISO
+                                )
+                            }
+
+                            val successMsg = if (parsedResponse.message.isNotBlank()) {
+                                parsedResponse.message
+                            } else {
+                                "Frame purchased and equipped"
+                            }
+                            return@withContext Triple(true, successMsg, finalCoins)
+                        } else {
+                            // Display the server's message when purchase fails
+                            val errorMsg = when {
+                                parsedResponse.message.isNotBlank() -> parsedResponse.message
+                                json.optString("error").isNotBlank() -> json.optString("error")
+                                json.optString("error_description").isNotBlank() -> json.optString("error_description")
+                                else -> "Unable to purchase avatar frame: insufficient coins or invalid frame."
+                            }
+                            val currentCoins = if (parsedResponse.newBalance >= 0L) {
+                                parsedResponse.newBalance
+                            } else {
+                                fetchCoins(cleanId)
+                            }
+                            return@withContext Triple(false, errorMsg, currentCoins)
+                        }
+                    } else {
+                        // Handle HTTP 400/401/403/404/500 responses separately with actual server error
+                        android.util.Log.e("SupabaseProfileService", "buy_avatar_frame HTTP error ${resp.code}: $respStr")
+
+                        var errCode = ""
+                        var errMsg = ""
+                        var errDetails = ""
+                        var errHint = ""
+                        var errDesc = ""
+                        var errField = ""
+
+                        if (respStr.startsWith("{")) {
+                            try {
+                                val errObj = JSONObject(respStr)
+                                errCode = errObj.optString("code", "")
+                                errMsg = errObj.optString("message", "")
+                                errDetails = errObj.optString("details", "")
+                                errHint = errObj.optString("hint", "")
+                                errField = errObj.optString("error", "")
+                                errDesc = errObj.optString("error_description", "")
+                            } catch (_: Exception) {}
+                        }
+
+                        val parsedServerMsg = when {
+                            errMsg.isNotBlank() && errDetails.isNotBlank() && errDetails != "null" -> "$errMsg ($errDetails)"
+                            errMsg.isNotBlank() -> errMsg
+                            errDesc.isNotBlank() -> errDesc
+                            errField.isNotBlank() -> errField
+                            errDetails.isNotBlank() && errDetails != "null" -> errDetails
+                            errHint.isNotBlank() && errHint != "null" -> errHint
+                            else -> respStr.take(150)
+                        }
+
+                        val errorMessage = when (resp.code) {
+                            400 -> {
+                                val parts = mutableListOf<String>()
+                                if (errCode.isNotBlank()) parts.add("Code: $errCode")
+                                if (errMsg.isNotBlank()) parts.add(errMsg)
+                                if (errDetails.isNotBlank() && errDetails != "null") parts.add("Details: $errDetails")
+                                if (errHint.isNotBlank() && errHint != "null") parts.add("Hint: $errHint")
+                                if (errDesc.isNotBlank() && errDesc != errMsg) parts.add(errDesc)
+                                if (errField.isNotBlank() && errField != errMsg && errField != errCode) parts.add(errField)
+                                val fullErr = if (parts.isNotEmpty()) parts.joinToString(" - ") else respStr.take(200)
+                                "Supabase error (400): $fullErr"
+                            }
+                            401 -> "Session expired or unauthorized (401). Please sign in again."
+                            403 -> if (parsedServerMsg.isNotBlank()) "Access forbidden (403): $parsedServerMsg" else "Permission denied (403)."
+                            404 -> if (parsedServerMsg.isNotBlank()) "Function not found (404): $parsedServerMsg" else "Function public.buy_avatar_frame(p_frame_id) not found in schema cache (404)."
+                            500 -> if (parsedServerMsg.isNotBlank()) "Server error (500): $parsedServerMsg" else "Internal server error (500). Please try again later."
+                            else -> if (parsedServerMsg.isNotBlank()) "Server error (${resp.code}): $parsedServerMsg" else "Server error (${resp.code}). Please try again."
+                        }
+                        val serverCoins = fetchCoins(cleanId)
+                        return@withContext Triple(false, errorMessage, serverCoins)
+                    }
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
-                // Graceful local fallback so user gets their purchase
-                if (context != null) {
-                    val curCoins = UserSessionManager.getCoins(context)
-                    if (curCoins >= priceCoins) {
-                        val newCoins = UserSessionManager.subtractCoins(context, priceCoins)
-                        val expCalendar = java.util.Calendar.getInstance()
-                        expCalendar.add(java.util.Calendar.DAY_OF_YEAR, validityDays)
-                        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
-                            timeZone = java.util.TimeZone.getTimeZone("UTC")
-                        }
-                        val expISO = sdf.format(expCalendar.time)
-                        UserSessionManager.savePurchasedFrame(context, frameId, expISO, priceCoins, targetUserId = cleanId)
-                        UserSessionManager.saveActiveFrame(context, frameId, expISO, targetUserId = cleanId)
-                        val fName = AvatarFrameManager.getFrameById(frameId)?.name ?: frameId
-                        return@withContext Triple(true, "Successfully purchased $fName Frame!", newCoins)
-                    }
-                }
-                Triple(false, e.message ?: "Failed to purchase frame. Please try again.", 0L)
+                val liveCoins = fetchCoins(cleanId)
+                Triple(false, "Network error: ${e.message ?: "Failed to connect to server."}", liveCoins)
             }
         }
     }
@@ -2036,18 +1967,19 @@ class SupabaseProfileService {
         }
         return withContext(Dispatchers.IO) {
             val cleanId = userId.trim()
+            val canonicalFrameId = AvatarFrameManager.normalizeFrameId(frameId)
             val effectiveExp = if (expiresAt.isNotBlank()) expiresAt else "2054-01-01T00:00:00.000Z"
 
             if (context != null) {
-                UserSessionManager.saveActiveFrame(context, frameId, effectiveExp, targetUserId = cleanId)
+                UserSessionManager.saveActiveFrame(context, canonicalFrameId, effectiveExp, targetUserId = cleanId)
             }
 
             // Immediately update in-memory cache so no screen gets stale frame data
             ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
-                if (p.id.trim() == cleanId) p.copy(activeFrameId = frameId, frameExpiresAt = effectiveExp) else p
+                if (p.id.trim() == cleanId) p.copy(activeFrameId = canonicalFrameId, frameExpiresAt = effectiveExp) else p
             }
             ProfileCache.profilesMap[cleanId]?.let { p ->
-                ProfileCache.profilesMap[cleanId] = p.copy(activeFrameId = frameId, frameExpiresAt = effectiveExp)
+                ProfileCache.profilesMap[cleanId] = p.copy(activeFrameId = canonicalFrameId, frameExpiresAt = effectiveExp)
             }
 
             val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
@@ -2061,7 +1993,7 @@ class SupabaseProfileService {
                 try {
                     val rpcUrl = "$baseUrl/rest/v1/rpc/equip_avatar_frame"
                     val rpcBody = JSONObject().apply {
-                        put("p_frame_id", frameId)
+                        put("p_frame_id", canonicalFrameId)
                         put("p_expires_at", effectiveExp)
                     }.toString()
 
@@ -2241,88 +2173,54 @@ class SupabaseProfileService {
         }
 
         return withContext(Dispatchers.IO) {
+            val cleanSenderId = senderId.trim()
+            val cleanReceiverId = receiverId.trim()
+            if (cleanSenderId.isEmpty()) return@withContext Pair(false, 0L)
+
             try {
                 val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
                 val apiKey = SupabaseConfig.supabaseAnonKey.trim()
 
-                // Try RPC first: deduct_chat_coins
+                // Execute server RPC: deduct_chat_coins
                 val authHeader = getAuthHeader()
-                if (baseUrl.isNotEmpty() && apiKey.isNotEmpty() && senderId.isNotEmpty()) {
-                    try {
-                        val rpcUrl = "$baseUrl/rest/v1/rpc/deduct_chat_coins"
-                        val rpcBody = JSONObject().apply {
-                            put("p_sender_id", senderId)
-                            put("p_receiver_id", receiverId)
-                            put("p_amount", 15)
-                        }.toString()
-                        val req = Request.Builder()
-                            .url(rpcUrl)
-                            .addHeader("apikey", apiKey)
-                            .addHeader("Authorization", authHeader)
-                            .addHeader("Content-Type", "application/json")
-                            .post(rpcBody.toRequestBody(jsonMediaType))
-                            .build()
-                        client.newCall(req).execute().use { res ->
-                            if (res.isSuccessful || res.code == 200) {
-                                val bodyStr = res.body?.string() ?: ""
-                                val json = JSONObject(bodyStr)
-                                val success = json.optBoolean("success", false)
-                                val newBal = json.optLong("new_balance", 0L)
-                                return@withContext Pair(success, newBal)
+                if (baseUrl.isNotEmpty() && apiKey.isNotEmpty()) {
+                    val rpcUrl = "$baseUrl/rest/v1/rpc/deduct_chat_coins"
+                    val rpcBody = JSONObject().apply {
+                        put("p_sender_id", cleanSenderId)
+                        put("p_receiver_id", cleanReceiverId)
+                        put("p_amount", 15)
+                    }.toString()
+                    val req = Request.Builder()
+                        .url(rpcUrl)
+                        .addHeader("apikey", apiKey)
+                        .addHeader("Authorization", authHeader)
+                        .addHeader("Content-Type", "application/json")
+                        .post(rpcBody.toRequestBody(jsonMediaType))
+                        .build()
+                    client.newCall(req).execute().use { res ->
+                        if (res.isSuccessful || res.code == 200) {
+                            val bodyStr = res.body?.string() ?: ""
+                            val json = JSONObject(bodyStr)
+                            val success = json.optBoolean("success", false)
+                            val newBal = json.optLong("new_balance", fetchCoins(cleanSenderId))
+                            if (success) {
+                                ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
+                                    if (p.id == cleanSenderId) p.copy(coins = newBal) else p
+                                }
+                                return@withContext Pair(true, newBal)
+                            } else {
+                                return@withContext Pair(false, newBal)
                             }
                         }
-                    } catch (_: Exception) {}
-                }
-
-                // Fallback direct execution
-                // Double check if sender or receiver profile in DB is admin, coinseller, or agent
-                val profile = fetchProfileById(senderId)
-                if (profile != null && (profile.isAdmin || profile.isCoinSeller || profile.isAgent || !profile.gender.equals("Male", ignoreCase = true))) {
-                    val liveCoins = fetchCoins(senderId)
-                    return@withContext Pair(true, liveCoins)
-                }
-
-                val recProfile = if (receiverId.isNotBlank()) fetchProfileById(receiverId) else null
-                if (recProfile != null && (recProfile.isAdmin || recProfile.isCoinSeller || recProfile.isAgent)) {
-                    val liveCoins = fetchCoins(senderId)
-                    return@withContext Pair(true, liveCoins)
-                }
-
-                val curCoins = fetchCoins(senderId)
-                if (curCoins < 15) {
-                    return@withContext Pair(false, curCoins)
-                }
-
-                val newBal = curCoins - 15
-                val endpoint = "$baseUrl/rest/v1/profiles?id=eq.$senderId"
-                val updateBody = JSONObject().apply { put("coins", newBal) }.toString()
-                val request = Request.Builder()
-                    .url(endpoint)
-                    .addHeader("apikey", apiKey)
-                    .addHeader("Authorization", authHeader)
-                    .addHeader("Content-Type", "application/json")
-                    .patch(updateBody.toRequestBody(jsonMediaType))
-                    .build()
-
-                client.newCall(request).execute().use { response ->
-                    if (response.isSuccessful || response.code == 200 || response.code == 204) {
-                        ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
-                            if (p.id == senderId) p.copy(coins = newBal) else p
-                        }
-                        recordCoinTransaction(
-                            userId = senderId,
-                            amount = -15L,
-                            type = "CHAT_DEDUCT",
-                            title = "Message to ${receiverName.ifEmpty { "User" }}",
-                            description = "15 Coins deducted for text message to ${receiverName.ifEmpty { "User" }}"
-                        )
-                        return@withContext Pair(true, newBal)
                     }
                 }
+
+                // If network/server error, do not deduct locally
+                val curCoins = fetchCoins(cleanSenderId)
                 Pair(false, curCoins)
             } catch (e: Exception) {
                 e.printStackTrace()
-                Pair(false, 0L)
+                Pair(false, fetchCoins(cleanSenderId))
             }
         }
     }
@@ -2357,89 +2255,53 @@ class SupabaseProfileService {
         }
 
         return withContext(Dispatchers.IO) {
+            val cleanSenderId = senderId.trim()
+            val cleanReceiverId = receiverId.trim()
+            if (cleanSenderId.isEmpty()) return@withContext Pair(false, 0L)
+
             try {
                 val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
                 val apiKey = SupabaseConfig.supabaseAnonKey.trim()
 
-                // Try RPC first: deduct_photo_coins
+                // Execute server RPC: deduct_photo_coins
                 val authHeader = getAuthHeader()
-                if (baseUrl.isNotEmpty() && apiKey.isNotEmpty() && senderId.isNotEmpty()) {
-                    try {
-                        val rpcUrl = "$baseUrl/rest/v1/rpc/deduct_photo_coins"
-                        val rpcBody = JSONObject().apply {
-                            put("p_sender_id", senderId)
-                            put("p_receiver_id", receiverId)
-                            put("p_receiver_name", receiverName)
-                            put("p_amount", 40)
-                        }.toString()
-                        val req = Request.Builder()
-                            .url(rpcUrl)
-                            .addHeader("apikey", apiKey)
-                            .addHeader("Authorization", authHeader)
-                            .addHeader("Content-Type", "application/json")
-                            .post(rpcBody.toRequestBody(jsonMediaType))
-                            .build()
-                        client.newCall(req).execute().use { res ->
-                            if (res.isSuccessful || res.code == 200) {
-                                val bodyStr = res.body?.string() ?: ""
-                                val json = JSONObject(bodyStr)
-                                val success = json.optBoolean("success", false)
-                                val newBal = json.optLong("new_balance", 0L)
-                                return@withContext Pair(success, newBal)
+                if (baseUrl.isNotEmpty() && apiKey.isNotEmpty()) {
+                    val rpcUrl = "$baseUrl/rest/v1/rpc/deduct_photo_coins"
+                    val rpcBody = JSONObject().apply {
+                        put("p_sender_id", cleanSenderId)
+                        put("p_receiver_id", cleanReceiverId)
+                        put("p_amount", 40)
+                    }.toString()
+                    val req = Request.Builder()
+                        .url(rpcUrl)
+                        .addHeader("apikey", apiKey)
+                        .addHeader("Authorization", authHeader)
+                        .addHeader("Content-Type", "application/json")
+                        .post(rpcBody.toRequestBody(jsonMediaType))
+                        .build()
+                    client.newCall(req).execute().use { res ->
+                        if (res.isSuccessful || res.code == 200) {
+                            val bodyStr = res.body?.string() ?: ""
+                            val json = JSONObject(bodyStr)
+                            val success = json.optBoolean("success", false)
+                            val newBal = json.optLong("new_balance", fetchCoins(cleanSenderId))
+                            if (success) {
+                                ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
+                                    if (p.id == cleanSenderId) p.copy(coins = newBal) else p
+                                }
+                                return@withContext Pair(true, newBal)
+                            } else {
+                                return@withContext Pair(false, newBal)
                             }
                         }
-                    } catch (_: Exception) {}
-                }
-
-                // Fallback direct execution
-                // Double check if sender or receiver profile in DB is admin, coinseller, or agent
-                val profile = fetchProfileById(senderId)
-                if (profile != null && (profile.isAdmin || profile.isCoinSeller || profile.isAgent || !profile.gender.equals("Male", ignoreCase = true))) {
-                    val liveCoins = fetchCoins(senderId)
-                    return@withContext Pair(true, liveCoins)
-                }
-
-                val recProfile = if (receiverId.isNotBlank()) fetchProfileById(receiverId) else null
-                if (recProfile != null && (recProfile.isAdmin || recProfile.isCoinSeller || recProfile.isAgent)) {
-                    val liveCoins = fetchCoins(senderId)
-                    return@withContext Pair(true, liveCoins)
-                }
-
-                val curCoins = fetchCoins(senderId)
-                if (curCoins < 40) {
-                    return@withContext Pair(false, curCoins)
-                }
-
-                val newBal = curCoins - 40
-                val endpoint = "$baseUrl/rest/v1/profiles?id=eq.$senderId"
-                val updateBody = JSONObject().apply { put("coins", newBal) }.toString()
-                val request = Request.Builder()
-                    .url(endpoint)
-                    .addHeader("apikey", apiKey)
-                    .addHeader("Authorization", authHeader)
-                    .addHeader("Content-Type", "application/json")
-                    .patch(updateBody.toRequestBody(jsonMediaType))
-                    .build()
-
-                client.newCall(request).execute().use { response ->
-                    if (response.isSuccessful || response.code == 200 || response.code == 204) {
-                        ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
-                            if (p.id == senderId) p.copy(coins = newBal) else p
-                        }
-                        recordCoinTransaction(
-                            userId = senderId,
-                            amount = -40L,
-                            type = "PHOTO_DEDUCT",
-                            title = "Photo to ${receiverName.ifEmpty { "User" }}",
-                            description = "40 Coins deducted for sending photo to ${receiverName.ifEmpty { "User" }}"
-                        )
-                        return@withContext Pair(true, newBal)
                     }
                 }
+
+                val curCoins = fetchCoins(cleanSenderId)
                 Pair(false, curCoins)
             } catch (e: Exception) {
                 e.printStackTrace()
-                Pair(false, 0L)
+                Pair(false, fetchCoins(cleanSenderId))
             }
         }
     }
@@ -2561,104 +2423,74 @@ class SupabaseProfileService {
         isAdmin: Boolean = false,
         isCoinSeller: Boolean = false
     ): Pair<Boolean, Long> {
-        // ALL users (including Admin, Coin Seller, Agent, Male, Female) must be charged for sending gifts
+        // ALL users must be charged for sending gifts, validated against real server balance
         return withContext(Dispatchers.IO) {
+            val cleanSenderId = senderId.trim()
+            val cleanReceiverId = receiverId.trim()
+            if (cleanSenderId.isEmpty()) return@withContext Pair(false, 0L)
+
+            val realServerCoins = fetchCoins(cleanSenderId)
+            if (realServerCoins < coins) {
+                return@withContext Pair(false, realServerCoins)
+            }
+
             try {
                 val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
                 val apiKey = SupabaseConfig.supabaseAnonKey.trim()
-                if (baseUrl.isEmpty() || apiKey.isEmpty()) return@withContext Pair(true, 0L)
+                if (baseUrl.isEmpty() || apiKey.isEmpty()) return@withContext Pair(false, realServerCoins)
 
-                // 1. Try RPC first: deduct_gift_coins
+                // Execute server-side RPC: deduct_gift_coins
                 val authHeader = getAuthHeader()
-                try {
-                    val rpcUrl = "$baseUrl/rest/v1/rpc/deduct_gift_coins"
-                    val rpcBody = JSONObject().apply {
-                        put("p_sender_id", senderId)
-                        put("p_gift_name", giftName)
-                        put("p_coins", coins)
-                        put("p_receiver_id", receiverId)
-                        put("p_receiver_name", receiverName)
-                    }.toString()
-
-                    val rpcReq = Request.Builder()
-                        .url(rpcUrl)
-                        .addHeader("apikey", apiKey)
-                        .addHeader("Authorization", authHeader)
-                        .addHeader("Content-Type", "application/json")
-                        .post(rpcBody.toRequestBody(jsonMediaType))
-                        .build()
-
-                    client.newCall(rpcReq).execute().use { response ->
-                        if (response.isSuccessful || response.code == 200) {
-                            val respStr = response.body?.string() ?: ""
-                            val json = JSONObject(respStr)
-                            val success = json.optBoolean("success", false)
-                            val newBalance = json.optLong("new_balance", 0L)
-                            if (success) {
-                                ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
-                                    if (p.id == senderId) p.copy(coins = newBalance) else p
-                                }
-                                return@withContext Pair(true, newBalance)
-                            }
-                        }
-                    }
-                } catch (_: Exception) {}
-
-                // 2. Direct fallback
-                val curCoins = fetchCoins(senderId)
-                if (curCoins < coins) {
-                    return@withContext Pair(false, curCoins)
-                }
-
-                val newBal = curCoins - coins
-                val profile = fetchProfileById(senderId)
-                val endpoints = mutableListOf("$baseUrl/rest/v1/profiles?id=eq.$senderId")
-                val userEmail = profile?.email ?: ""
-                val userNumId = profile?.numericId ?: 0L
-                if (userEmail.isNotBlank()) endpoints.add("$baseUrl/rest/v1/profiles?email=eq.$userEmail")
-                if (userNumId > 0L) endpoints.add("$baseUrl/rest/v1/profiles?numeric_id=eq.$userNumId")
-
-                val body = JSONObject().apply {
-                    put("coins", newBal)
+                val rpcUrl = "$baseUrl/rest/v1/rpc/deduct_gift_coins"
+                val rpcBody = JSONObject().apply {
+                    put("p_sender_id", cleanSenderId)
+                    put("p_gift_name", giftName)
+                    put("p_coins", coins)
+                    put("p_receiver_id", cleanReceiverId)
+                    put("p_receiver_name", receiverName)
                 }.toString()
 
-                var patched = false
-                for (ep in endpoints) {
-                    try {
-                        val req = Request.Builder()
-                            .url(ep)
-                            .addHeader("apikey", apiKey)
-                            .addHeader("Authorization", authHeader)
-                            .addHeader("Content-Type", "application/json")
-                            .addHeader("Prefer", "return=minimal")
-                            .patch(body.toRequestBody(jsonMediaType))
-                            .build()
+                val rpcReq = Request.Builder()
+                    .url(rpcUrl)
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", authHeader)
+                    .addHeader("Content-Type", "application/json")
+                    .addHeader("Prefer", "return=representation")
+                    .post(rpcBody.toRequestBody(jsonMediaType))
+                    .build()
 
-                        client.newCall(req).execute().use { response ->
-                            if (response.isSuccessful || response.code in 200..204) {
-                                patched = true
+                client.newCall(rpcReq).execute().use { response ->
+                    val respStr = response.body?.string() ?: ""
+                    android.util.Log.d("SupabaseProfile", "deduct_gift_coins response: code=${response.code}, body=$respStr")
+                    if (response.isSuccessful || response.code in 200..300) {
+                        var success = true
+                        var newBalance = realServerCoins - coins
+                        if (respStr.isNotBlank() && respStr.trim().startsWith("{")) {
+                            try {
+                                val json = JSONObject(respStr)
+                                success = json.optBoolean("success", true)
+                                newBalance = json.optLong("new_balance", realServerCoins - coins)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
                             }
                         }
-                    } catch (_: Exception) {}
+                        if (success) {
+                            ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
+                                if (p.id == cleanSenderId) p.copy(coins = newBalance) else p
+                            }
+                            return@withContext Pair(true, newBalance)
+                        } else {
+                            val actualServerBal = fetchCoins(cleanSenderId)
+                            return@withContext Pair(false, actualServerBal)
+                        }
+                    }
                 }
 
-                if (patched || newBal >= 0) {
-                    ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
-                        if (p.id == senderId) p.copy(coins = newBal) else p
-                    }
-                    recordCoinTransaction(
-                        userId = senderId,
-                        amount = -coins,
-                        type = "GIFT_DEDUCT",
-                        title = "Gift $giftName to ${receiverName.ifEmpty { "User" }}",
-                        description = "$coins Coins deducted for sending gift $giftName"
-                    )
-                    return@withContext Pair(true, newBal)
-                }
+                val curCoins = fetchCoins(cleanSenderId)
                 Pair(false, curCoins)
             } catch (e: Exception) {
                 e.printStackTrace()
-                Pair(false, 0L)
+                Pair(false, fetchCoins(cleanSenderId))
             }
         }
     }
@@ -2679,7 +2511,6 @@ class SupabaseProfileService {
         callerName: String = "",
         calleeName: String = ""
     ): Pair<Boolean, Long> {
-        val rate = if (isVideo) 160L else 80L
         val isCallerMale = callerGender.equals("Male", ignoreCase = true)
         val isCalleeMale = calleeGender.equals("Male", ignoreCase = true)
 
@@ -2690,164 +2521,111 @@ class SupabaseProfileService {
         }
 
         return withContext(Dispatchers.IO) {
+            val cleanCallerId = callerId.trim()
+            val cleanCalleeId = calleeId.trim()
+            if (cleanCallerId.isEmpty()) return@withContext Pair(false, 0L)
+
             try {
                 val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
                 val apiKey = SupabaseConfig.supabaseAnonKey.trim()
 
-                // Try RPC first: deduct_call_minute_coins
+                // Execute server-side RPC: deduct_call_minute_coins
                 val authHeader = getAuthHeader()
                 if (baseUrl.isNotEmpty() && apiKey.isNotEmpty()) {
-                    try {
-                        val rpcUrl = "$baseUrl/rest/v1/rpc/deduct_call_minute_coins"
-                        val rpcBody = JSONObject().apply {
-                            put("p_caller_id", callerId)
-                            put("p_caller_gender", callerGender)
-                            put("p_callee_id", calleeId)
-                            put("p_callee_gender", calleeGender)
-                            put("p_call_type", if (isVideo) "VIDEO" else "VOICE")
-                        }.toString()
-                        val req = Request.Builder()
-                            .url(rpcUrl)
-                            .addHeader("apikey", apiKey)
-                            .addHeader("Authorization", authHeader)
-                            .addHeader("Content-Type", "application/json")
-                            .post(rpcBody.toRequestBody(jsonMediaType))
-                            .build()
-                        client.newCall(req).execute().use { res ->
-                            if (res.isSuccessful || res.code == 200) {
-                                val bodyStr = res.body?.string() ?: ""
-                                val json = JSONObject(bodyStr)
-                                val success = json.optBoolean("success", false)
-                                val callerBal = json.optLong("caller_balance", 0L)
-                                return@withContext Pair(success, callerBal)
-                            }
-                        }
-                    } catch (_: Exception) {}
-                }
-
-                // Fallback direct execution
-                var callerSuccess = true
-                var callerRemaining = 0L
-
-                if (isCallerMale) {
-                    val callerCurCoins = fetchCoins(callerId)
-                    if (callerCurCoins < rate) {
-                        return@withContext Pair(false, callerCurCoins)
-                    }
-                    val newCallerCoins = callerCurCoins - rate
-                    val endpoint = "$baseUrl/rest/v1/profiles?id=eq.$callerId"
-                    val updateBody = JSONObject().apply { put("coins", newCallerCoins) }.toString()
+                    val rpcUrl = "$baseUrl/rest/v1/rpc/deduct_call_minute_coins"
+                    val rpcBody = JSONObject().apply {
+                        put("p_caller_id", cleanCallerId)
+                        put("p_caller_gender", callerGender)
+                        put("p_callee_id", cleanCalleeId)
+                        put("p_callee_gender", calleeGender)
+                        put("p_call_type", if (isVideo) "VIDEO" else "VOICE")
+                    }.toString()
                     val req = Request.Builder()
-                        .url(endpoint)
+                        .url(rpcUrl)
                         .addHeader("apikey", apiKey)
                         .addHeader("Authorization", authHeader)
                         .addHeader("Content-Type", "application/json")
-                        .patch(updateBody.toRequestBody(jsonMediaType))
+                        .post(rpcBody.toRequestBody(jsonMediaType))
                         .build()
-                    client.newCall(req).execute().use { r ->
-                        callerSuccess = r.isSuccessful || r.code == 200 || r.code == 204
-                        if (callerSuccess) {
-                            callerRemaining = newCallerCoins
-                            ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
-                                if (p.id == callerId) p.copy(coins = newCallerCoins) else p
-                            }
-                            recordCoinTransaction(
-                                userId = callerId,
-                                amount = -rate,
-                                type = "CALL_DEDUCT",
-                                title = "${if (isVideo) "Video" else "Voice"} Call (1 min)",
-                                description = "$rate Coins deducted for ${if (isVideo) "Video" else "Voice"} call with ${calleeName.ifEmpty { "User" }}"
-                            )
-                        }
-                    }
-                } else {
-                    callerRemaining = fetchCoins(callerId)
-                }
+                    client.newCall(req).execute().use { res ->
+                        if (res.isSuccessful || res.code == 200) {
+                            val bodyStr = res.body?.string() ?: ""
+                            val json = JSONObject(bodyStr)
+                            val success = json.optBoolean("success", false)
+                            val callerBal = json.optLong("caller_balance", fetchCoins(cleanCallerId))
+                            val calleeBal = json.optLong("callee_balance", -1L)
 
-                // If callee is Male (e.g. female called male), deduct callee as well
-                if (isCalleeMale && calleeId.isNotEmpty()) {
-                    val calleeCoins = fetchCoins(calleeId)
-                    if (calleeCoins >= rate) {
-                        val newCalleeCoins = calleeCoins - rate
-                        val endpoint = "$baseUrl/rest/v1/profiles?id=eq.$calleeId"
-                        val updateBody = JSONObject().apply { put("coins", newCalleeCoins) }.toString()
-                        val req = Request.Builder()
-                            .url(endpoint)
-                            .addHeader("apikey", apiKey)
-                            .addHeader("Authorization", authHeader)
-                            .addHeader("Content-Type", "application/json")
-                            .patch(updateBody.toRequestBody(jsonMediaType))
-                            .build()
-                        client.newCall(req).execute().use { r ->
-                            if (r.isSuccessful || r.code == 200 || r.code == 204) {
+                            if (success) {
                                 ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
-                                    if (p.id == calleeId) p.copy(coins = newCalleeCoins) else p
+                                    when (p.id) {
+                                        cleanCallerId -> p.copy(coins = callerBal)
+                                        cleanCalleeId -> if (calleeBal >= 0L) p.copy(coins = calleeBal) else p
+                                        else -> p
+                                    }
                                 }
-                                recordCoinTransaction(
-                                    userId = calleeId,
-                                    amount = -rate,
-                                    type = "CALL_DEDUCT",
-                                    title = "${if (isVideo) "Video" else "Voice"} Call (1 min)",
-                                    description = "$rate Coins deducted for ${if (isVideo) "Video" else "Voice"} call with ${callerName.ifEmpty { "User" }}"
-                                )
                             }
+                            return@withContext Pair(success, callerBal)
                         }
                     }
                 }
 
-                Pair(callerSuccess, callerRemaining)
+                Pair(false, fetchCoins(cleanCallerId))
             } catch (e: Exception) {
                 e.printStackTrace()
-                Pair(false, 0L)
+                Pair(false, fetchCoins(cleanCallerId))
             }
         }
     }
 
     /**
-     * Top up / Recharge coins for a user directly to Supabase table 'profiles'
+     * Top up / Recharge coins for a user strictly server-side via RPC 'recharge_coins'.
+     * Updates local cache and returns the authoritative balance confirmed by the server.
      */
     suspend fun topUpCoins(userId: String, amountToAdd: Long, method: String = "Recharge"): Long {
         return withContext(Dispatchers.IO) {
+            val cleanId = userId.trim()
+            if (cleanId.isEmpty() || amountToAdd <= 0L) return@withContext fetchCoins(cleanId)
+
             try {
                 val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
                 val apiKey = SupabaseConfig.supabaseAnonKey.trim()
-                if (baseUrl.isEmpty() || apiKey.isEmpty() || userId.isEmpty()) return@withContext 0L
+                if (baseUrl.isEmpty() || apiKey.isEmpty()) return@withContext fetchCoins(cleanId)
 
-                val currentCoins = fetchCoins(userId)
-                val newCoins = currentCoins + amountToAdd
-
-                val endpoint = "$baseUrl/rest/v1/profiles?id=eq.$userId"
-                val updateBody = JSONObject().apply { put("coins", newCoins) }.toString()
                 val authHeader = getAuthHeader()
+                val rpcUrl = "$baseUrl/rest/v1/rpc/recharge_coins"
+                val rpcBody = JSONObject().apply {
+                    put("p_user_id", cleanId)
+                    put("p_amount", amountToAdd)
+                    put("p_method", method)
+                    put("p_reference", "REC-" + System.currentTimeMillis().toString().takeLast(8))
+                }.toString()
 
                 val request = Request.Builder()
-                    .url(endpoint)
+                    .url(rpcUrl)
                     .addHeader("apikey", apiKey)
                     .addHeader("Authorization", authHeader)
                     .addHeader("Content-Type", "application/json")
-                    .addHeader("Prefer", "return=representation")
-                    .patch(updateBody.toRequestBody(jsonMediaType))
+                    .post(rpcBody.toRequestBody(jsonMediaType))
                     .build()
 
                 client.newCall(request).execute().use { response ->
-                    if (response.isSuccessful || response.code == 200 || response.code == 204) {
-                        ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
-                            if (p.id == userId) p.copy(coins = newCoins) else p
+                    if (response.isSuccessful || response.code == 200) {
+                        val bodyStr = response.body?.string() ?: ""
+                        val json = JSONObject(bodyStr)
+                        val success = json.optBoolean("success", false)
+                        val newBalance = json.optLong("new_balance", -1L)
+                        if (success && newBalance >= 0L) {
+                            ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
+                                if (p.id == cleanId) p.copy(coins = newBalance) else p
+                            }
+                            return@withContext newBalance
                         }
-                        recordCoinTransaction(
-                            userId = userId,
-                            amount = amountToAdd,
-                            type = "RECHARGE",
-                            title = "Coin Recharge ($method)",
-                            description = "Purchased +$amountToAdd coins via $method"
-                        )
-                        return@withContext newCoins
                     }
                 }
-                newCoins
+                fetchCoins(cleanId)
             } catch (e: Exception) {
                 e.printStackTrace()
-                0L
+                fetchCoins(cleanId)
             }
         }
     }
@@ -2860,45 +2638,75 @@ class SupabaseProfileService {
     }
 
     /**
-     * Direct update user coin balance on Supabase server
+     * Server-side coin adjustment via RPC 'adjust_user_coins'
      */
-    suspend fun updateUserCoinsDirect(userId: String, newCoins: Long): Boolean {
+    suspend fun adjustCoinsServer(
+        userId: String,
+        amount: Long,
+        type: String = "ADJUSTMENT",
+        title: String = "Coin Transaction",
+        description: String = ""
+    ): Pair<Boolean, Long> {
         return withContext(Dispatchers.IO) {
+            val cleanId = userId.trim()
+            if (cleanId.isEmpty()) return@withContext Pair(false, 0L)
+
             try {
-                val cleanId = userId.trim()
                 val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
                 val apiKey = SupabaseConfig.supabaseAnonKey.trim()
-                if (baseUrl.isEmpty() || apiKey.isEmpty() || cleanId.isEmpty()) return@withContext false
-
-                val endpoint = "$baseUrl/rest/v1/profiles?id=eq.$cleanId"
                 val authHeader = getAuthHeader()
-                val updateBody = JSONObject().apply {
-                    put("coins", newCoins)
+
+                val rpcUrl = "$baseUrl/rest/v1/rpc/adjust_user_coins"
+                val body = JSONObject().apply {
+                    put("p_user_id", cleanId)
+                    put("p_amount", amount)
+                    put("p_type", type)
+                    put("p_title", title)
+                    put("p_description", description)
                 }.toString()
 
-                val request = Request.Builder()
-                    .url(endpoint)
+                val req = Request.Builder()
+                    .url(rpcUrl)
                     .addHeader("apikey", apiKey)
                     .addHeader("Authorization", authHeader)
                     .addHeader("Content-Type", "application/json")
-                    .addHeader("Prefer", "return=minimal")
-                    .patch(updateBody.toRequestBody(jsonMediaType))
+                    .post(body.toRequestBody(jsonMediaType))
                     .build()
 
-                val response = client.newCall(request).execute()
-                val isSuccess = response.isSuccessful || response.code in 200..204
-                response.close()
-                if (isSuccess) {
-                    ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
-                        if (p.id == cleanId) p.copy(coins = newCoins) else p
+                client.newCall(req).execute().use { res ->
+                    if (res.isSuccessful || res.code == 200) {
+                        val resStr = res.body?.string() ?: ""
+                        val json = JSONObject(resStr)
+                        val success = json.optBoolean("success", false)
+                        val newBal = json.optLong("new_balance", fetchCoins(cleanId))
+                        if (success) {
+                            ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
+                                if (p.id == cleanId) p.copy(coins = newBal) else p
+                            }
+                            return@withContext Pair(true, newBal)
+                        } else {
+                            return@withContext Pair(false, newBal)
+                        }
                     }
                 }
-                isSuccess
+                Pair(false, fetchCoins(cleanId))
             } catch (e: Exception) {
                 e.printStackTrace()
-                false
+                Pair(false, fetchCoins(cleanId))
             }
         }
+    }
+
+    /**
+     * Update user coin balance safely by calculating delta and applying server-side adjustment RPC.
+     * Prevents any client PATCH tampering.
+     */
+    suspend fun updateUserCoinsDirect(userId: String, newCoins: Long): Boolean {
+        val current = fetchCoins(userId)
+        val delta = newCoins - current
+        if (delta == 0L) return true
+        val res = adjustCoinsServer(userId, delta, "BALANCE_SYNC", "Balance Sync", "Synchronized balance")
+        return res.first
     }
 
     /**
@@ -3192,144 +3000,105 @@ data class ServerClaimResult(
         context: Context? = null
     ): ServerClaimResult {
         return withContext(Dispatchers.IO) {
+            val cleanId = userId.trim()
+            if (cleanId.isBlank()) {
+                return@withContext ServerClaimResult(success = false, message = "Invalid user ID")
+            }
+
             try {
                 val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
                 val apiKey = SupabaseConfig.supabaseAnonKey.trim()
-                val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
-                if (baseUrl.isEmpty() || apiKey.isEmpty() || userId.isBlank()) {
-                    return@withContext ServerClaimResult(success = false, message = "Supabase configuration missing or invalid user ID")
+                if (baseUrl.isEmpty() || apiKey.isEmpty()) {
+                    return@withContext ServerClaimResult(success = false, message = "Supabase configuration missing")
                 }
 
                 val authHeader = getAuthHeader(context)
-
-                // 1. Fetch live profile to check last_checkin_date on server
-                val currentProfile = fetchProfileById(userId)
-                    ?: (if (userEmail.isNotBlank()) fetchProfile(userId, userEmail) else null)
-                    ?: ProfileCache.cachedProfiles.firstOrNull { it.id == userId || (userEmail.isNotBlank() && it.email.equals(userEmail, true)) }
-
-                if (currentProfile != null && isDateMatchingToday(currentProfile.lastCheckinDate)) {
-                    // Already claimed today according to verified server records
-                    return@withContext ServerClaimResult(
-                        success = false,
-                        isAlreadyClaimed = true,
-                        updatedCoins = currentProfile.coins,
-                        dayNumber = if (currentProfile.lastCheckinDay > 0) currentProfile.lastCheckinDay else dayNumber,
-                        message = "Already claimed for today on server"
-                    )
-                }
-
-                val currentCoins = currentProfile?.coins ?: fetchCoins(userId)
-                val newCoins = currentCoins + coinsToAward
-
-                // 2. Update profile with last_checkin_date, last_checkin_day, and coins
-                val endpoint = "$baseUrl/rest/v1/profiles?id=eq.$userId"
-                val updateBodyFull = JSONObject().apply {
-                    put("coins", newCoins)
-                    put("last_checkin_date", todayStr)
-                    put("last_checkin_day", dayNumber)
+                val rpcUrl = "$baseUrl/rest/v1/rpc/claim_daily_checkin"
+                val rpcBody = JSONObject().apply {
+                    put("p_user_id", cleanId)
+                    put("p_day_number", dayNumber)
+                    put("p_coins_to_award", coinsToAward)
                 }.toString()
 
-                val requestFull = Request.Builder()
-                    .url(endpoint)
+                val request = Request.Builder()
+                    .url(rpcUrl)
                     .addHeader("apikey", apiKey)
                     .addHeader("Authorization", authHeader)
                     .addHeader("Content-Type", "application/json")
-                    .addHeader("Prefer", "return=minimal")
-                    .patch(updateBodyFull.toRequestBody(jsonMediaType))
+                    .addHeader("Prefer", "return=representation")
+                    .post(rpcBody.toRequestBody(jsonMediaType))
                     .build()
 
-                var success = false
-                try {
-                    client.newCall(requestFull).execute().use { resp ->
-                        success = resp.isSuccessful || resp.code in 200..204
-                    }
-                } catch (_: Exception) {}
+                client.newCall(request).execute().use { resp ->
+                    val body = resp.body?.string() ?: ""
+                    android.util.Log.d("SupabaseProfile", "claim_daily_checkin response: code=${resp.code}, body=$body")
+                    if (resp.isSuccessful || resp.code in 200..300) {
+                        var success = true
+                        var alreadyClaimed = false
+                        var newBal = fetchCoins(cleanId)
+                        var finalDay = dayNumber
 
-                // Fallback: If full patch failed, try target endpoints
-                if (!success) {
-                    val updateBodyCoinsOnly = JSONObject().apply {
-                        put("coins", newCoins)
-                    }.toString()
-
-                    val targetEndpoints = mutableListOf("$baseUrl/rest/v1/profiles?id=eq.$userId")
-                    if (userEmail.isNotBlank()) {
-                        targetEndpoints.add("$baseUrl/rest/v1/profiles?email=eq.$userEmail")
-                    }
-                    if (currentProfile?.numericId != null && currentProfile.numericId > 0) {
-                        targetEndpoints.add("$baseUrl/rest/v1/profiles?numeric_id=eq.${currentProfile.numericId}")
-                    }
-
-                    for (ep in targetEndpoints) {
-                        try {
-                            val req = Request.Builder()
-                                .url(ep)
-                                .addHeader("apikey", apiKey)
-                                .addHeader("Authorization", authHeader)
-                                .addHeader("Content-Type", "application/json")
-                                .addHeader("Prefer", "return=minimal")
-                                .patch(updateBodyCoinsOnly.toRequestBody(jsonMediaType))
-                                .build()
-                            client.newCall(req).execute().use { resp ->
-                                if (resp.isSuccessful || resp.code in 200..204) {
-                                    success = true
-                                }
+                        if (body.isNotBlank() && body.trim().startsWith("{")) {
+                            try {
+                                val json = JSONObject(body)
+                                success = json.optBoolean("success", true)
+                                alreadyClaimed = json.optBoolean("already_claimed", false)
+                                newBal = json.optLong("new_balance", newBal)
+                                finalDay = json.optInt("day_number", dayNumber)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
                             }
-                            if (success) break
-                        } catch (_: Exception) {}
+                        }
+
+                        if (alreadyClaimed) {
+                            return@withContext ServerClaimResult(
+                                success = false,
+                                isAlreadyClaimed = true,
+                                updatedCoins = newBal,
+                                dayNumber = finalDay,
+                                message = "Already claimed for today on server"
+                            )
+                        }
+
+                        if (success) {
+                            val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                            ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
+                                if (p.id == cleanId) p.copy(
+                                    coins = newBal,
+                                    lastCheckinDate = todayStr,
+                                    lastCheckinDay = finalDay
+                                ) else p
+                            }
+                            return@withContext ServerClaimResult(
+                                success = true,
+                                isAlreadyClaimed = false,
+                                updatedCoins = newBal,
+                                dayNumber = finalDay,
+                                message = "+$coinsToAward Coins Claimed!"
+                            )
+                        }
                     }
-                }
-
-                if (!success) {
-                    return@withContext ServerClaimResult(
-                        success = false,
-                        isAlreadyClaimed = false,
-                        message = "Could not verify update with server. Please check your connection."
-                    )
-                }
-
-                // 3. Record transaction in database with unique account-based reference
-                try {
-                    recordCoinTransaction(
-                        userId = userId,
-                        amount = coinsToAward.toLong(),
-                        type = "DAILY_CLAIM",
-                        title = "Day $dayNumber Check-in Reward",
-                        description = "Daily login streak reward",
-                        referenceId = "CHECKIN-$todayStr-$userId"
-                    )
-                } catch (_: Exception) {}
-
-                // 4. Update cached profile with server-approved state
-                if (currentProfile != null) {
-                    val updated = currentProfile.copy(
-                        coins = newCoins,
-                        lastCheckinDate = todayStr,
-                        lastCheckinDay = dayNumber
-                    )
-                    ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.filter { it.id != userId } + updated
                 }
 
                 ServerClaimResult(
-                    success = true,
+                    success = false,
                     isAlreadyClaimed = false,
-                    updatedCoins = newCoins,
-                    dayNumber = dayNumber,
-                    message = "+$coinsToAward Coins Claimed!"
+                    message = "Server claim failed. Please try again."
                 )
             } catch (e: Exception) {
                 e.printStackTrace()
                 ServerClaimResult(
                     success = false,
                     isAlreadyClaimed = false,
-                    message = e.localizedMessage ?: "Failed to connect to server"
+                    message = "Error claiming: ${e.localizedMessage}"
                 )
             }
         }
     }
 
     /**
-     * Deduct 5000 coins for creating a party room
+     * Deduct 5000 coins for creating a party room strictly server-side via RPC 'deduct_party_room_coins'
      * Returns Pair<Boolean (success), Long (newBalance or currentBalance)>
      */
     suspend fun deductPartyRoomCreationFee(
@@ -3337,50 +3106,53 @@ data class ServerClaimResult(
         roomName: String
     ): Pair<Boolean, Long> {
         return withContext(Dispatchers.IO) {
+            val cleanId = userId.trim()
+            if (cleanId.isBlank()) return@withContext Pair(false, 0L)
+
             try {
                 val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
                 val apiKey = SupabaseConfig.supabaseAnonKey.trim()
 
-                if (baseUrl.isEmpty() || apiKey.isEmpty() || userId.isBlank()) {
-                    return@withContext Pair(false, 0L)
+                if (baseUrl.isEmpty() || apiKey.isEmpty()) {
+                    return@withContext Pair(false, fetchCoins(cleanId))
                 }
 
                 val authHeader = getAuthHeader()
-                val curCoins = fetchCoins(userId)
-                if (curCoins < 5000L) {
-                    return@withContext Pair(false, curCoins)
-                }
+                val rpcUrl = "$baseUrl/rest/v1/rpc/deduct_party_room_coins"
+                val rpcBody = JSONObject().apply {
+                    put("p_user_id", cleanId)
+                    put("p_room_name", roomName)
+                    put("p_fee", 5000L)
+                }.toString()
 
-                val newBal = curCoins - 5000L
-                val endpoint = "$baseUrl/rest/v1/profiles?id=eq.$userId"
-                val updateBody = JSONObject().apply { put("coins", newBal) }.toString()
                 val request = Request.Builder()
-                    .url(endpoint)
+                    .url(rpcUrl)
                     .addHeader("apikey", apiKey)
                     .addHeader("Authorization", authHeader)
                     .addHeader("Content-Type", "application/json")
-                    .patch(updateBody.toRequestBody(jsonMediaType))
+                    .post(rpcBody.toRequestBody(jsonMediaType))
                     .build()
 
                 client.newCall(request).execute().use { response ->
-                    if (response.isSuccessful || response.code in 200..204) {
-                        ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
-                            if (p.id == userId) p.copy(coins = newBal) else p
+                    if (response.isSuccessful || response.code == 200) {
+                        val bodyStr = response.body?.string() ?: ""
+                        val json = JSONObject(bodyStr)
+                        val success = json.optBoolean("success", false)
+                        val newBal = json.optLong("new_balance", fetchCoins(cleanId))
+                        if (success) {
+                            ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
+                                if (p.id == cleanId) p.copy(coins = newBal) else p
+                            }
+                            return@withContext Pair(true, newBal)
+                        } else {
+                            return@withContext Pair(false, newBal)
                         }
-                        recordCoinTransaction(
-                            userId = userId,
-                            amount = -5000L,
-                            type = "PARTY_ROOM_CREATION",
-                            title = "Party Room Creation Fee",
-                            description = "5,000 Coins deducted for creating party room: $roomName"
-                        )
-                        return@withContext Pair(true, newBal)
                     }
                 }
-                Pair(false, curCoins)
+                Pair(false, fetchCoins(cleanId))
             } catch (e: Exception) {
                 e.printStackTrace()
-                Pair(false, 0L)
+                Pair(false, fetchCoins(cleanId))
             }
         }
     }

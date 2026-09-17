@@ -601,7 +601,7 @@ private fun UserConnectionCard(
                     // Gender & Age Badge
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = if (user.gender.equals("Female", true)) Color(0xFFFF4081) else Color(0xFF2979FF)
+                        color = if (user.gender.equals("Female", true)) Color(0xFF7FFF00) else Color(0xFF2979FF)
                     ) {
                         Text(
                             text = "${if (user.gender.equals("Female", true)) "♀" else "♂"} 24",

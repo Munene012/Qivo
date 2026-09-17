@@ -1010,7 +1010,7 @@ fun PartyRoomDetailScreen(
                     border = androidx.compose.foundation.BorderStroke(
                         1.5.dp,
                         Brush.horizontalGradient(
-                            listOf(Color(0xFFFFD54F), Color(0xFFFF4081), Color(0xFF7C4DFF))
+                            listOf(Color(0xFF8CFF1A), Color(0xFF7FFF00), Color(0xFF5AB800))
                         )
                     ),
                     shadowElevation = 6.dp
@@ -1609,7 +1609,7 @@ fun PartyRoomDetailScreen(
                                     }
                                 },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (isTargetAdmin) Color(0xFFFF5252) else Color(0xFF1E88E5)
+                                    containerColor = if (isTargetAdmin) Color(0xFFFF5252) else QivoOrange
                                 ),
                                 shape = RoundedCornerShape(14.dp),
                                 modifier = Modifier.fillMaxWidth()

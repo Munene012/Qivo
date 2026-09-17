@@ -16,37 +16,37 @@
         android:translateY="5.0"
         android:rotation="-4">
 
-        <!-- 1. Deep 3D Shadow / Outer Black Shell for QIVO -->
+        <!-- 1. Deep 3D Shadow / Outer Dark Jade Shell for QIVO -->
         <!-- Shadow Q -->
         <path
             android:pathData="M23,38 C23,32 27,27 34,27 C41,27 45,32 45,38 L45,55 C45,61 41,66 34,66 C30,66 27,64 25,61 L22,66 C20.5,68.5 17,68 16.5,65 C16,62 18,59.5 19.5,57.5 L23,53.5 Z"
-            android:fillColor="#150E06" />
+            android:fillColor="#061209" />
         <path
             android:pathData="M21,40 C21,30 27,24 35,24 C43,24 48,30 48,40 L48,56 C48,65 42,70 34,70 C30,70 26.5,68 24.5,64.5 L20.5,70 C18.5,72.5 14,71.5 13.5,67.5 C13,63.5 16,60 18,57.5 L21,54 Z"
-            android:fillColor="#0D0904" />
+            android:fillColor="#030A05" />
 
         <!-- Shadow I -->
         <path
             android:pathData="M48,30 C48,26 51,24 54,24 C57,24 60,26 60,30 L60,63 C60,67 57,69 54,69 C51,69 48,67 48,63 Z"
-            android:fillColor="#0D0904" />
+            android:fillColor="#030A05" />
 
         <!-- Shadow V -->
         <path
             android:pathData="M61,26 C63,24 67,24 69,27 L76,49 L83,27 C85,24 89,24 91,26 C93,28.5 92.5,32.5 90.5,36.5 L80.5,65.5 C79,69 75,71 72,70 C69,69 67,66 65.5,62.5 L59.5,35.5 C58,31.5 59,28 61,26 Z"
-            android:fillColor="#0D0904" />
+            android:fillColor="#030A05" />
 
         <!-- Shadow O -->
         <path
             android:pathData="M81,42 C81,31 87,24 96,24 C104,24 109.5,31 109.5,42 L109.5,53 C109.5,64 104,70 96,70 C87,70 81,64 81,53 Z"
-            android:fillColor="#0D0904" />
+            android:fillColor="#030A05" />
 
-        <!-- 2. Mid 3D Extrusion Layer (Warm Amber/Brown edge) -->
+        <!-- 2. Mid 3D Extrusion Layer (Deep Forest Jade Edge) -->
         <!-- Extrusion for entire word -->
         <path
             android:pathData="M23,38 C23,31 28,26 35,26 C42,26 46,31 46,38 L46,55 C46,62 42,67 35,67 C31.5,67 28.5,65.5 26.5,62.5 L23,67 C21.5,69 18.5,68.5 18,66 C17.5,63.5 19.5,61 21,59 L23,56.5 Z"
-            android:fillColor="#3E2723" />
+            android:fillColor="#0A2412" />
 
-        <!-- 3. Front Chunky Bubble Cream-White Faces -->
+        <!-- 3. Front Chunky Bubble Pure White & Soft Jade Highlight Faces -->
 
         <!-- LETTER Q Front -->
         <path
@@ -59,15 +59,15 @@
                     android:endY="64"
                     android:type="linear">
                     <item android:offset="0.0" android:color="#FFFFFFFF" />
-                    <item android:offset="0.45" android:color="#FFFFFDE7" />
-                    <item android:offset="1.0" android:color="#FFFFF59D" />
+                    <item android:offset="0.5" android:color="#FFF2FBF5" />
+                    <item android:offset="1.0" android:color="#FFE8F5EE" />
                 </gradient>
             </aapt:attr>
         </path>
         <!-- Q Inner Hole -->
         <path
             android:pathData="M31.5,38 C31.5,35 32.8,33 34.5,33 C36.2,33 37.5,35 37.5,38 L37.5,52 C37.5,55 36.2,57 34.5,57 C32.8,57 31.5,55 31.5,52 Z"
-            android:fillColor="#150E06" />
+            android:fillColor="#061209" />
 
         <!-- LETTER I Front -->
         <path
@@ -80,8 +80,8 @@
                     android:endY="64.5"
                     android:type="linear">
                     <item android:offset="0.0" android:color="#FFFFFFFF" />
-                    <item android:offset="0.45" android:color="#FFFFFDE7" />
-                    <item android:offset="1.0" android:color="#FFFFF59D" />
+                    <item android:offset="0.5" android:color="#FFF2FBF5" />
+                    <item android:offset="1.0" android:color="#FFE8F5EE" />
                 </gradient>
             </aapt:attr>
         </path>
@@ -97,8 +97,8 @@
                     android:endY="64"
                     android:type="linear">
                     <item android:offset="0.0" android:color="#FFFFFFFF" />
-                    <item android:offset="0.45" android:color="#FFFFFDE7" />
-                    <item android:offset="1.0" android:color="#FFFFF59D" />
+                    <item android:offset="0.5" android:color="#FFF2FBF5" />
+                    <item android:offset="1.0" android:color="#FFE8F5EE" />
                 </gradient>
             </aapt:attr>
         </path>
@@ -114,15 +114,15 @@
                     android:endY="63.5"
                     android:type="linear">
                     <item android:offset="0.0" android:color="#FFFFFFFF" />
-                    <item android:offset="0.45" android:color="#FFFFFDE7" />
-                    <item android:offset="1.0" android:color="#FFFFF59D" />
+                    <item android:offset="0.5" android:color="#FFF2FBF5" />
+                    <item android:offset="1.0" android:color="#FFE8F5EE" />
                 </gradient>
             </aapt:attr>
         </path>
         <!-- O Inner Hole -->
         <path
             android:pathData="M90.5,40 C90.5,35.5 92.2,33 94.5,33 C96.8,33 98.5,35.5 98.5,40 L98.5,50 C98.5,54.5 96.8,57 94.5,57 C92.2,57 90.5,54.5 90.5,50 Z"
-            android:fillColor="#150E06" />
+            android:fillColor="#061209" />
 
         <!-- 4. Glossy Highlight Accents across Top of Letters -->
         <!-- Q Top Highlight -->

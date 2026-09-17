@@ -190,11 +190,11 @@ fun ManageRolesScreen(
                                     .testTag("roles_search_input"),
                                 shape = RoundedCornerShape(14.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color(0xFF0284C7),
+                                    focusedBorderColor = QivoOrange,
                                     unfocusedBorderColor = colors.cardBorder,
                                     focusedTextColor = colors.textPrimary,
                                     unfocusedTextColor = colors.textPrimary,
-                                    cursorColor = Color(0xFF0284C7)
+                                    cursorColor = QivoOrange
                                 )
                             )
 
@@ -218,7 +218,7 @@ fun ManageRolesScreen(
                                     }
                                 },
                                 shape = RoundedCornerShape(14.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                                colors = ButtonDefaults.buttonColors(containerColor = QivoOrange),
                                 modifier = Modifier
                                     .height(54.dp)
                                     .testTag("roles_search_btn")
@@ -245,7 +245,7 @@ fun ManageRolesScreen(
                         colors = CardDefaults.cardColors(
                             containerColor = if (isDark) Color(0xFF13131A) else Color.White
                         ),
-                        border = BorderStroke(1.5.dp, Color(0xFF0284C7))
+                        border = BorderStroke(1.5.dp, QivoOrange)
                     ) {
                         Column(modifier = Modifier.padding(18.dp)) {
                             Row(
@@ -509,7 +509,7 @@ fun ManageRolesScreen(
                                     .height(50.dp)
                                     .testTag("save_roles_btn"),
                                 shape = RoundedCornerShape(14.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
+                                colors = ButtonDefaults.buttonColors(containerColor = QivoOrange)
                             ) {
                                 if (isSavingRole) {
                                     CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
@@ -537,7 +537,7 @@ fun ManageRolesScreen(
             if (isLoadingList) {
                 item {
                     Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Color(0xFF0284C7))
+                        CircularProgressIndicator(color = QivoOrange)
                     }
                 }
             } else if (allPrivilegedUsers.isEmpty()) {

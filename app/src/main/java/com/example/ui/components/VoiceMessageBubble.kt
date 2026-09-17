@@ -64,15 +64,15 @@ fun VoiceMessageBubble(
     val totalSec = if (durationSeconds > 0) durationSeconds else if (isThisActive && playbackState.totalDurationMs > 0) playbackState.totalDurationMs / 1000 else 0
 
     val primaryColor = if (isMe) {
-        if (isDark) Color(0xFFFFD600) else Color(0xFF2E7D32)
+        if (isDark) Color(0xFF00E676) else Color(0xFF00C853)
     } else {
-        if (isDark) Color(0xFFFF80AB) else Color(0xFFE91E63)
+        if (isDark) Color(0xFF69F0AE) else Color(0xFF007E33)
     }
 
     val bubbleBg = if (isMe) {
-        if (isDark) Color(0xFF1E3324) else Color(0xFFE8F5E9)
+        if (isDark) Color(0xFF102416) else Color(0xFFEDF8F1)
     } else {
-        if (isDark) Color(0xFF2C2538) else Color(0xFFF3E5F5)
+        if (isDark) Color(0xFF142017) else Color(0xFFF0F6F2)
     }
 
     val infiniteTransition = rememberInfiniteTransition(label = "wave_anim")
@@ -115,8 +115,8 @@ fun VoiceMessageBubble(
                     .clip(CircleShape)
                     .background(
                         Brush.linearGradient(
-                            if (isMe) listOf(Color(0xFF2E7D32), Color(0xFF43A047))
-                            else listOf(Color(0xFF880E4F), Color(0xFFC2185B))
+                            if (isMe) listOf(Color(0xFF007E33), Color(0xFF00C853))
+                            else listOf(Color(0xFF004D20), Color(0xFF009639))
                         )
                     )
                     .clickable(

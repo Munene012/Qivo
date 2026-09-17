@@ -218,9 +218,9 @@ fun PartyMusicBottomSheet(
                             .background(
                                 Brush.linearGradient(
                                     listOf(
-                                        Color(0xFFFF9100),
-                                        Color(0xFFFF3D00),
-                                        Color(0xFFE91E63)
+                                        Color(0xFF8CFF1A),
+                                        Color(0xFF7FFF00),
+                                        Color(0xFF5AB800)
                                     )
                                 )
                             )
@@ -460,9 +460,9 @@ fun PartyMusicBottomSheet(
                                         .background(
                                             Brush.linearGradient(
                                                 listOf(
-                                                    Color(0xFFFF9100),
-                                                    Color(0xFFFF3D00),
-                                                    Color(0xFFE91E63)
+                                                    Color(0xFF8CFF1A),
+                                                    Color(0xFF7FFF00),
+                                                    Color(0xFF5AB800)
                                                 )
                                             )
                                         )
@@ -788,9 +788,9 @@ fun TurntableVinylRecord(
                 .background(
                     Brush.linearGradient(
                         listOf(
-                            Color(0xFFFF9100),
-                            Color(0xFFFF3D00),
-                            Color(0xFFE91E63)
+                            Color(0xFF8CFF1A),
+                            Color(0xFF7FFF00),
+                            Color(0xFF5AB800)
                         )
                     )
                 )

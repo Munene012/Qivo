@@ -563,7 +563,7 @@ fun GiftPadBottomSheet(
                                 if (gift.badge != null) {
                                     Surface(
                                         shape = RoundedCornerShape(6.dp),
-                                        color = if (gift.coins >= 10000L) Color(0xFF7C3AED) else if (gift.coins >= 1000L) Color(0xFFE11D48) else QivoOrange,
+                                        color = if (gift.coins >= 10000L) Color(0xFFA37E30) else if (gift.coins >= 1000L) Color(0xFFB08C42) else QivoOrange,
                                         modifier = Modifier.padding(bottom = 2.dp)
                                     ) {
                                         Text(
@@ -727,7 +727,7 @@ fun GiftPadBottomSheet(
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFE11D48)
+                                containerColor = QivoOrange
                             ),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier

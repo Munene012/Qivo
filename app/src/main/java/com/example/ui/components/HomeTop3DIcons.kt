@@ -3,11 +3,13 @@ package com.example.ui.components
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
@@ -704,25 +706,29 @@ fun Chat3DBadgeButton(
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(17.dp),
-        color = Color.Transparent,
+        shape = RoundedCornerShape(16.dp),
+        color = Color(0xFFFF7043),
         shadowElevation = 4.dp,
-        modifier = modifier.height(34.dp)
+        modifier = modifier.height(32.dp)
     ) {
         Box(
             modifier = Modifier
                 .background(
                     Brush.horizontalGradient(
                         colors = listOf(
-                            Color(0xFFFF9E79), // Soft Warm Coral Peach (Top part of Home)
-                            Color(0xFFFFAE8D), // Pale Amber Orange (Top Header gradient)
-                            Color(0xFFFF8A65)  // Rich Warm Sunset Coral
+                            Color(0xFFFF8A65), // Soft Warm Coral
+                            Color(0xFFFF5722)  // Rich Sunset Coral
                         )
                     ),
-                    shape = RoundedCornerShape(17.dp)
+                    shape = RoundedCornerShape(16.dp)
                 )
-                .clip(RoundedCornerShape(17.dp))
-                .padding(horizontal = 11.dp, vertical = 5.dp),
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.4f),
+                    shape = RoundedCornerShape(16.dp)
+                )
+                .clip(RoundedCornerShape(16.dp))
+                .padding(horizontal = 10.dp, vertical = 5.dp),
             contentAlignment = Alignment.Center
         ) {
             Row(
@@ -730,17 +736,17 @@ fun Chat3DBadgeButton(
                 horizontalArrangement = Arrangement.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.Chat,
+                    imageVector = Icons.AutoMirrored.Filled.Chat,
                     contentDescription = "Chat",
                     tint = Color.White,
-                    modifier = Modifier.size(15.dp)
+                    modifier = Modifier.size(14.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = "Chat",
                     color = Color.White,
                     fontWeight = FontWeight.ExtraBold,
-                    fontSize = 12.5.sp,
+                    fontSize = 12.sp,
                     letterSpacing = 0.3.sp
                 )
             }
@@ -1845,7 +1851,7 @@ fun Follow3DIcon(
                 cubicTo(w * 0.92f, h * 0.42f, w * 0.82f, h * 0.65f, w * 0.50f, h * 0.88f)
                 close()
             }
-            drawPath(path = heartShadowPath, color = Color(0xFFC2185B))
+            drawPath(path = heartShadowPath, color = Color(0xFF38521F))
 
             val heartMainPath = Path().apply {
                 moveTo(w * 0.50f, h * 0.82f)
@@ -1859,9 +1865,9 @@ fun Follow3DIcon(
                 path = heartMainPath,
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFFFF5252),
-                        Color(0xFFFF2A6D),
-                        Color(0xFFE91E63)
+                        Color(0xFF8CFF1A),
+                        Color(0xFF7FFF00),
+                        Color(0xFF5AB800)
                     )
                 )
             )

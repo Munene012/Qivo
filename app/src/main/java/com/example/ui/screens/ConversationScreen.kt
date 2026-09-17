@@ -122,15 +122,22 @@ fun ConversationScreen(
 
     val initialConversationMessages = remember(myUserId, targetUser.id) {
         if (myUserId.isNotEmpty() && targetUser.id.isNotEmpty()) {
-            val all = SupabaseChatService.getInMemoryMessages(myUserId).ifEmpty {
-                AppDataCacheManager.getCachedChatMessagesSync(context, myUserId)
-            }
-            val filtered = all.filter { msg ->
-                (msg.senderId.trim().equals(myUserId, ignoreCase = true) && msg.receiverId.trim().equals(targetUser.id, ignoreCase = true)) ||
-                (msg.receiverId.trim().equals(myUserId, ignoreCase = true) && msg.senderId.trim().equals(targetUser.id, ignoreCase = true))
+            val fromHolder = com.example.data.ChatStateHolder.messagesList.value.filter { msg ->
+                (msg.senderId.trim().equals(myUserId, ignoreCase = true) && msg.receiverId.trim().equals(targetUser.id.trim(), ignoreCase = true)) ||
+                (msg.receiverId.trim().equals(myUserId, ignoreCase = true) && msg.senderId.trim().equals(targetUser.id.trim(), ignoreCase = true))
             }.reversed()
-            // Show only the last 20 messages initially
-            filtered.takeLast(20)
+            if (fromHolder.isNotEmpty()) {
+                fromHolder.takeLast(40)
+            } else {
+                val all = SupabaseChatService.getInMemoryMessages(myUserId).ifEmpty {
+                    AppDataCacheManager.getCachedChatMessagesSync(context, myUserId)
+                }
+                val filtered = all.filter { msg ->
+                    (msg.senderId.trim().equals(myUserId, ignoreCase = true) && msg.receiverId.trim().equals(targetUser.id.trim(), ignoreCase = true)) ||
+                    (msg.receiverId.trim().equals(myUserId, ignoreCase = true) && msg.senderId.trim().equals(targetUser.id.trim(), ignoreCase = true))
+                }.reversed()
+                filtered.takeLast(40)
+            }
         } else emptyList()
     }
 
@@ -870,7 +877,7 @@ fun ConversationScreen(
                     .clipToBounds()
                     .background(colors.screenBg)
             ) {
-                if (isLoadingMessages) {
+                if (isLoadingMessages && messagesList.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         App3DMascotLoader(
                             modifier = Modifier.fillMaxWidth(),
@@ -1357,7 +1364,7 @@ fun ConversationScreen(
                                         text = "Earned $earnedDiamondsText",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (isDark) Color(0xFFFF80AB) else Color(0xFFC2185B)
+                                        color = if (isDark) Color(0xFFA6FF4D) else Color(0xFF50A300)
                                     )
                                 }
                             }
@@ -1388,8 +1395,8 @@ fun ConversationScreen(
                         ConversationActionButton(
                             text = "Photo",
                             icon = { PhotoGallery3DIcon(size = 20.dp) },
-                            gradientColors = listOf(Color(0xFFFF9E79), Color(0xFFFF7043), Color(0xFFF4511E)),
-                            shadowColor = Color(0xFFFF7043),
+                            gradientColors = listOf(Color(0xFF00E676), Color(0xFF00C853), Color(0xFF007E33)),
+                            shadowColor = Color(0xFF007E33),
                             isEnabled = !isTargetBlocked,
                             onClick = {
                                 if (!com.example.data.NetworkUtils.isOnline(context)) {
@@ -1479,8 +1486,8 @@ fun ConversationScreen(
                         ConversationActionButton(
                             text = "Gift",
                             icon = { GiftBox3DIcon(size = 20.dp) },
-                            gradientColors = listOf(Color(0xFFFF4081), Color(0xFFE91E63), Color(0xFFC2185B)),
-                            shadowColor = Color(0xFFE91E63),
+                            gradientColors = listOf(Color(0xFF26E06D), Color(0xFF00C853), Color(0xFF007E33)),
+                            shadowColor = Color(0xFF007E33),
                             isEnabled = !isTargetBlocked,
                             onClick = {
                                 if (isBlockedByMe || profileService.isUserBlockedByMe(myUserId, targetUser.id, context)) {
