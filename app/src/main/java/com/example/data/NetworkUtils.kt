@@ -306,8 +306,10 @@ object NetworkUtils {
                 "No internet connection"
             } else if (!status.isStable) {
                 "Unstable internet connection"
+            } else if (lower.contains("timeout") || lower.contains("connectexception") || lower.contains("socket") || lower.contains("failed to connect") || lower.contains("unknownhost")) {
+                "Connection timeout. Please try again."
             } else {
-                "Network error. Please try again."
+                "Unable to complete request. Please try again."
             }
         }
         return msg

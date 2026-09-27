@@ -79,20 +79,22 @@ fun TaskCenterScreen(
     var isClaimedToday by remember { mutableStateOf(UserSessionManager.isClaimedToday(context, userId, userEmail)) }
     var currentDayNumber by remember { mutableIntStateOf(UserSessionManager.getLastCheckInDay(context, userId, userEmail)) }
     var isClaimingReward by remember { mutableStateOf(false) }
-    var isCheckingServer by remember { mutableStateOf(true) }
     var isOnline by remember { mutableStateOf(NetworkUtils.isOnline(context)) }
     var showInfoDialog by remember { mutableStateOf(false) }
 
-    // Fetch real profile from Supabase for coin balance, streak, and server-side claim verification
+    // Persistent claim state: if already claimed for today locally, stop checking server every time!
+    // If not claimed yet, show the claim action immediately instead of keeping on refreshing.
     LaunchedEffect(userId) {
         isOnline = NetworkUtils.isOnline(context)
         val localClaimed = UserSessionManager.isClaimedToday(context, userId, userEmail)
         if (localClaimed) {
             isClaimedToday = true
+            // Already claimed today! Stop checking server every time.
+            return@LaunchedEffect
         }
 
+        // Only do a lightweight background sync if user hasn't collected yet, without blocking UI
         if (userId.isNotEmpty() && isOnline) {
-            isCheckingServer = true
             try {
                 val liveProfile = profileService.fetchProfile(userId, userEmail) ?: profileService.fetchProfileById(userId)
                 if (liveProfile != null) {
@@ -100,9 +102,7 @@ fun TaskCenterScreen(
                     UserSessionManager.saveCoins(context, liveProfile.coins)
 
                     val isServerClaimedToday = profileService.isDateMatchingToday(liveProfile.lastCheckinDate)
-                    val isLocallyClaimed = localClaimed || UserSessionManager.isClaimedToday(context, userId, userEmail)
-
-                    if (isServerClaimedToday || isLocallyClaimed) {
+                    if (isServerClaimedToday) {
                         isClaimedToday = true
                         currentDayNumber = if (liveProfile.lastCheckinDay > 0) {
                             liveProfile.lastCheckinDay
@@ -112,15 +112,11 @@ fun TaskCenterScreen(
                         }
                         val dateToSave = if (liveProfile.lastCheckinDate.isNotBlank()) liveProfile.lastCheckinDate else todayDate
                         UserSessionManager.saveDailyCheckIn(context, userId, dateToSave, currentDayNumber, userEmail)
-                    } else {
+                    } else if (liveProfile.lastCheckinDay > 0 && currentDayNumber == 0) {
                         currentDayNumber = liveProfile.lastCheckinDay
-                        isClaimedToday = false
                     }
                 }
             } catch (_: Exception) {}
-            isCheckingServer = false
-        } else {
-            isCheckingServer = false
         }
     }
 
@@ -333,12 +329,12 @@ fun TaskCenterScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.LocalFireDepartment,
-                                        contentDescription = "Streak",
+                                        contentDescription = "Day",
                                         tint = Color(0xFFFF9800),
                                         modifier = Modifier.size(13.dp)
                                     )
                                     Text(
-                                        text = "${if (isClaimedToday) currentDayNumber else currentDayNumber.coerceAtLeast(0)}D Streak",
+                                        text = "${if (isClaimedToday) currentDayNumber else currentDayNumber.coerceAtLeast(0)}D",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Color(0xFFFF9800)
@@ -479,7 +475,7 @@ fun TaskCenterScreen(
                     // Clean, Prominent Action Button
                     Button(
                         onClick = { claimCoins() },
-                        enabled = isOnline && !isCheckingServer && !isClaimedToday && !isClaimingReward,
+                        enabled = isOnline && !isClaimedToday && !isClaimingReward,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp)
@@ -507,19 +503,6 @@ fun TaskCenterScreen(
                                     fontSize = 15.sp
                                 )
                             }
-                        } else if (isCheckingServer) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                App3DInlineSpinner(size = 16.dp)
-                                Text(
-                                    text = "Checking status...",
-                                    color = colors.textMuted,
-                                    fontWeight = FontWeight.Medium,
-                                    fontSize = 14.sp
-                                )
-                            }
                         } else if (!isOnline || isClaimedToday) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -528,12 +511,12 @@ fun TaskCenterScreen(
                                 Icon(
                                     imageVector = Icons.Default.Check,
                                     contentDescription = null,
-                                    tint = if (isDark) Color(0xFF4ADE80) else Color(0xFF16A34A),
+                                    tint = if (isDark) Color(0xFFFFB74D) else Color(0xFFFF8D00),
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Text(
                                     text = "Claimed",
-                                    color = if (isDark) Color(0xFF4ADE80) else Color(0xFF16A34A),
+                                    color = if (isDark) Color(0xFFFFB74D) else Color(0xFFFF8D00),
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 15.sp
                                 )
@@ -569,7 +552,7 @@ fun TaskCenterScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "• Check in daily to build your consecutive day streak.",
+                        text = "• Check in daily to build consecutive rewards.",
                         fontSize = 13.sp,
                         color = colors.textSecondary
                     )
@@ -655,13 +638,13 @@ private fun SimpleDayTile(
                     modifier = Modifier
                         .size(20.dp)
                         .clip(CircleShape)
-                        .background(if (isDark) Color(0xFF1E3A2B) else Color(0xFFDCFCE7)),
+                        .background(if (isDark) Color(0xFF331600) else Color(0xFFFFF3E0)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Check,
                         contentDescription = "Claimed",
-                        tint = if (isDark) Color(0xFF4ADE80) else Color(0xFF16A34A),
+                        tint = if (isDark) Color(0xFFFFB74D) else Color(0xFFFF8D00),
                         modifier = Modifier.size(13.dp)
                     )
                 }
@@ -765,13 +748,13 @@ private fun SimpleDay7Tile(
                         modifier = Modifier
                             .size(20.dp)
                             .clip(CircleShape)
-                            .background(if (isDark) Color(0xFF1E3A2B) else Color(0xFFDCFCE7)),
+                            .background(if (isDark) Color(0xFF331600) else Color(0xFFFFF3E0)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Check,
                             contentDescription = "Claimed",
-                            tint = if (isDark) Color(0xFF4ADE80) else Color(0xFF16A34A),
+                            tint = if (isDark) Color(0xFFFFB74D) else Color(0xFFFF8D00),
                             modifier = Modifier.size(13.dp)
                         )
                     }

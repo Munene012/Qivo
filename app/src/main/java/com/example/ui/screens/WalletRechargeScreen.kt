@@ -221,18 +221,18 @@ fun WalletRechargeScreen(
                         if (isDark) {
                             Brush.verticalGradient(
                                 listOf(
-                                    Color(0xFF09120B),
-                                    Color(0xFF0E1A11),
-                                    Color(0xFF050A06)
+                                    Color(0xFF331600),
+                                    Color(0xFF240E00),
+                                    Color(0xFF140800)
                                 )
                             )
                         } else {
                             Brush.verticalGradient(
                                 listOf(
-                                    Color(0xFF009639), // Deep Emerald
-                                    Color(0xFF00B04A), // Jewel Jade
-                                    Color(0xFF00C853), // Vivid Emerald
-                                    Color(0xFF26E06D)  // Mint Emerald
+                                    Color(0xFFBF360C), // Deep Amber
+                                    Color(0xFFE65100), // Rich Orange
+                                    Color(0xFFFF6500), // Qivo Orange
+                                    Color(0xFFFF8D00)  // Golden Orange
                                 )
                             )
                         }
@@ -395,7 +395,7 @@ fun WalletRechargeScreen(
                 Text(
                     text = "Instant Delivery",
                     fontSize = 12.sp,
-                    color = Color(0xFF00C853),
+                    color = Color(0xFFFF8D00),
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -692,7 +692,7 @@ fun WalletRechargeScreen(
                                 Icon(
                                     imageVector = Icons.Default.Check,
                                     contentDescription = "Selected",
-                                    tint = Color(0xFF00C853),
+                                    tint = Color(0xFFFF6500),
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -952,13 +952,13 @@ fun PaymentMethodCard(
                             Spacer(modifier = Modifier.width(8.dp))
                             Surface(
                                 shape = RoundedCornerShape(6.dp),
-                                color = if (colors.isDark) Color(0xFF16331C) else Color(0xFFE8F5E9)
+                                color = if (colors.isDark) Color(0xFF3E1E02) else Color(0xFFFFF3E0)
                             ) {
                                 Text(
                                     text = badge,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF00C853),
+                                    color = Color(0xFFFF6500),
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
                             }

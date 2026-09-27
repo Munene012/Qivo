@@ -584,10 +584,10 @@ fun WhatsApp3DIcon(modifier: Modifier = Modifier, size: Dp = 44.dp) {
             val w = this.size.width
             val h = this.size.height
 
-            // Green Sphere
+            // Sunset Amber Sphere
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFF69F0AE), Color(0xFF00E676), Color(0xFF00C853), Color(0xFF007E33)),
+                    colors = listOf(Color(0xFFFFE082), Color(0xFFFF8D00), Color(0xFFFF6500), Color(0xFFD84315)),
                     center = Offset(w * 0.42f, h * 0.42f),
                     radius = w * 0.36f
                 ),
@@ -597,7 +597,7 @@ fun WhatsApp3DIcon(modifier: Modifier = Modifier, size: Dp = 44.dp) {
 
             // Phone icon
             drawCircle(color = Color.White, radius = w * 0.16f, center = Offset(w * 0.50f, h * 0.48f))
-            drawCircle(color = Color(0xFF00C853), radius = w * 0.10f, center = Offset(w * 0.50f, h * 0.48f))
+            drawCircle(color = Color(0xFFFF6500), radius = w * 0.10f, center = Offset(w * 0.50f, h * 0.48f))
         }
     }
 }
@@ -967,17 +967,17 @@ fun AdminAnalytics3DIcon(
                 cornerRadius = CornerRadius(w * 0.03f, w * 0.03f)
             )
 
-            // Bar 2 (Center - Emerald)
+            // Bar 2 (Center - Sunset Amber)
             drawRoundRect(
-                brush = Brush.linearGradient(listOf(Color(0xFF34D399), Color(0xFF059669))),
+                brush = Brush.linearGradient(listOf(Color(0xFFFF8D00), Color(0xFFFF6500))),
                 topLeft = Offset(w * 0.43f, h * 0.32f),
                 size = Size(w * 0.14f, h * 0.40f),
                 cornerRadius = CornerRadius(w * 0.03f, w * 0.03f)
             )
 
-            // Bar 3 (Right - Neon Lime / Gold Peak)
+            // Bar 3 (Right - Gold Peak)
             drawRoundRect(
-                brush = Brush.linearGradient(listOf(Color(0xFFA3E635), Color(0xFF65A30D))),
+                brush = Brush.linearGradient(listOf(Color(0xFFFFD54F), Color(0xFFFFA000))),
                 topLeft = Offset(w * 0.64f, h * 0.18f),
                 size = Size(w * 0.14f, h * 0.54f),
                 cornerRadius = CornerRadius(w * 0.03f, w * 0.03f)
@@ -1128,10 +1128,10 @@ fun CoinSeller3DIcon(
                 size = Size(w * 0.80f, h * 0.20f)
             )
 
-            // Emerald Round Platter Base
+            // Amber/Orange Round Platter Base
             drawCircle(
                 brush = Brush.linearGradient(
-                    colors = listOf(Color(0xFF34D399), Color(0xFF059669), Color(0xFF064E3B)),
+                    colors = listOf(Color(0xFFFF8D00), Color(0xFFFF6500), Color(0xFFBF360C)),
                     start = Offset(w * 0.2f, h * 0.1f),
                     end = Offset(w * 0.8f, h * 0.9f)
                 ),

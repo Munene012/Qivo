@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -28,9 +29,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -40,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.SupabaseAuthService
 import com.example.data.UserSessionManager
 import com.example.ui.theme.AppFontFamily
+import com.example.ui.theme.PacificoFontFamily
 import com.example.ui.theme.QivoOrange
 import com.example.ui.theme.QivoYellow
 import kotlinx.coroutines.Dispatchers
@@ -51,7 +56,7 @@ fun SplashScreen(
     onSplashFinished: (session: UserSessionManager.SessionData?) -> Unit
 ) {
     val context = LocalContext.current
-    val alphaAnim = remember { Animatable(0f) }
+    val alphaAnim = remember { Animatable(1f) }
     var hasFinished by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -110,14 +115,15 @@ fun SplashScreen(
         }
     }
 
-    // Refined Emerald & Jade Canvas Gradient
+    // Luxury Sunset Amber Canvas Gradient matching Welcome Screen
     val splashGradient = Brush.verticalGradient(
         colors = listOf(
-            Color(0xFF009639), // Deep Emerald Top
-            Color(0xFF00B04A), // Rich Jewel Jade
-            Color(0xFF00C853), // Vivid Emerald
-            Color(0xFF26E06D), // Luminous Mint Emerald
-            Color(0xFFE8F5EE)  // Crisp Soft Green Canvas Tint
+            Color(0xFFFFB74D), // Warm Golden Light
+            Color(0xFFFF9800), // Amber
+            Color(0xFFFF6500), // Sunset Orange
+            Color(0xFFE65100), // Deep Amber
+            Color(0xFFFF8D00), // Amber Gold
+            Color(0xFFFFCC80)  // Soft Peach Glow
         )
     )
 
@@ -127,40 +133,7 @@ fun SplashScreen(
             .background(splashGradient)
             .testTag("splash_screen_root")
     ) {
-        // Decorative radiant ambient glow (steady, no pulsing or expanding)
-        Box(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .size(340.dp)
-                .alpha(0.45f)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.45f),
-                            Color(0xFFFFE0B2).copy(alpha = 0.35f),
-                            Color(0xFFFFCC80).copy(alpha = 0.20f),
-                            Color.Transparent
-                        )
-                    )
-                )
-        )
-
-        // Top Aura Glow
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .size(260.dp)
-                .alpha(0.35f)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.45f),
-                            Color.Transparent
-                        )
-                    )
-                )
-        )
-
+        // Center Hero: Signature Qivo Typography in Cursive Font Design
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -171,43 +144,31 @@ fun SplashScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // App Branding Icon with Soft Golden Gradient, Glow Border, and Drop Shadow (steady, fixed size)
             Box(
+                contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(118.dp)
-                    .shadow(elevation = 8.dp, shape = CircleShape, spotColor = Color(0x33D84315))
-                    .clip(CircleShape)
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(
-                                Color(0xFFFFFFFF),
-                                Color(0xFFFFF8E1),
-                                Color(0xFFFFE082),
-                                Color(0xFFFFB74D),
-                                Color(0xFFFF9800)
-                            )
-                        )
-                    )
-                    .border(
-                        width = 3.dp,
-                        brush = Brush.linearGradient(
-                            colors = listOf(
-                                Color.White,
-                                Color(0xFFFFD54F),
-                                Color.White.copy(alpha = 0.6f)
-                            )
-                        ),
-                        shape = CircleShape
-                    ),
-                contentAlignment = Alignment.Center
+                    .size(130.dp)
+                    .clip(RoundedCornerShape(32.dp))
+                    .background(QivoOrange)
+                    .border(2.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(32.dp))
+                    .shadow(8.dp, RoundedCornerShape(32.dp))
             ) {
                 Text(
-                    text = "QIVO",
-                    fontFamily = AppFontFamily,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 34.sp,
-                    letterSpacing = 3.sp,
-                    color = Color(0xFF4E2608) // Deep Rich Warm Tone
+                    text = "Qivo",
+                    fontFamily = PacificoFontFamily,
+                    fontSize = 52.sp,
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                    style = androidx.compose.ui.text.TextStyle(
+                        shadow = androidx.compose.ui.graphics.Shadow(
+                            color = Color(0x40000000),
+                            offset = Offset(0f, 4f),
+                            blurRadius = 12f
+                        )
+                    ),
+                    modifier = Modifier
+                        .rotate(-4f)
+                        .testTag("splash_qivo_logo")
                 )
             }
         }

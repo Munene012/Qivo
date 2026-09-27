@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.AppColors
 import com.example.ui.theme.AppTheme
+import com.example.ui.theme.QivoOrange
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,7 +86,7 @@ fun VerificationScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(54.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C853)),
+                    colors = ButtonDefaults.buttonColors(containerColor = QivoOrange),
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Icon(

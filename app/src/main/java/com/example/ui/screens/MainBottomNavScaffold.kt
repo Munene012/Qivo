@@ -453,6 +453,9 @@ fun MainBottomNavScaffold(
             while (isOnline) {
                 try {
                     val messages = chatService.checkRecentIncomingMessages(userId, context, limit = 30)
+                    if (messages.isNotEmpty()) {
+                        com.example.data.ChatStateHolder.appendOrUpdateMessages(messages)
+                    }
                     val unreadIncoming = messages.filter {
                         !it.isRead && it.receiverId.trim().equals(userId.trim(), ignoreCase = true)
                     }
@@ -502,7 +505,7 @@ fun MainBottomNavScaffold(
         }
     }
 
-    // Refresh triggers for bottom nav double-clicks / re-selections
+    var homeTabClickCount by remember { mutableStateOf(0) }
     var homeRefreshTrigger by remember { mutableStateOf(0L) }
     var chatRefreshTrigger by remember { mutableStateOf(0L) }
 
@@ -523,11 +526,18 @@ fun MainBottomNavScaffold(
         val current = navStack.lastOrNull()
         if (current is AppNavStep.TabStep && current.tab == tab) {
             if (tab == MainTab.HOME) {
-                homeRefreshTrigger = System.currentTimeMillis()
-                scope.launch {
-                    try {
-                        homeListState.animateScrollToItem(0)
-                    } catch (_: Exception) {}
+                homeTabClickCount++
+                if (homeTabClickCount == 1) {
+                    // 1st click: take home to top of home
+                    scope.launch {
+                        try {
+                            homeListState.animateScrollToItem(0)
+                        } catch (_: Exception) {}
+                    }
+                } else {
+                    // 2nd click: refresh and bring updates
+                    homeTabClickCount = 0
+                    homeRefreshTrigger = System.currentTimeMillis()
                 }
             } else if (tab == MainTab.CHAT) {
                 chatRefreshTrigger = System.currentTimeMillis()
@@ -539,6 +549,10 @@ fun MainBottomNavScaffold(
             }
             return
         }
+
+        // When switching tabs to Home, remain where you were on Home (do not scroll to top)
+        homeTabClickCount = 0
+
         navStack.clear()
         navStack.add(AppNavStep.TabStep(tab))
     }

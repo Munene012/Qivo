@@ -204,6 +204,15 @@ fun PartyRoomDetailScreen(
         showLeaveConfirmDialog = true
     }
 
+    // Initialize and join ZegoCloud Voice & Party Engine
+    DisposableEffect(room.id) {
+        ZegoCloudVoiceEngine.initEngine(context)
+        ZegoCloudVoiceEngine.joinRoom(room.id, currentUserId, currentUserName, false)
+        onDispose {
+            ZegoCloudVoiceEngine.leaveRoom()
+        }
+    }
+
     // Sync global session state (only if not actively leaving)
     LaunchedEffect(currentRoom, isSeated, mySeatIndex, isMicMuted, isLeavingRoom) {
         if (!isLeavingRoom) {
@@ -287,11 +296,13 @@ fun PartyRoomDetailScreen(
         }
     }
 
-    val audioPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasAudioPermission = granted
-        if (granted) {
+    val partyPermissionsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { perms ->
+        val micGranted = perms[Manifest.permission.RECORD_AUDIO] == true ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        hasAudioPermission = micGranted
+        if (micGranted) {
             val targetIdx = pendingSeatIndexToTake ?: seats.indexOfFirst { it.userId.isBlank() }.takeIf { it != -1 } ?: 0
             takeMicSeatInternal(targetIdx)
             pendingSeatIndexToTake = null
@@ -308,13 +319,19 @@ fun PartyRoomDetailScreen(
         }
         if (!hasAudioPermission) {
             pendingSeatIndexToTake = targetIdx
-            audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            val perms = mutableListOf(Manifest.permission.RECORD_AUDIO)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                    perms.add(Manifest.permission.BLUETOOTH_CONNECT)
+                }
+            }
+            partyPermissionsLauncher.launch(perms.toTypedArray())
         } else {
             takeMicSeatInternal(targetIdx)
         }
     }
 
-    // Connect to Tencent TRTC & Realtime Relay Room on launch
+    // Connect to ZegoCloud RTC & Realtime Relay Room on launch
     LaunchedEffect(currentRoom.id, currentRoom.roomNumber) {
         PartyRealtimeRelayManager.connectRoom(currentRoom.id, currentUserId)
         PartyMusicManager.setRoomId(currentRoom.id)
@@ -440,7 +457,7 @@ fun PartyRoomDetailScreen(
         }
     }
 
-    // Set audio amplitude callback from Tencent Voice Engine
+    // Set audio amplitude callback from ZegoCloud Voice Engine
     LaunchedEffect(Unit) {
         voiceEngine.onSpeakingVolumeChanged = { uid, vol ->
             if (uid == currentUserId) {
@@ -450,7 +467,7 @@ fun PartyRoomDetailScreen(
         }
     }
 
-    // Start / stop mic when seated using Tencent Voice Engine. When muted, mic capture is fully disabled.
+    // Start / stop mic when seated using ZegoCloud Voice Engine. When muted, mic capture is fully disabled.
     LaunchedEffect(isSeated, isMicMuted, hasAudioPermission, mySeatIndex) {
         if (isSeated && !isMicMuted && hasAudioPermission) {
             voiceEngine.takeMicSeat(scope, currentUserId, mySeatIndex)
@@ -1380,7 +1397,7 @@ fun PartyRoomDetailScreen(
                         }
                         if (speakers.isNotEmpty()) {
                             item {
-                                Text("🎙️ ON MIC SPEAKERS (${speakers.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF81C784), modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+                                Text("🎙️ ON MIC SPEAKERS (${speakers.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFB74D), modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
                             }
                             items(speakers, key = { "speaker_${it.userId}" }) { member ->
                                 MemberItemRow(
@@ -2531,13 +2548,13 @@ fun SpeakingRadioWaves(
                         width = (2.2f * (1f - progress * 0.4f)).dp,
                         brush = Brush.radialGradient(
                             listOf(
-                                Color(0xFF00E676).copy(alpha = currentAlpha),
-                                Color(0xFF69F0AE).copy(alpha = currentAlpha * 0.6f)
+                                Color(0xFFFF9100).copy(alpha = currentAlpha),
+                                Color(0xFFFFD54F).copy(alpha = currentAlpha * 0.6f)
                             )
                         ),
                         shape = CircleShape
                     )
-                    .background(Color(0xFF00E676).copy(alpha = currentAlpha * 0.12f))
+                    .background(Color(0xFFFF9100).copy(alpha = currentAlpha * 0.12f))
             )
         }
     }
@@ -2645,7 +2662,7 @@ fun PartySeatItem(
                         .size(48.dp)
                         .border(
                             if (isSpeaking || isMyUser) 2.dp else 0.dp,
-                            if (isSpeaking) Color(0xFF00E676) else if (isMyUser) QivoYellow else Color.Transparent,
+                            if (isSpeaking) Color(0xFFFF9100) else if (isMyUser) QivoYellow else Color.Transparent,
                             CircleShape
                         ),
                     contentScale = ContentScale.Crop
@@ -2803,7 +2820,7 @@ fun MemberItemRow(
                     }
                 }
                 if (member.seatIndex >= 0) {
-                    Text("Seat #${member.seatIndex + 1}", fontSize = 10.sp, color = Color(0xFF81C784))
+                    Text("Seat #${member.seatIndex + 1}", fontSize = 10.sp, color = Color(0xFFFFB74D))
                 }
             }
 

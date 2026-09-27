@@ -141,10 +141,34 @@ fun BagScreen(
         }
     }
 
-    val framesToDisplay = remember(validOwnedFrames) {
-        validOwnedFrames.mapNotNull { owned ->
-            AvatarFrameManager.getFrameById(owned.frameId)?.let { item ->
-                Pair(item, owned)
+    val framesToDisplay = remember(validOwnedFrames, activeFrameId) {
+        val ownedMap = validOwnedFrames.associateBy { it.frameId.lowercase() }
+        val orderedCatalog = listOf(
+            "solar_monarch",
+            "imperial_leo",
+            "crimson_drake",
+            "new_user",
+            "sky_aviator",
+            "seraphim_grace",
+            "mystic_oculus",
+            "volt_tempest",
+            "emerald_matrix",
+            "astral_diadem",
+            "enchanted_flora"
+        )
+        val allFramesMap = AvatarFrameManager.ALL_FRAMES.associateBy { it.id.lowercase() }
+        orderedCatalog.mapNotNull { id ->
+            allFramesMap[id]?.let { frame ->
+                val owned = ownedMap[id] ?: UserOwnedFrame(
+                    id = frame.id,
+                    userId = userId,
+                    frameId = frame.id,
+                    purchasedAt = "",
+                    expiresAt = if (frame.id == "new_user") "2026-10-02T00:00:00.000Z" else "2054-01-01T00:00:00.000Z",
+                    isActive = activeFrameId.equals(frame.id, ignoreCase = true),
+                    pricePaid = 0L
+                )
+                Pair(frame, owned)
             }
         }
     }
@@ -282,7 +306,7 @@ fun BagScreen(
                                 }
                                 drawPath(
                                     path = path,
-                                    color = Color(0xFF4ADE80),
+                                    color = Color(0xFFFF8D00),
                                     style = Stroke(
                                         width = 3.dp.toPx(),
                                         cap = StrokeCap.Round,
@@ -315,15 +339,15 @@ fun BagScreen(
                         }
                     } else {
                         LazyVerticalGrid(
-                            columns = GridCells.Fixed(2),
+                            columns = GridCells.Fixed(3),
                             contentPadding = PaddingValues(16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
                             // 0. Offline Alert Banner (when device is offline)
                             if (!isOnline) {
-                                item(span = { GridItemSpan(2) }) {
+                                item(span = { GridItemSpan(3) }) {
                                     Surface(
                                         color = Color(0xFFFEF2F2),
                                         shape = RoundedCornerShape(12.dp),
@@ -353,96 +377,14 @@ fun BagScreen(
                                 }
                             }
 
-                            // 1. "Wearing" Section Header
-                            item(span = { GridItemSpan(2) }) {
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                    Text(
-                                        text = "Wearing",
-                                        fontSize = 17.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF111827)
-                                    )
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                }
-                            }
-
-                            // 2. Currently Wearing Card
-                            item(span = { GridItemSpan(2) }) {
-                                if (wearingFrameItem != null && activeFrameId.isNotBlank()) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.Start
-                                    ) {
-                                        WearingFrameCard(
-                                            frame = wearingFrameItem,
-                                            onUnwear = {
-                                                if (!NetworkUtils.requireOnline(context, "No internet connection. Cannot unwear avatar frame while offline.")) {
-                                                    return@WearingFrameCard
-                                                }
-                                                scope.launch {
-                                                    profileService.unequipAvatarFrame(userId, context)
-                                                    activeFrameId = ""
-                                                    activeFrameExp = ""
-                                                    AppToast.show("Unequipped frame")
-                                                }
-                                            },
-                                            modifier = Modifier.width(168.dp)
-                                        )
-                                    }
-                                } else {
-                                    // Empty Wearing Placeholder
-                                    Card(
-                                        shape = RoundedCornerShape(16.dp),
-                                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                                        border = BorderStroke(1.dp, Color(0xFFE5E7EB)),
-                                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(16.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(48.dp)
-                                                    .clip(CircleShape)
-                                                    .background(Color(0xFFF3F4F6)),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.ShoppingBag,
-                                                    contentDescription = null,
-                                                    tint = Color(0xFF9CA3AF),
-                                                    modifier = Modifier.size(24.dp)
-                                                )
-                                            }
-                                            Spacer(modifier = Modifier.width(12.dp))
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = "No frame equipped",
-                                                    fontSize = 15.sp,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = Color(0xFF374151)
-                                                )
-                                                Text(
-                                                    text = "Tap any available frame below to wear it",
-                                                    fontSize = 13.sp,
-                                                    color = Color(0xFF9CA3AF)
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            // 3. "Available" Section Header
-                            item(span = { GridItemSpan(2) }) {
-                                Column(
+                            // Available Section Header (clean, without huge redundant preview at top)
+                            item(span = { GridItemSpan(3) }) {
+                                Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(top = 10.dp)
+                                        .padding(top = 2.dp, bottom = 4.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
                                         text = "Available",
@@ -450,7 +392,12 @@ fun BagScreen(
                                         fontWeight = FontWeight.Bold,
                                         color = Color(0xFF111827)
                                     )
-                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Text(
+                                        text = "${framesToDisplay.size} Frames",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color(0xFF6B7280)
+                                    )
                                 }
                             }
 
@@ -535,7 +482,7 @@ fun BagScreen(
                             }
 
                             // Bottom Spacer & Store CTA
-                            item(span = { GridItemSpan(2) }) {
+                            item(span = { GridItemSpan(3) }) {
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Card(
                                     shape = RoundedCornerShape(16.dp),
@@ -605,7 +552,7 @@ fun BagScreen(
 
                 Box(
                     modifier = Modifier
-                        .size(130.dp)
+                        .size(100.dp)
                         .background(Color(0xFFF9FAFB), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
@@ -829,7 +776,7 @@ private fun WearingFrameCard(
             verticalArrangement = Arrangement.Center
         ) {
             Box(
-                modifier = Modifier.size(92.dp),
+                modifier = Modifier.size(72.dp),
                 contentAlignment = Alignment.Center
             ) {
                 AvatarFrameRenderer(
@@ -878,22 +825,22 @@ private fun AvailableFrameGridCard(
         modifier = modifier.fillMaxWidth()
     ) {
         Card(
-            shape = RoundedCornerShape(18.dp),
+            shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
                 containerColor = if (isWearing) Color(0xFFFDFBF7) else Color.White
             ),
-            elevation = CardDefaults.cardElevation(defaultElevation = if (isWearing) 3.dp else 1.5.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = if (isWearing) 3.dp else 1.dp),
             border = BorderStroke(
                 width = if (isWearing) 1.5.dp else 1.dp,
-                color = if (isWearing) QivoGold else Color(0xFFF3F4F6)
+                color = if (isWearing) QivoOrange else Color(0xFFF0F1F3)
             ),
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(1.05f)
+                .aspectRatio(0.92f)
                 .shadow(
-                    elevation = if (isWearing) 6.dp else 3.dp,
-                    shape = RoundedCornerShape(18.dp),
-                    spotColor = if (isWearing) Color(0x33C5A059) else Color(0x14000000)
+                    elevation = if (isWearing) 4.dp else 1.5.dp,
+                    shape = RoundedCornerShape(16.dp),
+                    spotColor = if (isWearing) Color(0x33C5A059) else Color(0x10000000)
                 )
                 .clickable { onClick() }
         ) {
@@ -904,12 +851,12 @@ private fun AvailableFrameGridCard(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 8.dp, vertical = 12.dp),
+                        .padding(horizontal = 6.dp, vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
                     Box(
-                        modifier = Modifier.size(76.dp),
+                        modifier = Modifier.size(54.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         AvatarFrameRenderer(
@@ -920,12 +867,32 @@ private fun AvailableFrameGridCard(
 
                     Text(
                         text = frame.name,
-                        fontSize = 13.5.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF1F2937),
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center
                     )
+                }
+
+                // NEW tag top-left for newcomer frame
+                if (frame.id == "new_user") {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(4.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Brush.horizontalGradient(listOf(Color(0xFFFF8D00), Color(0xFFFF3D00))))
+                            .padding(horizontal = 4.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            text = "NEW",
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White
+                        )
+                    }
                 }
 
                 // Wearing badge top-right
@@ -933,14 +900,14 @@ private fun AvailableFrameGridCard(
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
-                            .padding(6.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                            .padding(4.dp)
+                            .clip(RoundedCornerShape(6.dp))
                             .background(QivoOrange)
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
                     ) {
                         Text(
                             text = "Wearing",
-                            fontSize = 10.sp,
+                            fontSize = 8.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
@@ -949,24 +916,24 @@ private fun AvailableFrameGridCard(
             }
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
-        // Remaining Days Tag (Matches screenshot lime green e.g. "9967Days")
+        // Remaining Days / Validity Tag
         val daysText = remember(owned.expiresAt) {
             if (owned.expiresAt.contains("2054")) {
-                "9967Days"
+                "Permanent"
             } else if (owned.expiresAt.isNotBlank()) {
                 owned.remainingTimeText
             } else {
-                "9967Days"
+                "Available"
             }
         }
 
         Text(
             text = daysText,
-            fontSize = 12.5.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF65A30D) // Vibrant lime green from screenshot
+            fontSize = 10.5.sp,
+            fontWeight = FontWeight.Medium,
+            color = if (isWearing) QivoOrange else Color(0xFF6B7280)
         )
     }
 }

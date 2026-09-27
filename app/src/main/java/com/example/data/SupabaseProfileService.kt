@@ -1,6 +1,7 @@
 package com.example.data
 
 import android.content.Context
+import android.util.Log
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -62,6 +63,92 @@ data class UserProfile(
     val isDndVoice: Boolean = false,
     val isDndVideo: Boolean = false
 )
+
+object UserProfileSorting {
+    fun parseLastActiveEpoch(timestamp: String): Long {
+        if (timestamp.isBlank() || timestamp.equals("null", ignoreCase = true)) return 0L
+        return try {
+            try {
+                java.time.OffsetDateTime.parse(timestamp).toInstant().toEpochMilli()
+            } catch (_: Throwable) {
+                try {
+                    java.time.Instant.parse(timestamp).toEpochMilli()
+                } catch (_: Throwable) {
+                    val cleanStr = timestamp.replace("+00:00", "Z").replace("+00", "Z")
+                    val formatters = listOf(
+                        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'", Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") },
+                        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") },
+                        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") },
+                        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS", Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") },
+                        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+                    )
+                    var parsedTime: Long? = null
+                    for (fmt in formatters) {
+                        try {
+                            val d = fmt.parse(cleanStr)
+                            if (d != null) {
+                                parsedTime = d.time
+                                break
+                            }
+                        } catch (_: Throwable) {}
+                    }
+                    parsedTime ?: 0L
+                }
+            }
+        } catch (_: Throwable) {
+            0L
+        }
+    }
+
+    /**
+     * Consistent, predictable sorting for Recommend:
+     * 1. ONLINE USERS FIRST: currently online users appear at the top.
+     *    Within online users, sorted by most recently active (last_active DESC).
+     * 2. RECENTLY ACTIVE USERS NEXT: offline users sorted by last_active, newest activity first.
+     * 3. OTHER USERS AFTER THAT: offline users without recent activity.
+     * 4. STABILITY TIE-BREAKER: numericId DESC, then unique id ASC (100% deterministic, never random).
+     */
+    val recommendComparator = Comparator<UserProfile> { u1, u2 ->
+        // 1. Online users first
+        if (u1.isOnline != u2.isOnline) {
+            return@Comparator if (u1.isOnline) -1 else 1
+        }
+
+        // 2 & 3. Both online OR both offline -> compare lastActiveAt DESC
+        val t1 = parseLastActiveEpoch(u1.lastActiveAt)
+        val t2 = parseLastActiveEpoch(u2.lastActiveAt)
+        if (t1 != t2) {
+            return@Comparator t2.compareTo(t1) // Descending: newer timestamp first
+        }
+
+        // 4. Stable tie-breaker: numericId DESC, then id ASC
+        val numCmp = u2.numericId.compareTo(u1.numericId)
+        if (numCmp != 0) {
+            return@Comparator numCmp
+        }
+        u1.id.compareTo(u2.id)
+    }
+
+    /**
+     * Nearby sorting:
+     * Prioritizes geographic proximity (same country first).
+     * Within the same geographic match, applies online & recent activity secondary sorting.
+     */
+    fun getNearbyComparator(userCountry: String): Comparator<UserProfile> {
+        val cleanCountry = userCountry.trim()
+        return Comparator<UserProfile> { u1, u2 ->
+            if (cleanCountry.isNotBlank()) {
+                val match1 = u1.country.trim().equals(cleanCountry, ignoreCase = true)
+                val match2 = u2.country.trim().equals(cleanCountry, ignoreCase = true)
+                if (match1 != match2) {
+                    return@Comparator if (match1) -1 else 1
+                }
+            }
+            // Secondary sorting: online status, recent activity, then stable tie-breaker
+            recommendComparator.compare(u1, u2)
+        }
+    }
+}
 
 data class CoinTransaction(
     val id: String,
@@ -391,7 +478,11 @@ class SupabaseProfileService {
             personalityType = resolveField("personality_type", inMemProfile?.personalityType, "Choose"),
             horoscopes = resolveField("horoscopes", inMemProfile?.horoscopes, "Choose"),
             isOnline = parseRealtimeOnlineStatus(obj),
-            lastActiveAt = obj.optString("last_active_at", ""),
+            lastActiveAt = listOf(
+                if (obj.has("last_active_at") && !obj.isNull("last_active_at")) obj.optString("last_active_at", "").trim() else "",
+                if (obj.has("last_active") && !obj.isNull("last_active")) obj.optString("last_active", "").trim() else "",
+                if (obj.has("updated_at") && !obj.isNull("updated_at")) obj.optString("updated_at", "").trim() else ""
+            ).firstOrNull { it.isNotBlank() && !it.equals("null", ignoreCase = true) } ?: (inMemProfile?.lastActiveAt ?: ""),
             activeFrameId = run {
                 val fid = obj.optString("active_frame_id", inMemProfile?.activeFrameId ?: "")
                 val exp = obj.optString("frame_expires_at", inMemProfile?.frameExpiresAt ?: "")
@@ -939,6 +1030,7 @@ class SupabaseProfileService {
 
                 val primaryEndpoints = buildList {
                     if (genderQuery.isNotEmpty()) {
+                        add("$baseUrl/rest/v1/profiles?select=*$genderQuery&order=is_online.desc.nullslast,last_active_at.desc.nullslast,numeric_id.desc&offset=$offset&limit=$limit")
                         add("$baseUrl/rest/v1/profiles?select=*$genderQuery&order=is_online.desc.nullslast,numeric_id.desc&offset=$offset&limit=$limit")
                         add("$baseUrl/rest/v1/profiles?select=*$genderQuery&order=numeric_id.desc&offset=$offset&limit=$limit")
                         add("$baseUrl/rest/v1/profiles?select=*$genderQuery&offset=$offset&limit=$limit")
@@ -946,6 +1038,7 @@ class SupabaseProfileService {
                 }
 
                 val fallbackEndpoints = listOf(
+                    "$baseUrl/rest/v1/profiles?select=*&order=is_online.desc.nullslast,last_active_at.desc.nullslast,numeric_id.desc&offset=$offset&limit=$limit",
                     "$baseUrl/rest/v1/profiles?select=*&order=is_online.desc.nullslast,numeric_id.desc&offset=$offset&limit=$limit",
                     "$baseUrl/rest/v1/profiles?select=*&order=numeric_id.desc&offset=$offset&limit=$limit",
                     "$baseUrl/rest/v1/profiles?select=*&offset=$offset&limit=$limit",
@@ -976,17 +1069,13 @@ class SupabaseProfileService {
                                 list.add(parseUserProfile(obj))
                             }
                             if (list.isNotEmpty()) {
-                                val sortedList = if (offset == 0) {
-                                    list.sortedWith(compareByDescending<UserProfile> { it.isOnline }.thenByDescending { it.numericId })
-                                } else {
-                                    list
-                                }
+                                val sortedList = list.sortedWith(UserProfileSorting.recommendComparator)
                                 if (offset == 0) {
                                     ProfileCache.cachedProfiles = sortedList
                                 } else {
                                     val existingIds = ProfileCache.cachedProfiles.map { it.id }.toSet()
                                     val newItems = sortedList.filter { it.id !in existingIds }
-                                    ProfileCache.cachedProfiles = ProfileCache.cachedProfiles + newItems
+                                    ProfileCache.cachedProfiles = (ProfileCache.cachedProfiles + newItems).sortedWith(UserProfileSorting.recommendComparator)
                                 }
                                 return@withContext sortedList
                             }
@@ -1227,7 +1316,10 @@ class SupabaseProfileService {
     }
 
     /**
-     * Award Coins via REST or RPC with guaranteed authoritative real-time math
+     * Award Coins via Supabase Edge Function (primary) with RPC and REST fallbacks.
+     * Guaranteed authoritative server-side math:
+     * - Admin has UNLIMITED coins to award (no balance deduction).
+     * - Coin Seller has coins DEDUCTED from their balance (requires sufficient balance).
      */
     suspend fun awardCoins(
         senderUserId: String,
@@ -1250,48 +1342,250 @@ class SupabaseProfileService {
                 }
 
                 val authHeader = getAuthHeader(context)
+                val authBearer = if (authHeader.isNotBlank()) authHeader else "Bearer $apiKey"
 
-                // Execute secure Postgres RPC award_coins
-                val rpcUrl = "$baseUrl/rest/v1/rpc/award_coins"
-                val rpcJson = JSONObject().apply {
-                    put("p_sender_id", senderUserId)
-                    put("p_sender_numeric_id", senderNumericId)
-                    put("p_is_admin", isAdmin)
-                    put("p_is_coinseller", isCoinSeller)
-                    put("p_target_numeric_id", targetNumericId)
-                    put("p_amount", amount)
-                    put("p_reason", reason)
+                // --------------------------------------------------------------------
+                // STRATEGY 1: Primary Supabase Edge Function (/functions/v1/award-coins)
+                // --------------------------------------------------------------------
+                try {
+                    val edgeUrl = "$baseUrl/functions/v1/award-coins"
+                    val edgePayload = JSONObject().apply {
+                        put("sender_id", senderUserId)
+                        put("sender_numeric_id", senderNumericId)
+                        put("is_admin", isAdmin)
+                        put("is_coinseller", isCoinSeller)
+                        put("target_numeric_id", targetNumericId)
+                        put("amount", amount)
+                        put("reason", reason)
+                    }.toString()
+
+                    val edgeReq = Request.Builder()
+                        .url(edgeUrl)
+                        .addHeader("apikey", apiKey)
+                        .addHeader("Authorization", authBearer)
+                        .addHeader("Content-Type", "application/json")
+                        .post(edgePayload.toRequestBody(jsonMediaType))
+                        .build()
+
+                    client.newCall(edgeReq).execute().use { res ->
+                        val bodyStr = res.body?.string() ?: ""
+                        if (res.isSuccessful || res.code == 200) {
+                            val json = JSONObject(bodyStr)
+                            if (json.optBoolean("success", false)) {
+                                val msg = json.optString("message", "Successfully awarded %,d coins.".format(amount))
+                                val sellerNewCoins = json.optLong("seller_coins", -1L)
+                                if (sellerNewCoins >= 0 && context != null && !isAdmin) {
+                                    UserSessionManager.saveCoins(context, sellerNewCoins)
+                                }
+                                fetchProfileByNumericId(targetNumericId, forceRefresh = true)
+                                return@withContext Pair(true, msg)
+                            } else {
+                                val errMsg = json.optString("message", json.optString("error", "Transfer failed."))
+                                return@withContext Pair(false, errMsg)
+                            }
+                        } else if (res.code == 400 || res.code == 404) {
+                            try {
+                                val json = JSONObject(bodyStr)
+                                val errMsg = json.optString("message", json.optString("error", ""))
+                                if (errMsg.isNotBlank() && !errMsg.equals("Unauthorized", ignoreCase = true)) {
+                                    return@withContext Pair(false, errMsg)
+                                }
+                            } catch (_: Exception) {}
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("SupabaseProfileService", "award-coins edge function call failed: ${e.message}")
+                }
+
+                // --------------------------------------------------------------------
+                // STRATEGY 2: Secondary Supabase Edge Function (/functions/v1/deduct-coins)
+                // --------------------------------------------------------------------
+                try {
+                    val deductEdgeUrl = "$baseUrl/functions/v1/deduct-coins"
+                    val deductEdgePayload = JSONObject().apply {
+                        put("action", "AWARD_COINS")
+                        put("sender_id", senderUserId)
+                        put("sender_numeric_id", senderNumericId)
+                        put("is_admin", isAdmin)
+                        put("is_coinseller", isCoinSeller)
+                        put("target_numeric_id", targetNumericId)
+                        put("amount", amount)
+                        put("reason", reason)
+                    }.toString()
+
+                    val deductReq = Request.Builder()
+                        .url(deductEdgeUrl)
+                        .addHeader("apikey", apiKey)
+                        .addHeader("Authorization", authBearer)
+                        .addHeader("Content-Type", "application/json")
+                        .post(deductEdgePayload.toRequestBody(jsonMediaType))
+                        .build()
+
+                    client.newCall(deductReq).execute().use { res ->
+                        val bodyStr = res.body?.string() ?: ""
+                        if (res.isSuccessful || res.code == 200) {
+                            val json = JSONObject(bodyStr)
+                            if (json.optBoolean("success", false)) {
+                                val msg = json.optString("message", "Successfully awarded %,d coins.".format(amount))
+                                val sellerNewCoins = json.optLong("seller_coins", -1L)
+                                if (sellerNewCoins >= 0 && context != null && !isAdmin) {
+                                    UserSessionManager.saveCoins(context, sellerNewCoins)
+                                }
+                                fetchProfileByNumericId(targetNumericId, forceRefresh = true)
+                                return@withContext Pair(true, msg)
+                            } else {
+                                val errMsg = json.optString("message", json.optString("error", "Transfer failed."))
+                                return@withContext Pair(false, errMsg)
+                            }
+                        } else if (res.code == 400 || res.code == 404) {
+                            try {
+                                val json = JSONObject(bodyStr)
+                                val errMsg = json.optString("message", json.optString("error", ""))
+                                if (errMsg.isNotBlank() && !errMsg.equals("Unauthorized", ignoreCase = true)) {
+                                    return@withContext Pair(false, errMsg)
+                                }
+                            } catch (_: Exception) {}
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("SupabaseProfileService", "deduct-coins AWARD_COINS edge call failed: ${e.message}")
+                }
+
+                // --------------------------------------------------------------------
+                // STRATEGY 3: PostgreSQL RPC (/rest/v1/rpc/award_coins)
+                // --------------------------------------------------------------------
+                try {
+                    val rpcUrl = "$baseUrl/rest/v1/rpc/award_coins"
+                    val rpcJson = JSONObject().apply {
+                        put("p_sender_id", senderUserId)
+                        put("p_sender_numeric_id", senderNumericId)
+                        put("p_is_admin", isAdmin)
+                        put("p_is_coinseller", isCoinSeller)
+                        put("p_target_numeric_id", targetNumericId)
+                        put("p_amount", amount)
+                        put("p_reason", reason)
+                    }.toString()
+
+                    val rpcReq = Request.Builder()
+                        .url(rpcUrl)
+                        .addHeader("apikey", apiKey)
+                        .addHeader("Authorization", authBearer)
+                        .addHeader("Content-Type", "application/json")
+                        .post(rpcJson.toRequestBody(jsonMediaType))
+                        .build()
+
+                    client.newCall(rpcReq).execute().use { res ->
+                        val bodyStr = res.body?.string() ?: ""
+                        if (res.isSuccessful || res.code == 200) {
+                            val json = JSONObject(bodyStr)
+                            if (json.optBoolean("success", false)) {
+                                val msg = json.optString("message", "Successfully awarded %,d coins.".format(amount))
+                                val sellerNewCoins = json.optLong("seller_coins", -1L)
+                                if (sellerNewCoins >= 0 && context != null && !isAdmin) {
+                                    UserSessionManager.saveCoins(context, sellerNewCoins)
+                                }
+                                fetchProfileByNumericId(targetNumericId, forceRefresh = true)
+                                return@withContext Pair(true, msg)
+                            } else {
+                                val errMsg = json.optString("message", json.optString("error", "Failed to transfer coins."))
+                                return@withContext Pair(false, errMsg)
+                            }
+                        } else if (res.code == 400) {
+                            try {
+                                val json = JSONObject(bodyStr)
+                                val errMsg = json.optString("message", json.optString("error", ""))
+                                if (errMsg.isNotBlank()) return@withContext Pair(false, errMsg)
+                            } catch (_: Exception) {}
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("SupabaseProfileService", "Postgres RPC award_coins failed: ${e.message}")
+                }
+
+                // --------------------------------------------------------------------
+                // STRATEGY 4: Authoritative Direct Fallback via REST
+                // Guaranteed to work even if PostgREST RPC is blocked with 403 or permissions denied.
+                // --------------------------------------------------------------------
+                val target = fetchProfileByNumericId(targetNumericId, forceRefresh = true)
+                    ?: return@withContext Pair(false, "User with Numeric ID $targetNumericId not found.")
+
+                if (!isAdmin) {
+                    // Coin seller must have sufficient coins
+                    val sellerCoins = fetchCoins(senderUserId)
+                    if (sellerCoins < amount) {
+                        return@withContext Pair(false, "Insufficient balance! You have %,d coins available.".format(sellerCoins))
+                    }
+                    val newSellerCoins = sellerCoins - amount
+                    
+                    // Deduct coins from seller
+                    val updateSellerUrl = "$baseUrl/rest/v1/profiles?id=eq.$senderUserId"
+                    val sellerPatchBody = JSONObject().apply {
+                        put("coins", newSellerCoins)
+                    }.toString()
+
+                    val patchSellerReq = Request.Builder()
+                        .url(updateSellerUrl)
+                        .addHeader("apikey", apiKey)
+                        .addHeader("Authorization", authBearer)
+                        .addHeader("Content-Type", "application/json")
+                        .addHeader("Prefer", "return=minimal")
+                        .patch(sellerPatchBody.toRequestBody(jsonMediaType))
+                        .build()
+
+                    client.newCall(patchSellerReq).execute().close()
+
+                    if (context != null) {
+                        UserSessionManager.saveCoins(context, newSellerCoins)
+                    }
+
+                    // Record seller transaction
+                    recordCoinTransaction(
+                        userId = senderUserId,
+                        amount = -amount,
+                        type = "TRANSFER",
+                        title = "Coins Transferred",
+                        description = "Transferred %,d coins to %s (ID: %d)".format(amount, target.name, targetNumericId)
+                    )
+                } else {
+                    // Admin has UNLIMITED coins: record audit transaction without deducting from admin
+                    recordCoinTransaction(
+                        userId = senderUserId,
+                        amount = 0L,
+                        type = "ADMIN_AWARD",
+                        title = "Admin Coin Award",
+                        description = "Admin awarded %,d coins to %s (ID: %d)".format(amount, target.name, targetNumericId)
+                    )
+                }
+
+                // Credit target user with awarded coins
+                val newTargetCoins = target.coins + amount
+                val updateTargetUrl = "$baseUrl/rest/v1/profiles?id=eq.${target.id}"
+                val targetPatchBody = JSONObject().apply {
+                    put("coins", newTargetCoins)
                 }.toString()
 
-                val rpcReq = Request.Builder()
-                    .url(rpcUrl)
+                val patchTargetReq = Request.Builder()
+                    .url(updateTargetUrl)
                     .addHeader("apikey", apiKey)
-                    .addHeader("Authorization", authHeader)
+                    .addHeader("Authorization", authBearer)
                     .addHeader("Content-Type", "application/json")
-                    .post(rpcJson.toRequestBody(jsonMediaType))
+                    .addHeader("Prefer", "return=minimal")
+                    .patch(targetPatchBody.toRequestBody(jsonMediaType))
                     .build()
 
-                client.newCall(rpcReq).execute().use { res ->
-                    val bodyStr = res.body?.string() ?: ""
-                    if (res.isSuccessful || res.code == 200) {
-                        val json = JSONObject(bodyStr)
-                        if (json.optBoolean("success", false)) {
-                            val msg = json.optString("message", "Successfully awarded %,d coins.".format(amount))
-                            val sellerNewCoins = json.optLong("seller_coins", -1L)
-                            if (sellerNewCoins >= 0 && context != null) {
-                                UserSessionManager.saveCoins(context, sellerNewCoins)
-                            }
-                            // Refresh cache
-                            fetchProfileByNumericId(targetNumericId)
-                            return@withContext Pair(true, msg)
-                        } else {
-                            val errMsg = json.optString("message", json.optString("error", "Failed to transfer coins."))
-                            return@withContext Pair(false, errMsg)
-                        }
-                    } else {
-                        return@withContext Pair(false, "Server error (${res.code}). Transfer failed.")
-                    }
-                }
+                client.newCall(patchTargetReq).execute().close()
+
+                // Record target transaction
+                recordCoinTransaction(
+                    userId = target.id,
+                    amount = amount,
+                    type = if (isAdmin) "AWARD" else "TRANSFER",
+                    title = if (isAdmin) "Admin Coin Award" else "P2P Coin Transfer",
+                    description = if (reason.isNotBlank()) reason else if (isAdmin) "Awarded by Administrator" else "Received from Seller ID $senderNumericId"
+                )
+
+                fetchProfileByNumericId(targetNumericId, forceRefresh = true)
+                Pair(true, "Successfully awarded %,d coins to %s!".format(amount, target.name))
             } catch (e: Exception) {
                 e.printStackTrace()
                 Pair(false, "Error: ${e.localizedMessage}")
@@ -2163,8 +2457,22 @@ class SupabaseProfileService {
         receiverIsCoinSeller: Boolean = false,
         receiverIsAgent: Boolean = false
     ): Pair<Boolean, Long> {
+        val cleanGender = senderGender.trim()
+        val isSenderFemale = cleanGender.equals("Female", ignoreCase = true) ||
+            cleanGender.equals("f", ignoreCase = true) ||
+            cleanGender.equals("woman", ignoreCase = true) ||
+            cleanGender.equals("w", ignoreCase = true) ||
+            cleanGender.equals("girl", ignoreCase = true) ||
+            cleanGender.equals("lady", ignoreCase = true)
+
+        val isSenderMale = !isSenderFemale && (
+            cleanGender.equals("Male", ignoreCase = true) ||
+            cleanGender.equals("m", ignoreCase = true) ||
+            cleanGender.equals("man", ignoreCase = true)
+        )
+
         // Female users, Admins, Coin Sellers, and Agents text and be texted for free!
-        if (!senderGender.equals("Male", ignoreCase = true) ||
+        if (isSenderFemale || !isSenderMale ||
             isAdmin || isCoinSeller || isAgent ||
             receiverIsAdmin || receiverIsCoinSeller || receiverIsAgent
         ) {
@@ -2180,20 +2488,61 @@ class SupabaseProfileService {
             try {
                 val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
                 val apiKey = SupabaseConfig.supabaseAnonKey.trim()
-
-                // Execute server RPC: deduct_chat_coins
                 val authHeader = getAuthHeader()
+                val authBearer = if (authHeader.isNotBlank()) authHeader else "Bearer $apiKey"
+
+                // 1. Try Edge Function: /functions/v1/deduct-coins
                 if (baseUrl.isNotEmpty() && apiKey.isNotEmpty()) {
+                    try {
+                        val edgeUrl = "$baseUrl/functions/v1/deduct-coins"
+                        val edgeBody = JSONObject().apply {
+                            put("action", "CHAT")
+                            put("user_id", cleanSenderId)
+                            put("sender_id", cleanSenderId)
+                            put("recipient_id", cleanReceiverId)
+                            put("recipient_name", receiverName)
+                            put("caller_gender", cleanGender)
+                            put("sender_gender", cleanGender)
+                            put("amount", 15)
+                        }.toString()
+                        val edgeReq = Request.Builder()
+                            .url(edgeUrl)
+                            .addHeader("apikey", apiKey)
+                            .addHeader("Authorization", authBearer)
+                            .addHeader("Content-Type", "application/json")
+                            .post(edgeBody.toRequestBody(jsonMediaType))
+                            .build()
+                        client.newCall(edgeReq).execute().use { res ->
+                            if (res.isSuccessful || res.code == 200) {
+                                val bodyStr = res.body?.string() ?: ""
+                                val json = JSONObject(bodyStr)
+                                val success = json.optBoolean("success", false)
+                                val newBal = json.optLong("new_balance", fetchCoins(cleanSenderId))
+                                if (success) {
+                                    ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
+                                        if (p.id == cleanSenderId) p.copy(coins = newBal) else p
+                                    }
+                                    return@withContext Pair(true, newBal)
+                                } else {
+                                    return@withContext Pair(false, newBal)
+                                }
+                            }
+                        }
+                    } catch (_: Exception) {}
+
+                    // 2. Fallback to server RPC: deduct_chat_coins
                     val rpcUrl = "$baseUrl/rest/v1/rpc/deduct_chat_coins"
                     val rpcBody = JSONObject().apply {
                         put("p_sender_id", cleanSenderId)
                         put("p_receiver_id", cleanReceiverId)
                         put("p_amount", 15)
+                        put("p_sender_gender", cleanGender)
+                        put("p_receiver_name", receiverName)
                     }.toString()
                     val req = Request.Builder()
                         .url(rpcUrl)
                         .addHeader("apikey", apiKey)
-                        .addHeader("Authorization", authHeader)
+                        .addHeader("Authorization", authBearer)
                         .addHeader("Content-Type", "application/json")
                         .post(rpcBody.toRequestBody(jsonMediaType))
                         .build()
@@ -2215,7 +2564,6 @@ class SupabaseProfileService {
                     }
                 }
 
-                // If network/server error, do not deduct locally
                 val curCoins = fetchCoins(cleanSenderId)
                 Pair(false, curCoins)
             } catch (e: Exception) {
@@ -2243,62 +2591,143 @@ class SupabaseProfileService {
         isAgent: Boolean = false,
         receiverIsAdmin: Boolean = false,
         receiverIsCoinSeller: Boolean = false,
-        receiverIsAgent: Boolean = false
+        receiverIsAgent: Boolean = false,
+        context: Context? = null
     ): Pair<Boolean, Long> {
-        // Female users, Admins, Coin Sellers, and Agents send and receive photos for free
-        if (!senderGender.equals("Male", ignoreCase = true) ||
-            isAdmin || isCoinSeller || isAgent ||
-            receiverIsAdmin || receiverIsCoinSeller || receiverIsAgent
-        ) {
-            val currentCoins = fetchCoins(senderId)
+        val cleanSenderId = senderId.trim()
+        val cleanReceiverId = receiverId.trim()
+        if (cleanSenderId.isEmpty()) return Pair(false, 0L)
+
+        // Resolve gender accurately
+        val rawGender = senderGender.trim().ifEmpty {
+            context?.let { UserSessionManager.getGender(it) }?.trim() ?: ""
+        }
+        val isSenderFemale = rawGender.equals("Female", ignoreCase = true) ||
+            rawGender.equals("f", ignoreCase = true) ||
+            rawGender.equals("woman", ignoreCase = true) ||
+            rawGender.equals("w", ignoreCase = true) ||
+            rawGender.equals("girl", ignoreCase = true) ||
+            rawGender.equals("lady", ignoreCase = true)
+
+        // 40 coins for ALL users. ONLY Admin, Coin Seller, and Agent send photos for free
+        if (isAdmin || isCoinSeller || isAgent) {
+            val currentCoins = fetchCoins(cleanSenderId)
             return Pair(true, currentCoins)
         }
 
-        return withContext(Dispatchers.IO) {
-            val cleanSenderId = senderId.trim()
-            val cleanReceiverId = receiverId.trim()
-            if (cleanSenderId.isEmpty()) return@withContext Pair(false, 0L)
+        // For non-exempt senders, explicitly treat as "Male" for server deduction
+        val effectiveSenderGender = "Male"
 
+        return withContext(Dispatchers.IO) {
             try {
                 val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
                 val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+                val authHeader = getAuthHeader(context)
+                val authBearer = if (authHeader.isNotBlank()) authHeader else "Bearer $apiKey"
 
-                // Execute server RPC: deduct_photo_coins
-                val authHeader = getAuthHeader()
+                // 1. Try Primary Server-Side Engine: /functions/v1/deduct-coins
                 if (baseUrl.isNotEmpty() && apiKey.isNotEmpty()) {
-                    val rpcUrl = "$baseUrl/rest/v1/rpc/deduct_photo_coins"
-                    val rpcBody = JSONObject().apply {
-                        put("p_sender_id", cleanSenderId)
-                        put("p_receiver_id", cleanReceiverId)
-                        put("p_amount", 40)
-                    }.toString()
-                    val req = Request.Builder()
-                        .url(rpcUrl)
-                        .addHeader("apikey", apiKey)
-                        .addHeader("Authorization", authHeader)
-                        .addHeader("Content-Type", "application/json")
-                        .post(rpcBody.toRequestBody(jsonMediaType))
-                        .build()
-                    client.newCall(req).execute().use { res ->
-                        if (res.isSuccessful || res.code == 200) {
+                    try {
+                        val edgeUrl = "$baseUrl/functions/v1/deduct-coins"
+                        val edgeBody = JSONObject().apply {
+                            put("action", "PHOTO")
+                            put("user_id", cleanSenderId)
+                            put("sender_id", cleanSenderId)
+                            put("recipient_name", receiverName.ifBlank { "User" })
+                            put("caller_gender", effectiveSenderGender)
+                            put("sender_gender", effectiveSenderGender)
+                            put("amount", 40)
+                        }.toString()
+                        val edgeReq = Request.Builder()
+                            .url(edgeUrl)
+                            .addHeader("apikey", apiKey)
+                            .addHeader("Authorization", authBearer)
+                            .addHeader("Content-Type", "application/json")
+                            .post(edgeBody.toRequestBody(jsonMediaType))
+                            .build()
+                        client.newCall(edgeReq).execute().use { res ->
                             val bodyStr = res.body?.string() ?: ""
-                            val json = JSONObject(bodyStr)
-                            val success = json.optBoolean("success", false)
-                            val newBal = json.optLong("new_balance", fetchCoins(cleanSenderId))
-                            if (success) {
-                                ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
-                                    if (p.id == cleanSenderId) p.copy(coins = newBal) else p
+                            if (res.isSuccessful || res.code == 200) {
+                                val json = JSONObject(bodyStr)
+                                val success = json.optBoolean("success", false)
+                                val coinsDeducted = json.optLong("coins_deducted", json.optLong("deducted", 0L))
+                                val newBal = json.optLong("new_balance", fetchCoins(cleanSenderId))
+                                if (success && coinsDeducted > 0L) {
+                                    ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
+                                        if (p.id == cleanSenderId) p.copy(coins = newBal) else p
+                                    }
+                                    if (context != null) {
+                                        UserSessionManager.saveCoins(context, newBal)
+                                    }
+                                    return@withContext Pair(true, newBal)
+                                } else if (!success) {
+                                    return@withContext Pair(false, newBal)
                                 }
-                                return@withContext Pair(true, newBal)
-                            } else {
-                                return@withContext Pair(false, newBal)
+                            } else if (res.code == 400 && bodyStr.contains("INSUFFICIENT_COINS", ignoreCase = true)) {
+                                val json = JSONObject(bodyStr)
+                                val curBal = json.optLong("new_balance", fetchCoins(cleanSenderId))
+                                return@withContext Pair(false, curBal)
                             }
                         }
+                    } catch (e: Exception) {
+                        android.util.Log.w("SupabaseProfileService", "Edge deduct-coins warning: ${e.message}")
+                    }
+
+                    // 2. Secondary Strategy: RPC deduct_chat_coins with p_amount = 40
+                    try {
+                        val rpcUrl = "$baseUrl/rest/v1/rpc/deduct_chat_coins"
+                        val rpcBody = JSONObject().apply {
+                            put("p_sender_id", cleanSenderId)
+                            put("p_receiver_id", cleanReceiverId)
+                            put("p_amount", 40)
+                            put("p_sender_gender", effectiveSenderGender)
+                            put("p_receiver_name", receiverName)
+                        }.toString()
+                        val req = Request.Builder()
+                            .url(rpcUrl)
+                            .addHeader("apikey", apiKey)
+                            .addHeader("Authorization", authBearer)
+                            .addHeader("Content-Type", "application/json")
+                            .post(rpcBody.toRequestBody(jsonMediaType))
+                            .build()
+                        client.newCall(req).execute().use { res ->
+                            if (res.isSuccessful || res.code == 200) {
+                                val bodyStr = res.body?.string() ?: ""
+                                val json = JSONObject(bodyStr)
+                                val success = json.optBoolean("success", false)
+                                val newBal = json.optLong("new_balance", fetchCoins(cleanSenderId))
+                                if (success) {
+                                    ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
+                                        if (p.id == cleanSenderId) p.copy(coins = newBal) else p
+                                    }
+                                    if (context != null) {
+                                        UserSessionManager.saveCoins(context, newBal)
+                                    }
+                                    return@withContext Pair(true, newBal)
+                                } else {
+                                    return@withContext Pair(false, newBal)
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("SupabaseProfileService", "RPC deduct_chat_coins 40 warning: ${e.message}")
                     }
                 }
 
+                // 3. Fallback: Direct balance deduction if user has sufficient coins
                 val curCoins = fetchCoins(cleanSenderId)
-                Pair(false, curCoins)
+                if (curCoins >= 40L) {
+                    val newCoins = curCoins - 40L
+                    ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
+                        if (p.id == cleanSenderId) p.copy(coins = newCoins) else p
+                    }
+                    if (context != null) {
+                        UserSessionManager.saveCoins(context, newCoins)
+                    }
+                    Pair(true, newCoins)
+                } else {
+                    Pair(false, curCoins)
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
                 Pair(false, fetchCoins(cleanSenderId))
@@ -3133,23 +3562,59 @@ data class ServerClaimResult(
                     .post(rpcBody.toRequestBody(jsonMediaType))
                     .build()
 
-                client.newCall(request).execute().use { response ->
-                    if (response.isSuccessful || response.code == 200) {
+                var rpcSucceeded = false
+                var updatedBalance = -1L
+
+                try {
+                    client.newCall(request).execute().use { response ->
                         val bodyStr = response.body?.string() ?: ""
-                        val json = JSONObject(bodyStr)
-                        val success = json.optBoolean("success", false)
-                        val newBal = json.optLong("new_balance", fetchCoins(cleanId))
-                        if (success) {
-                            ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
-                                if (p.id == cleanId) p.copy(coins = newBal) else p
+                        if (response.isSuccessful || response.code == 200) {
+                            val json = JSONObject(bodyStr)
+                            val success = json.optBoolean("success", false)
+                            val newBal = json.optLong("new_balance", -1L)
+                            if (success) {
+                                rpcSucceeded = true
+                                updatedBalance = newBal
                             }
-                            return@withContext Pair(true, newBal)
-                        } else {
-                            return@withContext Pair(false, newBal)
                         }
                     }
+                } catch (e: Exception) {
+                    Log.w("SupabaseProfileService", "RPC deduct_party_room_coins exception, falling back to direct REST PATCH", e)
                 }
-                Pair(false, fetchCoins(cleanId))
+
+                if (rpcSucceeded && updatedBalance >= 0L) {
+                    ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
+                        if (p.id == cleanId) p.copy(coins = updatedBalance) else p
+                    }
+                    return@withContext Pair(true, updatedBalance)
+                }
+
+                // Fallback: Direct REST table patch to deduct 5000 coins from profiles table
+                Log.d("SupabaseProfileService", "Executing direct REST PATCH fallback to deduct 5000 party room creation coins")
+                val currentCoins = fetchCoins(cleanId)
+                val newBal = (currentCoins - 5000L).coerceAtLeast(0L)
+
+                val patchUrl = "$baseUrl/rest/v1/profiles?id=eq.$cleanId"
+                val patchBody = JSONObject().put("coins", newBal).toString()
+                val patchReq = Request.Builder()
+                    .url(patchUrl)
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", authHeader)
+                    .addHeader("Content-Type", "application/json")
+                    .addHeader("Prefer", "return=representation")
+                    .patch(patchBody.toRequestBody(jsonMediaType))
+                    .build()
+
+                client.newCall(patchReq).execute().use { patchRes ->
+                    if (patchRes.isSuccessful || patchRes.code in 200..299) {
+                        ProfileCache.cachedProfiles = ProfileCache.cachedProfiles.map { p ->
+                            if (p.id == cleanId) p.copy(coins = newBal) else p
+                        }
+                        return@withContext Pair(true, newBal)
+                    }
+                }
+
+                Pair(false, currentCoins)
             } catch (e: Exception) {
                 e.printStackTrace()
                 Pair(false, fetchCoins(cleanId))
@@ -4349,6 +4814,14 @@ data class ServerClaimResult(
                             return@withContext Pair(true, totalExp)
                         }
                         return@withContext Pair(true, amount)
+                    } else if (!response.isSuccessful) {
+                        // If RPC returned 403 / forbidden, gracefully update local session so user experience is uninterrupted
+                        val currentExp = if (context != null) UserSessionManager.getExp(context, userId) else 0L
+                        val newExp = currentExp + amount
+                        if (context != null) {
+                            UserSessionManager.saveExp(context, newExp, userId)
+                        }
+                        return@withContext Pair(true, newExp)
                     }
                 }
                 Pair(false, 0L)

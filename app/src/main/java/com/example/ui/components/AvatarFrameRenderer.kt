@@ -84,7 +84,7 @@ fun AvatarFrameRenderer(
         val h = size.height
         val cx = w / 2f
         val cy = h / 2f
-        val r = (minOf(w, h) / 2f) * 0.72f // Avatar base radius matching 72% inner scale
+        val r = (minOf(w, h) / 2f) * 0.92f // Avatar base radius matching 92% inner scale
 
         when (AvatarFrameManager.normalizeFrameId(frameId)) {
             "amethyst_sovereign" -> drawVip4Frame(cx, cy, r, pulse)
@@ -97,7 +97,7 @@ fun AvatarFrameRenderer(
             "solar_monarch" -> drawGoldenKingFrame(cx, cy, r, pulse)
             "mystic_oculus" -> drawVioletEyeFrame(cx, cy, r, pulse)
             "volt_tempest" -> drawLightningFrame(cx, cy, r, rotation, pulse)
-            "emerald_matrix" -> drawGreenSpaceFrame(cx, cy, r, rotation, pulse)
+            "emerald_matrix" -> drawSunsetAmberSpaceFrame(cx, cy, r, rotation, pulse)
             "seraphim_grace" -> drawAngelWingsFrame(cx, cy, r, pulse)
             "imperial_leo" -> drawLionFrame(cx, cy, r, pulse)
             "crimson_drake" -> drawCyberDragonFrame(cx, cy, r, pulse)
@@ -308,20 +308,20 @@ private fun drawCloudPuff(drawScope: DrawScope, cx: Float, cy: Float, size: Floa
 
 // 2. FLOWERS GARDEN FRAME
 private fun DrawScope.drawFlowersGardenFrame(cx: Float, cy: Float, r: Float, pulse: Float) {
-    // Green botanical stem wreath ring
+    // Golden floral wreath ring
     val stemBrush = Brush.sweepGradient(
         listOf(
-            Color(0xFF66BB6A),
-            Color(0xFF43A047),
-            Color(0xFF81C784),
-            Color(0xFF2E7D32),
-            Color(0xFF66BB6A)
+            Color(0xFFFFB74D),
+            Color(0xFFFF9800),
+            Color(0xFFFFCC80),
+            Color(0xFFE65100),
+            Color(0xFFFFB74D)
         ),
         center = Offset(cx, cy)
     )
     drawCircle(brush = stemBrush, radius = r + 4.dp.toPx(), center = Offset(cx, cy), style = Stroke(width = 4.dp.toPx()))
 
-    // Botanical leaves around wreath
+    // Botanical golden leaves around wreath
     val leafCount = 18
     for (i in 0 until leafCount) {
         val angleDeg = i * (360.0 / leafCount)
@@ -329,7 +329,7 @@ private fun DrawScope.drawFlowersGardenFrame(cx: Float, cy: Float, r: Float, pul
         val lx = cx + (r + 4.dp.toPx()) * cos(angle).toFloat()
         val ly = cy + (r + 4.dp.toPx()) * sin(angle).toFloat()
 
-        val leafColor = if (i % 2 == 0) Color(0xFF4CAF50) else Color(0xFF81C784)
+        val leafColor = if (i % 2 == 0) Color(0xFFFF9800) else Color(0xFFFFCC80)
         rotate((angleDeg + 45).toFloat(), pivot = Offset(lx, ly)) {
             val leafPath = Path().apply {
                 moveTo(lx, ly - 6.dp.toPx())
@@ -588,29 +588,29 @@ private fun DrawScope.drawLightningFrame(cx: Float, cy: Float, r: Float, rotatio
     drawPath(sparkPath2, Color(0xFF80D8FF), style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
 }
 
-// 6. GREEN SPACE FRAME
-private fun DrawScope.drawGreenSpaceFrame(cx: Float, cy: Float, r: Float, rotation: Float, pulse: Float) {
-    // Outer emerald holographic glow
+// 6. SUNSET AMBER SPACE FRAME
+private fun DrawScope.drawSunsetAmberSpaceFrame(cx: Float, cy: Float, r: Float, rotation: Float, pulse: Float) {
+    // Outer amber holographic glow
     drawCircle(
-        color = Color(0xFF00E676).copy(alpha = 0.25f + pulse * 0.2f),
+        color = Color(0xFFFF6500).copy(alpha = 0.25f + pulse * 0.2f),
         radius = r + 9.dp.toPx(),
         center = Offset(cx, cy),
         style = Stroke(width = 4.dp.toPx())
     )
 
     // Holographic sci-fi energy ring
-    val greenBrush = Brush.sweepGradient(
+    val amberBrush = Brush.sweepGradient(
         listOf(
-            Color(0xFFB9F6CA),
-            Color(0xFF00E676),
-            Color(0xFF00C853),
-            Color(0xFF69F0AE),
-            Color(0xFFB9F6CA)
+            Color(0xFFFFE082),
+            Color(0xFFFF8D00),
+            Color(0xFFFF6500),
+            Color(0xFFFFB300),
+            Color(0xFFFFE082)
         ),
         center = Offset(cx, cy)
     )
     drawCircle(
-        brush = greenBrush,
+        brush = amberBrush,
         radius = r + 5.dp.toPx(),
         center = Offset(cx, cy),
         style = Stroke(width = 4.5.dp.toPx())
@@ -622,7 +622,7 @@ private fun DrawScope.drawGreenSpaceFrame(cx: Float, cy: Float, r: Float, rotati
             val angle = i * 60f
             rotate(angle, pivot = Offset(cx, cy)) {
                 drawArc(
-                    color = Color(0xFFB9F6CA),
+                    color = Color(0xFFFFE082),
                     startAngle = -12f,
                     sweepAngle = 24f,
                     useCenter = false,
@@ -977,7 +977,7 @@ private fun DrawScope.drawNewUserFrame(cx: Float, cy: Float, r: Float, pulse: Fl
         listOf(
             Color(0xFFFFD700), // Gold
             Color(0xFF38BDF8), // Cyan
-            Color(0xFF34D399), // Emerald
+            Color(0xFFFF9800), // Amber
             Color(0xFFFF7A00), // Vibrant Orange
             Color(0xFFFFD700)
         ),

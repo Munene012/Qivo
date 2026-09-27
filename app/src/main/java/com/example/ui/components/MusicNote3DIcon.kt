@@ -59,7 +59,7 @@ fun MusicNote3DIcon(
                 )
                 1 -> drawSingleFlaggedNote(
                     w, h,
-                    gradientColors = listOf(Color(0xFF00E5FF), Color(0xFF00B0FF), Color(0xFF00E676)),
+                    gradientColors = listOf(Color(0xFF00E5FF), Color(0xFF00B0FF), Color(0xFFFF8D00)),
                     shadowColor = Color(0x6600B0FF)
                 )
                 2 -> drawGoldenSparkleNote(

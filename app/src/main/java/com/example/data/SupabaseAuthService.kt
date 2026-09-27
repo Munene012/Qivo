@@ -169,6 +169,17 @@ class SupabaseAuthService {
         return "$baseUrl/auth/v1/authorize?provider=google&redirect_to=$encodedRedirect"
     }
 
+    private fun toAuthEmail(input: String): String {
+        val trimmed = input.trim()
+        if (trimmed.isBlank()) return trimmed
+        if (trimmed.contains("+emailauth@")) return trimmed.lowercase()
+        val parts = trimmed.split("@")
+        if (parts.size == 2) {
+            return "${parts[0]}+emailauth@${parts[1]}".lowercase()
+        }
+        return trimmed.lowercase()
+    }
+
     suspend fun signIn(emailInput: String, passwordInput: String, context: Context? = null): AuthResult {
         return withContext(Dispatchers.IO) {
             try {
@@ -180,8 +191,9 @@ class SupabaseAuthService {
                 }
 
                 val endpoint = "$baseUrl/auth/v1/token?grant_type=password"
+                val authEmail = toAuthEmail(emailInput)
                 val jsonBody = JSONObject().apply {
-                    put("email", emailInput.trim())
+                    put("email", authEmail)
                     put("password", passwordInput)
                 }.toString()
 
@@ -202,7 +214,6 @@ class SupabaseAuthService {
                         val expiresIn = json.optLong("expires_in", 3600L)
                         val userObj = json.optJSONObject("user")
                         val id = userObj?.optString("id") ?: json.optString("id", "user_id")
-                        val email = userObj?.optString("email") ?: emailInput
 
                         if (!accessToken.isNullOrBlank()) {
                             UserSessionManager.saveTokens(
@@ -215,7 +226,7 @@ class SupabaseAuthService {
 
                         AuthResult.Success(
                             userId = id,
-                            email = email,
+                            email = emailInput.trim(),
                             accessToken = accessToken,
                             refreshToken = refreshToken,
                             expiresIn = expiresIn,
@@ -273,8 +284,9 @@ class SupabaseAuthService {
                 }
 
                 val endpoint = "$baseUrl/auth/v1/signup"
+                val authEmail = toAuthEmail(emailInput)
                 val jsonBody = JSONObject().apply {
-                    put("email", emailInput.trim())
+                    put("email", authEmail)
                     put("password", passwordInput)
                 }.toString()
 
@@ -295,7 +307,6 @@ class SupabaseAuthService {
                         val expiresIn = json.optLong("expires_in", 3600L)
                         val userObj = json.optJSONObject("user")
                         val id = userObj?.optString("id") ?: json.optString("id", "user_id")
-                        val email = userObj?.optString("email") ?: emailInput
 
                         if (!accessToken.isNullOrBlank()) {
                             UserSessionManager.saveTokens(
@@ -314,7 +325,7 @@ class SupabaseAuthService {
 
                         AuthResult.Success(
                             userId = id,
-                            email = email,
+                            email = emailInput.trim(),
                             accessToken = accessToken,
                             refreshToken = refreshToken,
                             expiresIn = expiresIn,
@@ -910,150 +921,37 @@ class SupabaseAuthService {
                 val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
                 val apiKey = SupabaseConfig.supabaseAnonKey.trim()
                 val authHeader = UserSessionManager.getAuthHeader(context)
-                val session = UserSessionManager.getSession(context)
-                val userId = session?.userId?.trim() ?: ""
-                val userEmail = session?.email?.trim() ?: ""
-                val token = UserSessionManager.getAccessToken(context)
 
-                if (baseUrl.isNotBlank() && authHeader.isNotBlank()) {
-                    // Zero-Out profile on server to force new account flow if database hard delete fails
-                    if (userId.isNotBlank()) {
-                        try {
-                            val resetEndpoint = "$baseUrl/rest/v1/profiles?id=eq.$userId"
-                            val patchBody = JSONObject().apply {
-                                put("name", "User")
-                                put("gender", "")
-                                put("avatar_url", "")
-                                put("coins", 0)
-                                put("diamonds", 0)
-                                put("level", 1)
-                                put("exp", 0)
-                                put("bio", "")
-                                put("photos", org.json.JSONArray())
-                                put("age", 18)
-                            }.toString()
-                            val patchReq = Request.Builder()
-                                .url(resetEndpoint)
-                                .addHeader("apikey", apiKey)
-                                .addHeader("Authorization", authHeader)
-                                .addHeader("Content-Type", "application/json")
-                                .patch(patchBody.toRequestBody(jsonMediaType))
-                                .build()
-                            client.newCall(patchReq).execute().close()
-                        } catch (_: Exception) {}
-                    }
-
-                    // 1. Invoke the Supabase Edge Function to delete the account and all user data
-                    try {
-                        val edgeFunctionUrl = if (baseUrl.contains("supabase.co")) {
-                            "$baseUrl/functions/v1/delete-account"
-                        } else {
-                            "https://nfenuymzzvbxebqmtdqz.supabase.co/functions/v1/delete-account"
-                        }
-                        val edgeBody = JSONObject().apply {
-                            put("user_id", userId)
-                            put("email", userEmail)
-                        }.toString()
-                        val edgeReq = Request.Builder()
-                            .url(edgeFunctionUrl)
-                            .addHeader("apikey", apiKey)
-                            .addHeader("Authorization", authHeader)
-                            .addHeader("Content-Type", "application/json")
-                            .post(edgeBody.toRequestBody(jsonMediaType))
-                            .build()
-                        client.newCall(edgeReq).execute().use { response ->
-                            android.util.Log.d("SupabaseAuth", "Edge delete-account response: ${response.code}")
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.e("SupabaseAuth", "Edge delete-account failed: ${e.message}")
-                    }
-
-                    // 2. Fallback attempt RPC delete_user_account if available
-                    try {
-                        val rpcUrl = "$baseUrl/rest/v1/rpc/delete_user_account"
-                        val req = Request.Builder()
-                            .url(rpcUrl)
-                            .addHeader("apikey", apiKey)
-                            .addHeader("Authorization", authHeader)
-                            .addHeader("Content-Type", "application/json")
-                            .post("{}".toRequestBody(jsonMediaType))
-                            .build()
-                        client.newCall(req).execute().close()
-                    } catch (_: Exception) {}
-
-                    // 3. Direct cascade delete user data from tables if userId is present (Strict Dependency Order)
-                    if (userId.isNotBlank()) {
-                        val tablesToDelete = listOf(
-                            "coin_transactions?user_id=eq.$userId",
-                            "diamond_transactions?user_id=eq.$userId",
-                            "user_follows?follower_id=eq.$userId",
-                            "user_follows?following_id=eq.$userId",
-                            "profile_visitors?visitor_id=eq.$userId",
-                            "profile_visitors?visited_id=eq.$userId",
-                            "blocked_users?blocker_id=eq.$userId",
-                            "blocked_users?blocked_id=eq.$userId",
-                            "user_reports?reporter_id=eq.$userId",
-                            "user_reports?reported_id=eq.$userId",
-                            "user_frames?user_id=eq.$userId",
-                            "user_avatar_frames?user_id=eq.$userId",
-                            "fcm_device_tokens?user_id=eq.$userId",
-                            "party_room_members?user_id=eq.$userId",
-                            "party_room_seats?user_id=eq.$userId",
-                            "party_room_admins?user_id=eq.$userId",
-                            "party_rooms?host_id=eq.$userId",
-                            "agency_members?user_id=eq.$userId",
-                            "agency_applications?user_id=eq.$userId",
-                            "messages?sender_id=eq.$userId",
-                            "messages?receiver_id=eq.$userId",
-                            "profiles?id=eq.$userId"
-                        )
-
-                        for (path in tablesToDelete) {
-                            try {
-                                val deleteReq = Request.Builder()
-                                    .url("$baseUrl/rest/v1/$path")
-                                    .addHeader("apikey", apiKey)
-                                    .addHeader("Authorization", authHeader)
-                                    .delete()
-                                    .build()
-                                client.newCall(deleteReq).execute().close()
-                            } catch (_: Exception) {}
-                        }
-
-                        if (userEmail.isNotBlank()) {
-                            try {
-                                val deleteEmailReq = Request.Builder()
-                                    .url("$baseUrl/rest/v1/profiles?email=eq.$userEmail")
-                                    .addHeader("apikey", apiKey)
-                                    .addHeader("Authorization", authHeader)
-                                    .delete()
-                                    .build()
-                                client.newCall(deleteEmailReq).execute().close()
-                            } catch (_: Exception) {}
-                        }
-                    }
-
-                    // 3. Supabase Auth logout
-                    if (token.isNotBlank()) {
-                        try {
-                            val logoutReq = Request.Builder()
-                                .url("$baseUrl/auth/v1/logout")
-                                .addHeader("apikey", apiKey)
-                                .addHeader("Authorization", "Bearer $token")
-                                .post("{}".toRequestBody(jsonMediaType))
-                                .build()
-                            client.newCall(logoutReq).execute().close()
-                        } catch (_: Exception) {}
-                    }
+                if (baseUrl.isBlank() || authHeader.isBlank()) {
+                    return@withContext Pair(false, "Authentication required to delete account.")
                 }
 
-                // 4. Complete local wipe of all user data, prefs, and caches
-                wipeLocalUserData(context)
+                // Android must call ONLY: POST /rest/v1/rpc/delete_user_account
+                val rpcUrl = "$baseUrl/rest/v1/rpc/delete_user_account"
+                val req = Request.Builder()
+                    .url(rpcUrl)
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", authHeader)
+                    .addHeader("Content-Type", "application/json")
+                    .post("{}".toRequestBody(jsonMediaType))
+                    .build()
 
-                Pair(true, "All account data has been permanently erased.")
+                client.newCall(req).execute().use { response ->
+                    val isSuccess = response.isSuccessful || response.code in 200..204
+                    if (isSuccess) {
+                        // On success: clear local cache/session and disconnect Realtime
+                        try {
+                            ChatStateHolder.disconnect()
+                            wipeLocalUserData(context)
+                        } catch (_: Exception) {}
+                        return@withContext Pair(true, "Account successfully deleted.")
+                    } else {
+                        val errBody = response.body?.string() ?: ""
+                        return@withContext Pair(false, "Server account deletion failed (HTTP ${response.code}): $errBody")
+                    }
+                }
             } catch (e: Exception) {
-                wipeLocalUserData(context)
-                Pair(true, "All account data erased.")
+                Pair(false, "Account deletion error: ${e.message ?: "Unknown error"}")
             }
         }
     }

@@ -151,10 +151,10 @@ object AvatarHelper {
                 modifier = modifier,
                 contentAlignment = Alignment.Center
             ) {
-                // Avatar Image inside the frame (72% inner scale so ornate wings/crowns/tiaras render with full fidelity)
+                // Avatar Image inside the frame (78% inner scale so frames are compact and refined)
                 Box(
                     modifier = Modifier
-                        .fillMaxSize(0.72f)
+                        .fillMaxSize(0.78f)
                         .clip(shape)
                 ) {
                     if (mascotRes != null) {
@@ -194,10 +194,10 @@ object AvatarHelper {
                     }
                 }
 
-                // High-Craft Animated Avatar Frame Overlay
+                // High-Craft Animated Avatar Frame Overlay (Reduced scale to 88%)
                 com.example.ui.components.AvatarFrameRenderer(
                     frameId = resolvedFrameId,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(0.88f)
                 )
             }
         } else {

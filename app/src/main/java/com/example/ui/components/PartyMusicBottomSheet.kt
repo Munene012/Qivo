@@ -247,11 +247,11 @@ fun PartyMusicBottomSheet(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
-                                    .background(Color(0x3300E676))
-                                    .border(1.dp, Color(0xFF00E676), RoundedCornerShape(6.dp))
+                                    .background(Color(0x33FF8D00))
+                                    .border(1.dp, Color(0xFFFF8D00), RoundedCornerShape(6.dp))
                                     .padding(horizontal = 5.dp, vertical = 1.dp)
                             ) {
-                                Text("HI-FI", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF00E676))
+                                Text("HI-FI", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFF8D00))
                             }
                         }
                         Text(
@@ -870,7 +870,7 @@ fun AnimatedMusicEqualizer(isPlaying: Boolean, modifier: Modifier = Modifier) {
             val colorList = when (index % 3) {
                 0 -> listOf(Color(0xFFFF9100), Color(0xFFFF3D00))
                 1 -> listOf(Color(0xFFE040FB), Color(0xFF7C4DFF))
-                else -> listOf(Color(0xFF00E676), Color(0xFF00B0FF))
+                else -> listOf(Color(0xFFFFD54F), Color(0xFFFF6500))
             }
             Box(
                 modifier = Modifier

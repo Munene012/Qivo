@@ -221,10 +221,10 @@ fun PartyScreen(
                     } else {
                         Brush.verticalGradient(
                             listOf(
-                                Color(0xFF009639), // Deep Emerald
-                                Color(0xFF00B04A), // Jewel Jade
-                                Color(0xFF00C853), // Vivid Emerald
-                                Color(0xFF26E06D)  // Mint Emerald
+                                Color(0xFFBF360C),
+                                Color(0xFFE65100),
+                                Color(0xFFFF6500),
+                                Color(0xFFFF8D00)
                             )
                         )
                     }
@@ -531,7 +531,7 @@ fun PartyRoomCard(
                             modifier = Modifier
                                 .size(6.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF00E676))
+                                .background(Color(0xFFFF9100))
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(

@@ -481,8 +481,8 @@ private fun OverviewTab(
                 Card(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF1F1D2B) else Color(0xFFE8F5E9)),
-                    border = BorderStroke(1.dp, if (isDark) Color(0xFF2E2B3E) else Color(0xFFA5D6A7))
+                    colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF1F1D2B) else Color(0xFFFFF3E0)),
+                    border = BorderStroke(1.dp, if (isDark) Color(0xFF2E2B3E) else Color(0xFFFFD54F))
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text("Gross Revenue", fontSize = 11.sp, color = colors.textSecondary)
@@ -491,7 +491,7 @@ private fun OverviewTab(
                             text = "$${String.format("%,.2f", totalRevenueUsd)}",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF2E7D32)
+                            color = Color(0xFFFF8D00)
                         )
                         Text(
                             text = "≈ ${(totalRevenueUsd * 130).toLong()} KES",
@@ -686,7 +686,7 @@ private fun ThinkingDataSdkTab(
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = null,
-                            tint = Color(0xFF10B981),
+                            tint = Color(0xFFFF6500),
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))

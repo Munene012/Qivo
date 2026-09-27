@@ -404,7 +404,7 @@ private fun BlockedUserRow(
                         text = "Unblocked (Leaves on exit)",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF4CAF50)
+                        color = Color(0xFFFF8D00)
                     )
                 }
             }
@@ -455,7 +455,7 @@ private fun BlockedUserRow(
                     Icon(
                         imageVector = Icons.Default.LockOpen,
                         contentDescription = null,
-                        tint = if (isDark) Color(0xFF4ADE80) else Color(0xFF16A34A),
+                        tint = if (isDark) Color(0xFFFFB74D) else Color(0xFFFF8D00),
                         modifier = Modifier.size(14.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))

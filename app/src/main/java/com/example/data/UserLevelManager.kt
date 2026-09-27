@@ -206,11 +206,11 @@ object UserLevelManager {
                 )
             )
             level >= 20 -> LevelMeta(
-                title = "Emerald Knight",
-                badgeColor = Color(0xFF00E676),
-                badgeGradient = listOf(Color(0xFFB9F6CA), Color(0xFF00E676), Color(0xFF00C853)),
+                title = "Amber Knight",
+                badgeColor = Color(0xFFFF9100),
+                badgeGradient = listOf(Color(0xFFFFD54F), Color(0xFFFF9100), Color(0xFFFF6500)),
                 perks = listOf(
-                    "Emerald Chat Glow",
+                    "Amber Chat Glow",
                     "Priority Customer Support Queue",
                     "Special Knight Profile Frame"
                 )

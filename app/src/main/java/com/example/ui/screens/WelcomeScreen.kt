@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.app.Activity
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -31,7 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -49,6 +50,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -66,7 +68,9 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import com.example.ui.components.LegalDocumentType
 import com.example.ui.components.TermsAndPrivacyDialog
+import com.example.ui.screens.CustomerSupportScreen
 import com.example.ui.theme.AppFontFamily
+import com.example.ui.theme.PacificoFontFamily
 import com.example.ui.theme.QivoOrange
 import com.example.ui.theme.QivoYellow
 import kotlin.math.sin
@@ -75,22 +79,30 @@ import kotlin.math.sin
 fun WelcomeScreen(
     onNavigateToEmail: () -> Unit,
     onGoogleSignInClick: () -> Unit,
-    isGoogleLoading: Boolean = false
+    isGoogleLoading: Boolean = false,
+    onNavigateToCustomerSupport: (() -> Unit)? = null
 ) {
-    var showLegalDialog by remember { mutableStateOf(false) }
-    var legalDialogType by remember { mutableStateOf(LegalDocumentType.TERMS_OF_SERVICE) }
-    var showCustomerServiceDialog by remember { mutableStateOf(false) }
+    var activeLegalDoc by remember { mutableStateOf<LegalDocumentType?>(null) }
+    var showCustomerSupportScreen by remember { mutableStateOf(false) }
     var isAgreedToTerms by remember { mutableStateOf(true) }
 
-    if (showLegalDialog) {
-        TermsAndPrivacyDialog(
-            initialTab = legalDialogType,
-            onDismiss = { showLegalDialog = false }
+    if (showCustomerSupportScreen) {
+        BackHandler {
+            showCustomerSupportScreen = false
+        }
+        CustomerSupportScreen(
+            onBackClick = { showCustomerSupportScreen = false }
         )
+        return
     }
 
-    if (showCustomerServiceDialog) {
-        CustomerServiceHelpDialog(onDismiss = { showCustomerServiceDialog = false })
+    if (activeLegalDoc != null) {
+        LegalWebViewScreen(
+            initialType = activeLegalDoc!!,
+            showTabs = false,
+            onClose = { activeLegalDoc = null }
+        )
+        return
     }
 
     // Set Status Bar Icons to Dark for the pale warm sunset background
@@ -146,26 +158,6 @@ fun WelcomeScreen(
         label = "pulse_alpha"
     )
 
-    val haloRingScale by infiniteTransition.animateFloat(
-        initialValue = 1.0f,
-        targetValue = 1.28f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "halo_ring_scale"
-    )
-
-    val haloRingAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.45f,
-        targetValue = 0.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "halo_ring_alpha"
-    )
-
     val floatOffset by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
@@ -176,15 +168,15 @@ fun WelcomeScreen(
         label = "float_offset"
     )
 
-    // Splash-matching Refined Emerald Green Canvas Gradient
+    // Luxury Rare Social Sunset Amber & Warm Golden Canvas Gradient (No Black)
     val welcomeBgGradient = Brush.verticalGradient(
         colors = listOf(
-            Color(0xFF009639), // Deep Emerald Top
-            Color(0xFF00B04A), // Rich Jewel Jade
-            Color(0xFF00C853), // Vivid Emerald
-            Color(0xFF26E06D), // Luminous Mint Emerald
-            Color(0xFFE8F5EE), // Soft Jade Tint
-            Color(0xFFF7FAF8)  // Crisp Soft White Tint
+            Color(0xFFFFB74D), // Warm Golden Light
+            Color(0xFFFF9800), // Amber
+            Color(0xFFFF6500), // Sunset Orange
+            Color(0xFFE65100), // Deep Amber
+            Color(0xFFFF8D00), // Amber Gold
+            Color(0xFFFFCC80)  // Soft Peach Glow
         )
     )
 
@@ -298,64 +290,45 @@ fun WelcomeScreen(
             }
         }
 
-        // 4. Top-Right Customer Support Floating Button
+        // 4. Top-Right Customer Support Floating Button (Uses Screen Background)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 10.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            Surface(
-                onClick = { showCustomerServiceDialog = true },
+            IconButton(
+                onClick = {
+                    if (onNavigateToCustomerSupport != null) {
+                        onNavigateToCustomerSupport()
+                    } else {
+                        showCustomerSupportScreen = true
+                    }
+                },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .size(42.dp)
-                    .testTag("welcome_customer_service_button"),
-                shape = CircleShape,
-                color = Color.White.copy(alpha = 0.85f),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFCCAA).copy(alpha = 0.80f)),
-                shadowElevation = 3.dp
+                    .size(48.dp)
+                    .testTag("welcome_customer_service_button")
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.Headphones,
-                        contentDescription = "Customer Support",
-                        tint = QivoOrange,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.SupportAgent,
+                    contentDescription = "Customer Support",
+                    tint = Color.White,
+                    modifier = Modifier.size(28.dp)
+                )
             }
         }
 
-        // 5. CENTER HERO: Splash-Inspired Center Emblem (Enhanced & Dynamic)
+        // 5. CENTER HERO: Signature Qivo Typography in Cursive Font Design (No Round Badge)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.Center)
-                .offset(y = (-36).dp),
+                .offset(y = (-52).dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Emblem with expanding pulse ring
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.size(170.dp)
-            ) {
-                // Expanding ethereal ambient ring
-                Box(
-                    modifier = Modifier
-                        .size((122 * haloRingScale).dp)
-                        .clip(CircleShape)
-                        .border(
-                            width = 2.dp,
-                            color = Color.White.copy(alpha = haloRingAlpha),
-                            shape = CircleShape
-                        )
-                )
-
-                // The iconic Splash Round Badge
-                SplashInspiredCenterEmblem()
-            }
+            QivoWelcomeHeroLogo()
         }
 
         // 6. BOTTOM AUTHENTICATION & LEGAL CHECK (Clean & High-Contrast)
@@ -367,7 +340,7 @@ fun WelcomeScreen(
                 .padding(horizontal = 28.dp, vertical = 22.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // A. GOOGLE BUTTON (Sleek 50dp height, Official Google Vector G Logo)
+            // A. GOOGLE BUTTON (Sleek 52dp height, Official Google Vector G Logo)
             Surface(
                 onClick = {
                     if (!isAgreedToTerms) isAgreedToTerms = true
@@ -375,15 +348,15 @@ fun WelcomeScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp)
+                    .height(52.dp)
                     .shadow(
-                        elevation = 6.dp,
-                        shape = RoundedCornerShape(25.dp),
+                        elevation = 5.dp,
+                        shape = RoundedCornerShape(26.dp),
                         ambientColor = Color(0x22000000),
                         spotColor = Color(0x33FFA726)
                     )
                     .testTag("google_login_button"),
-                shape = RoundedCornerShape(25.dp),
+                shape = RoundedCornerShape(26.dp),
                 color = Color.White
             ) {
                 Box(
@@ -400,10 +373,10 @@ fun WelcomeScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(horizontal = 18.dp),
+                                .padding(horizontal = 20.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            GoogleOfficialLogo(modifier = Modifier.size(20.dp))
+                            GoogleOfficialLogo(modifier = Modifier.size(22.dp))
 
                             Text(
                                 text = "Continue with Google",
@@ -415,7 +388,7 @@ fun WelcomeScreen(
                                 textAlign = TextAlign.Center
                             )
 
-                            Spacer(modifier = Modifier.width(20.dp))
+                            Spacer(modifier = Modifier.width(22.dp))
                         }
                     }
                 }
@@ -423,7 +396,7 @@ fun WelcomeScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // B. EMAIL BUTTON (Sleek 50dp height, Rich Qivo Orange Gradient)
+            // B. EMAIL BUTTON (Sleek 52dp height, Pristine White Pill with Qivo Accent)
             Surface(
                 onClick = {
                     if (!isAgreedToTerms) isAgreedToTerms = true
@@ -431,39 +404,39 @@ fun WelcomeScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp)
+                    .height(52.dp)
                     .shadow(
-                        elevation = 6.dp,
-                        shape = RoundedCornerShape(25.dp),
+                        elevation = 5.dp,
+                        shape = RoundedCornerShape(26.dp),
                         ambientColor = Color(0x22000000),
-                        spotColor = Color(0x44FF7043)
+                        spotColor = Color(0x33FFA726)
                     )
                     .testTag("email_login_button"),
-                shape = RoundedCornerShape(25.dp),
-                color = QivoOrange
+                shape = RoundedCornerShape(26.dp),
+                color = Color.White
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 18.dp),
+                        .padding(horizontal = 20.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = Icons.Default.Email,
                         contentDescription = "Email",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                        tint = QivoOrange,
+                        modifier = Modifier.size(22.dp)
                     )
                     Text(
                         text = "Continue with Email",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = AppFontFamily,
-                        color = Color.White,
+                        color = Color(0xFF1E293B),
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.Center
                     )
-                    Spacer(modifier = Modifier.width(20.dp))
+                    Spacer(modifier = Modifier.width(22.dp))
                 }
             }
 
@@ -516,8 +489,7 @@ fun WelcomeScreen(
                             fontWeight = FontWeight.Bold,
                             color = QivoOrange,
                             modifier = Modifier.clickable {
-                                legalDialogType = LegalDocumentType.TERMS_OF_SERVICE
-                                showLegalDialog = true
+                                activeLegalDoc = LegalDocumentType.TERMS_OF_SERVICE
                             }
                         )
                         Text(
@@ -531,8 +503,7 @@ fun WelcomeScreen(
                             fontWeight = FontWeight.Bold,
                             color = QivoOrange,
                             modifier = Modifier.clickable {
-                                legalDialogType = LegalDocumentType.PRIVACY_POLICY
-                                showLegalDialog = true
+                                activeLegalDoc = LegalDocumentType.PRIVACY_POLICY
                             }
                         )
                     }
@@ -543,71 +514,47 @@ fun WelcomeScreen(
 }
 
 /**
- * Enhanced Splash-Screen Center Emblem:
- * Matches the iconic circular badge from SplashScreen with soft gold gradient,
- * precision dual rim, deep rich umber typography, and specular glass reflection curve.
+ * Signature Qivo brand wordmark in the flowing cursive font design (Pacifico).
+ * Cleanly rendered without any circular badge, featuring radiant ambient warmth,
+ * pure crisp white curves, subtle artistic tilt, and gentle drop shadow.
  */
 @Composable
-private fun SplashInspiredCenterEmblem() {
+private fun QivoWelcomeHeroLogo(modifier: Modifier = Modifier) {
     Box(
-        modifier = Modifier
-            .size(122.dp)
-            .shadow(
-                elevation = 10.dp,
-                shape = CircleShape,
-                spotColor = Color(0x44D84315),
-                ambientColor = Color(0x33000000)
-            )
-            .clip(CircleShape)
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(
-                        Color(0xFFFFFFFF),
-                        Color(0xFFFFF8E1),
-                        Color(0xFFFFE082),
-                        Color(0xFFFFB74D),
-                        Color(0xFFFF9800)
-                    )
-                )
-            )
-            .border(
-                width = 3.5.dp,
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        Color.White,
-                        Color(0xFFFFD54F),
-                        Color.White.copy(alpha = 0.8f)
-                    )
-                ),
-                shape = CircleShape
-            ),
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.Center,
+        modifier = modifier.padding(horizontal = 24.dp)
     ) {
-        // Specular Glossy Arc (Top Half)
+        // Soft diffuse warm radiance behind the typography
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(61.dp)
-                .align(Alignment.TopCenter)
+                .size(width = 330.dp, height = 175.dp)
                 .background(
-                    Brush.verticalGradient(
+                    Brush.radialGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = 0.45f),
+                            Color.White.copy(alpha = 0.35f),
+                            Color(0xFFFFE082).copy(alpha = 0.18f),
                             Color.Transparent
                         )
                     )
                 )
         )
 
-        // Iconic "QIVO" Deep Umber Luxury Typography
         Text(
-            text = "QIVO",
-            fontFamily = AppFontFamily,
-            fontWeight = FontWeight.Black,
-            fontSize = 35.sp,
-            letterSpacing = 3.5.sp,
-            color = Color(0xFF4E2608),
-            textAlign = TextAlign.Center
+            text = "Qivo",
+            fontFamily = PacificoFontFamily,
+            fontSize = 106.sp,
+            color = Color.White,
+            textAlign = TextAlign.Center,
+            style = androidx.compose.ui.text.TextStyle(
+                shadow = androidx.compose.ui.graphics.Shadow(
+                    color = Color(0x353E1F07),
+                    offset = Offset(0f, 7f),
+                    blurRadius = 18f
+                )
+            ),
+            modifier = Modifier
+                .rotate(-6f)
+                .testTag("welcome_qivo_logo")
         )
     }
 }
@@ -622,54 +569,5 @@ private fun GoogleOfficialLogo(modifier: Modifier = Modifier) {
         contentDescription = "Google",
         tint = Color.Unspecified,
         modifier = modifier
-    )
-}
-
-/**
- * Customer Service / Support Help Dialog
- */
-@Composable
-private fun CustomerServiceHelpDialog(onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Headphones,
-                    contentDescription = null,
-                    tint = QivoOrange,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = "Customer Support",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    color = Color(0xFF1E293B)
-                )
-            }
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    text = "Need help logging in or have questions about QIVO?",
-                    color = Color(0xFF475569),
-                    fontSize = 14.sp
-                )
-                Text(
-                    text = "• Official Support: support@qivo.live\n• 24/7 Live Streamer Concierge\n• Account & Safety Assistance",
-                    color = Color(0xFF7C2D12),
-                    fontSize = 13.sp,
-                    lineHeight = 20.sp
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Got It", color = QivoOrange, fontWeight = FontWeight.Bold)
-            }
-        },
-        containerColor = Color.White,
-        shape = RoundedCornerShape(20.dp)
     )
 }

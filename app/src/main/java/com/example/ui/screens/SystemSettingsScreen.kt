@@ -216,7 +216,7 @@ fun SystemSettingsScreen(
                             },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color.White,
-                                checkedTrackColor = Color(0xFF00C853),
+                                checkedTrackColor = Color(0xFFFF6500),
                                 uncheckedThumbColor = Color.White,
                                 uncheckedTrackColor = Color(0xFF71717A)
                             ),

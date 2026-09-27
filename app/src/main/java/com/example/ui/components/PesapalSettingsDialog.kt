@@ -260,7 +260,7 @@ fun PesapalSettingsDialog(
                         .height(44.dp)
                         .testTag("btn_register_ipn"),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C853))
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF6500))
                 ) {
                     if (isRegisteringIpn) {
                         CircularProgressIndicator(
@@ -287,7 +287,7 @@ fun PesapalSettingsDialog(
                     Text(
                         text = ipnStatusMsg,
                         fontSize = 11.sp,
-                        color = if (ipnStatusMsg.startsWith("✓")) Color(0xFF00C853) else Color(0xFFFF5252)
+                        color = if (ipnStatusMsg.startsWith("✓")) Color(0xFFFF8D00) else Color(0xFFFF5252)
                     )
                 }
             }

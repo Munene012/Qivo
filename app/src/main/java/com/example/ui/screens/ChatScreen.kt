@@ -275,8 +275,8 @@ fun ChatScreen(
                         .fillMaxSize()
                         .nestedScroll(pullRefreshState.getNestedScrollConnection(scope)),
                     contentPadding = PaddingValues(
-                        start = 16.dp,
-                        end = 16.dp,
+                        start = 0.dp,
+                        end = 0.dp,
                         top = statusBarTopInset + 64.dp, // Header height + status bar
                         bottom = 100.dp
                     ),
@@ -366,10 +366,10 @@ fun ChatScreen(
                     } else {
                         Brush.verticalGradient(
                             listOf(
-                                Color(0xFF009639), // Deep Emerald
-                                Color(0xFF00B04A), // Jewel Jade
-                                Color(0xFF00C853), // Vivid Emerald
-                                Color(0xFF26E06D)  // Mint Emerald
+                                Color(0xFFBF360C),
+                                Color(0xFFE65100),
+                                Color(0xFFFF6500),
+                                Color(0xFFFF8D00)
                             )
                         )
                     }
@@ -648,14 +648,14 @@ private fun ConversationItemRow(
                 onClick = onClick,
                 onLongClick = onLongClick
             ),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = colors.cardBg),
+        shape = RoundedCornerShape(0.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.screenBg),
         border = null
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Profile Photo / Avatar with Green Online Indicator
@@ -691,7 +691,7 @@ private fun ConversationItemRow(
                             .background(if (isDark) Color(0xFF18181C) else Color.White)
                             .padding(2.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF4CAF50))
+                            .background(Color(0xFF00E676))
                     )
                 }
             }
@@ -779,7 +779,7 @@ private fun ConversationItemRow(
                     if (isDraft) {
                         androidx.compose.ui.text.buildAnnotatedString {
                             withStyle(androidx.compose.ui.text.SpanStyle(
-                                color = Color(0xFF00E676), // Vibrant green
+                                color = Color(0xFFFF6500), // Vibrant sunset amber
                                 fontWeight = FontWeight.Bold
                             )) {
                                 append("Draft: ")
@@ -829,7 +829,7 @@ private fun ConversationItemRow(
                                 modifier = Modifier
                                     .size(8.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFF00E676))
+                                    .background(Color(0xFFFF9100))
                             )
                             Box(
                                 modifier = Modifier

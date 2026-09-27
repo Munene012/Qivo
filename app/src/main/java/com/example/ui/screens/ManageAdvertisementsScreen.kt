@@ -313,7 +313,7 @@ fun ManageAdvertisementsScreen(
                                         text = if (currentAd.isActive) "Active (Displayed to Users)" else "Disabled (Normal App Flow)",
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (currentAd.isActive) Color(0xFF00E676) else colors.textSecondary
+                                        color = if (currentAd.isActive) Color(0xFFFF9100) else colors.textSecondary
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(2.dp))

@@ -3,54 +3,54 @@ package com.example.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // ==========================================
-// QIVO SIGNATURE BRAND PALETTE (EMERALD & JADE LUXURY PALETTE)
+// QIVO RARE SOCIAL APP LUXURY PALETTE (SUNSET AMBER, ROSE GOLD & VIOLET)
 // ==========================================
 
-// Primary Brand Color: Emerald Green (Rich, opulent jewel emerald tone)
-val QivoOrange = Color(0xFF00C853)        // Vivid Emerald Green (Primary Brand)
-val QivoOrangeDark = Color(0xFF007E33)    // Deep Forest Jade / Deep Emerald
-val QivoOrangeHover = Color(0xFF26E06D)   // Luminous Mint Emerald
-val QivoSunsetCoral = Color(0xFF00B04A)   // Vibrant Jewel Jade
-val QivoGold = Color(0xFF00E676)          // Electric Mint Emerald
-val QivoGoldLight = Color(0xFF69F0AE)     // Soft Mint Highlight
-val QivoGoldGlow = Color(0xFFB9F6CA)      // Ambient Emerald Glow
-val QivoGoldDark = Color(0xFF00692C)      // Deep Jade Accent
-val QivoChampagne = Color(0xFFF2FBF5)     // Soft Jade Tint Ivory
+// Primary Brand Color: Sunset Amber & Rose Gold
+val QivoOrange = Color(0xFFFF6500)        // Vibrant Sunset Orange (Primary Brand)
+val QivoOrangeDark = Color(0xFFD84315)    // Deep Burnt Amber
+val QivoOrangeHover = Color(0xFFFF8D00)   // Luminous Amber Gold
+val QivoSunsetCoral = Color(0xFFFF3D00)   // Vibrant Sunset Coral
+val QivoGold = Color(0xFFFFD54F)          // Warm Golden Yellow
+val QivoGoldLight = Color(0xFFFFE082)     // Soft Golden Highlight
+val QivoGoldGlow = Color(0xFFFFECB3)      // Ambient Golden Glow
+val QivoGoldDark = Color(0xFFE65100)      // Deep Copper Accent
+val QivoChampagne = Color(0xFFFFFDE7)     // Soft Ivory Champagne
 
-// Gradient Colors matching Emerald & Jade Luxury Theme
+// Gradient Colors matching Rare Social Luxury Theme
 val QivoFadedSunsetGradientColors = listOf(
-    Color(0xFF00C853), // Vivid Emerald
-    Color(0xFF00E676), // Electric Mint
-    Color(0xFF26E06D), // Luminous Mint Emerald
-    Color(0xFF69F0AE), // Soft Mint Highlight
-    Color(0xFFF2FBF5)  // Soft Ivory Jade Tint
+    Color(0xFFFF6500), // Sunset Orange
+    Color(0xFFFF8D00), // Amber Gold
+    Color(0xFFFFB300), // Warm Gold
+    Color(0xFFFFD54F), // Light Gold
+    Color(0xFFE040FB)  // Violet Magenta Accent
 )
 
 val QivoHeaderSunsetGradientColors = listOf(
-    Color(0xFF009639), // Deep Emerald Top
-    Color(0xFF00B04A), // Rich Jewel Jade
-    Color(0xFF00C853), // Vivid Emerald
-    Color(0xFF26E06D)  // Mint Emerald Transition
+    Color(0xFFBF360C), // Deep Burnt Top
+    Color(0xFFE65100), // Rich Copper
+    Color(0xFFFF6500), // Sunset Orange
+    Color(0xFFFF9100)  // Amber Glow
 )
 
 // UI Badges & Accents
-val QivoYellow = Color(0xFF00E676)        // Electric Mint Accent
-val QivoPink = Color(0xFF00C853)          // Primary Emerald Accent
-val QivoNeon = Color(0xFF00E676)          // Electric Neon Emerald
+val QivoYellow = Color(0xFFFFD600)        // Vivid Golden Accent
+val QivoPink = Color(0xFFE040FB)          // Electric Magenta Accent
+val QivoNeon = Color(0xFF7C4DFF)          // Electric Violet Neon
 
 // Luxury Obsidian Containers (Dark Mode)
-val QivoObsidian = Color(0xFF0B100D)      // Rich Dark Onyx Canvas with subtle jade tint
-val QivoObsidianSurface = Color(0xFF101913)
-val QivoObsidianCard = Color(0xFF152219)
-val QivoObsidianCardLight = Color(0xFF1B2D21)
-val QivoObsidianBorder = Color(0xFF233A2B)
-val QivoObsidianGoldBorder = Color(0xFF1F4A2E) // Emerald border tint
+val QivoObsidian = Color(0xFF0C0A12)      // Rich Dark Onyx Canvas with subtle violet tint
+val QivoObsidianSurface = Color(0xFF13101C)
+val QivoObsidianCard = Color(0xFF1A1626)
+val QivoObsidianCardLight = Color(0xFF231D33)
+val QivoObsidianBorder = Color(0xFF322A45)
+val QivoObsidianGoldBorder = Color(0xFF4A3525) // Warm Gold border tint
 
 // Neutral Legibility
-val QivoDarkCharcoal = Color(0xFF141C16)
-val QivoLightGrey = Color(0xFFF0F5F2)
-val QivoTextDark = Color(0xFF111813)
-val QivoTextMuted = Color(0xFF6E8074)
+val QivoDarkCharcoal = Color(0xFF14131A)
+val QivoLightGrey = Color(0xFFF7F7F9)
+val QivoTextDark = Color(0xFF141318)
+val QivoTextMuted = Color(0xFF8E8E93)
 
 // Brand Providers
 val QivoGoogleBlue = Color(0xFF4285F4)
@@ -58,13 +58,14 @@ val QivoGoogleRed = Color(0xFFEA4335)
 val QivoGoogleYellow = Color(0xFFFBBC05)
 val QivoGoogleGreen = Color(0xFF34A853)
 
-val Purple80 = Color(0xFFE2EBE0)
-val PurpleGrey80 = Color(0xFFD3DDD1)
-val Pink80 = Color(0xFFE3F0DC)
+val Purple80 = Color(0xFFEBE0EB)
+val PurpleGrey80 = Color(0xFFDDD1D8)
+val Pink80 = Color(0xFFF0DCEB)
 
-val Purple40 = Color(0xFF6F7A6C)
-val PurpleGrey40 = Color(0xFF616B5F)
-val Pink40 = Color(0xFF74856A)
+val Purple40 = Color(0xFF7A6C77)
+val PurpleGrey40 = Color(0xFF6B5F67)
+val Pink40 = Color(0xFF856A7D)
+
 
 
 

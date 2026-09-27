@@ -75,6 +75,7 @@ import com.example.data.AvatarHelper
 import com.example.data.SupabaseProfileService
 import com.example.data.UserSessionManager
 import com.example.ui.components.AvatarFrameRenderer
+import com.example.ui.theme.LocalAppColors
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -85,6 +86,7 @@ fun StoreScreen(
     onNavigateToBag: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val colors = LocalAppColors.current
     val scope = rememberCoroutineScope()
     val profileService = remember { SupabaseProfileService() }
     val isOnline by remember { NetworkUtils.observeNetworkConnectivity(context) }
@@ -154,14 +156,14 @@ fun StoreScreen(
                     }
                 },
                 actions = {
-                    // Green Bag Pill Button -> Navigates directly to Bag screen
+                    // Luxury Amber Bag Pill Button -> Navigates directly to Bag screen
                     Box(
                         modifier = Modifier
                             .padding(end = 16.dp)
                             .clip(RoundedCornerShape(20.dp))
                             .background(
                                 brush = Brush.horizontalGradient(
-                                    listOf(Color(0xFF7CB342), Color(0xFF558B2F))
+                                    listOf(Color(0xFFFF8D00), Color(0xFFFF6500))
                                 )
                             )
                             .clickable { onNavigateToBag() }
@@ -217,13 +219,13 @@ fun StoreScreen(
                         color = Color(0xFF1E293B)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    // Wavy/pill green underline for selected tab
+                    // Wavy/pill amber underline for selected tab
                     Box(
                         modifier = Modifier
                             .width(36.dp)
                             .height(4.dp)
                             .clip(RoundedCornerShape(2.dp))
-                            .background(Color(0xFF7CB342))
+                            .background(Color(0xFFFF8D00))
                     )
                 }
             }
@@ -334,7 +336,7 @@ fun StoreScreen(
 
                 // Large Avatar Live Preview with Frame
                 Box(
-                    modifier = Modifier.size(130.dp),
+                    modifier = Modifier.size(100.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     AvatarHelper.UserAvatarImage(
@@ -373,7 +375,7 @@ fun StoreScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFFE8F5E9))
+                            .background(if (colors.isDark) Color(0xFF331600) else Color(0xFFFFF3E0))
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
@@ -382,7 +384,7 @@ fun StoreScreen(
                             Icon(
                                 imageVector = Icons.Default.CheckCircle,
                                 contentDescription = null,
-                                tint = Color(0xFF2E7D32),
+                                tint = Color(0xFFFF6500),
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
@@ -390,14 +392,14 @@ fun StoreScreen(
                                 text = "Purchased",
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF2E7D32)
+                                color = Color(0xFFFF6500)
                             )
                         }
                         Text(
                             text = ownedFrame?.remainingTimeText ?: "Active",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF2E7D32)
+                            color = Color(0xFFFF6500)
                         )
                     }
                 } else {
@@ -460,7 +462,7 @@ fun StoreScreen(
                             text = "%,d Coins".format(currentCoins),
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (currentCoins >= frame.priceCoins) Color(0xFF2E7D32) else Color(0xFFC62828)
+                            color = if (currentCoins >= frame.priceCoins) Color(0xFFFF8D00) else Color(0xFFC62828)
                         )
                     }
                 }
@@ -475,14 +477,14 @@ fun StoreScreen(
                                 .fillMaxWidth()
                                 .height(50.dp)
                                 .clip(RoundedCornerShape(25.dp))
-                                .background(Color(0xFFE8F5E9)),
+                                .background(if (colors.isDark) Color(0xFF331600) else Color(0xFFFFF3E0)),
                             contentAlignment = Alignment.Center
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     imageVector = Icons.Default.CheckCircle,
                                     contentDescription = null,
-                                    tint = Color(0xFF2E7D32),
+                                    tint = Color(0xFFFF6500),
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -490,7 +492,7 @@ fun StoreScreen(
                                     text = "Currently Equipped",
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF2E7D32)
+                                    color = Color(0xFFFF6500)
                                 )
                             }
                         }
@@ -652,7 +654,7 @@ fun StoreScreen(
 
                 if (equippedFrame != null) {
                     Box(
-                        modifier = Modifier.size(110.dp),
+                        modifier = Modifier.size(88.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         AvatarHelper.UserAvatarImage(
@@ -678,14 +680,14 @@ fun StoreScreen(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFFE8F5E9))
+                            .background(if (colors.isDark) Color(0xFF331600) else Color(0xFFFFF3E0))
                             .padding(horizontal = 12.dp, vertical = 4.dp)
                     ) {
                         Text(
                             text = "Active • $expText",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF2E7D32)
+                            color = Color(0xFFFF6500)
                         )
                     }
 
@@ -738,6 +740,7 @@ private fun StoreFrameCard(
     gender: String,
     onClick: () -> Unit
 ) {
+    val colors = LocalAppColors.current
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -755,7 +758,7 @@ private fun StoreFrameCard(
             // Circle Avatar Preview with Frame Overlay
             Box(
                 modifier = Modifier
-                    .size(90.dp)
+                    .size(72.dp)
                     .aspectRatio(1f),
                 contentAlignment = Alignment.Center
             ) {
@@ -786,28 +789,28 @@ private fun StoreFrameCard(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFFE8F5E9))
+                        .background(if (colors.isDark) Color(0xFF331600) else Color(0xFFFFF3E0))
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                 ) {
                     Text(
                         text = "Equipped",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF2E7D32)
+                        color = Color(0xFFFF6500)
                     )
                 }
             } else if (isPurchased) {
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFFE8F5E9))
+                        .background(if (colors.isDark) Color(0xFF331600) else Color(0xFFFFF3E0))
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                 ) {
                     Text(
                         text = if (!remainingTimeText.isNullOrBlank()) "Purchased • $remainingTimeText" else "Purchased",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF2E7D32),
+                        color = Color(0xFFFF6500),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )

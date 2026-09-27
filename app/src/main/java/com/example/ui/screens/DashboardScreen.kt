@@ -175,13 +175,13 @@ fun DashboardScreen(
                             Icon(
                                 imageVector = Icons.Default.CheckCircle,
                                 contentDescription = "Verified",
-                                tint = Color(0xFF4CAF50),
+                                tint = Color(0xFFFF8D00),
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = "Account Authenticated",
-                                color = Color(0xFF81C784),
+                                color = Color(0xFFFFB74D),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold
                             )

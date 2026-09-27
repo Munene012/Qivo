@@ -49,6 +49,7 @@ import com.example.data.UserSessionManager
 import com.example.ui.components.AppToast
 import com.example.ui.components.InAppToastHost
 import com.example.ui.screens.CreateAccountScreen
+import com.example.ui.screens.CustomerSupportScreen
 import com.example.ui.screens.EmailAuthScreen
 import com.example.ui.screens.MainBottomNavScaffold
 import com.example.ui.screens.SplashScreen
@@ -62,6 +63,7 @@ import kotlinx.coroutines.launch
 sealed class Screen {
     object Splash : Screen()
     object Welcome : Screen()
+    object CustomerSupport : Screen()
     object EmailAuth : Screen()
     data class CreateAccount(
         val email: String,
@@ -236,21 +238,12 @@ fun QivoApp(notificationIntent: Intent? = null) {
                 val errorMsg = e.message ?: ""
                 android.util.Log.w("MainActivity", "Native Google Sign-In error: $errorMsg", e)
                 if (!errorMsg.contains("cancel", ignoreCase = true) && !errorMsg.contains("user cancelled", ignoreCase = true)) {
-                    // Seamless fallback to Supabase Google OAuth via browser if native credential manager encounters an issue
-                    try {
-                        val oauthUrl = authService.getGoogleOAuthUrl()
-                        val browserIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(oauthUrl)).apply {
-                            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
-                        }
-                        context.startActivity(browserIntent)
-                    } catch (ex: Exception) {
-                        val friendlyMsg = if (!com.example.data.NetworkUtils.isOnline(context)) {
-                            "No internet connection. Please check your network."
-                        } else {
-                            "Google Sign-In: ${e.localizedMessage ?: "Failed to sign in. Please try again."}"
-                        }
-                        com.example.data.NetworkUtils.showToast(context, friendlyMsg, true)
+                    val friendlyMsg = if (!com.example.data.NetworkUtils.isOnline(context)) {
+                        "No internet connection. Please check your network."
+                    } else {
+                        "Google Sign-In failed. Please try again or use Email/Password."
                     }
+                    com.example.data.NetworkUtils.showToast(context, friendlyMsg, true)
                 }
             } finally {
                 isAuthenticatingOAuth = false
@@ -363,6 +356,9 @@ fun QivoApp(notificationIntent: Intent? = null) {
                         onGoogleSignInClick = {
                             performGoogleSignIn()
                         },
+                        onNavigateToCustomerSupport = {
+                            currentScreen = Screen.CustomerSupport
+                        },
                         isGoogleLoading = isAuthenticatingOAuth
                     )
 
@@ -382,6 +378,16 @@ fun QivoApp(notificationIntent: Intent? = null) {
                         }
                     }
                 }
+            }
+            is Screen.CustomerSupport -> {
+                BackHandler {
+                    currentScreen = Screen.Welcome
+                }
+                CustomerSupportScreen(
+                    onBackClick = {
+                        currentScreen = Screen.Welcome
+                    }
+                )
             }
             is Screen.EmailAuth -> {
                 BackHandler {

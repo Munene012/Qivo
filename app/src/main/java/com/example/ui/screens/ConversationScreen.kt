@@ -116,8 +116,8 @@ fun ConversationScreen(
     val myAvatarUrl = session?.avatarUrl ?: ""
 
     val viewedPhotoKeys by ViewOncePhotoManager.viewedKeysFlow.collectAsState()
-    LaunchedEffect(Unit) {
-        ViewOncePhotoManager.init(context)
+    LaunchedEffect(myUserId) {
+        ViewOncePhotoManager.init(context, forceRefresh = true)
     }
 
     val initialConversationMessages = remember(myUserId, targetUser.id) {
@@ -164,6 +164,13 @@ fun ConversationScreen(
         AppDataCacheManager.saveChatDraft(context, myUserId, targetUser.id, inputMessageText)
     }
 
+    // Keep viewed photo state synchronized with Supabase
+    LaunchedEffect(messagesList) {
+        if (messagesList.isNotEmpty()) {
+            ViewOncePhotoManager.syncConversationPhotos(context, messagesList)
+        }
+    }
+
 
     // Periodically update target user profile to keep realtime online status in sync
     LaunchedEffect(targetUser.id, targetUser.numericId) {
@@ -198,8 +205,51 @@ fun ConversationScreen(
     var insufficientCoinsRequired by remember { mutableLongStateOf(15L) }
     var userCurrentCoins by remember { mutableLongStateOf(session?.coins ?: 100L) }
     var myProfile by remember { mutableStateOf<UserProfile?>(null) }
-    val isMale = (session?.gender ?: "Male").equals("Male", ignoreCase = true)
-    val isFemaleAcc = !isMale
+
+    val senderGenderResolved = remember(myProfile?.gender, session?.gender) {
+        val profG = (myProfile?.gender ?: "").trim()
+        val sessG = (session?.gender ?: "").trim()
+        val prefG = UserSessionManager.getGender(context).trim()
+        fun isF(g: String) = g.equals("female", ignoreCase = true) ||
+            g.equals("f", ignoreCase = true) ||
+            g.equals("woman", ignoreCase = true) ||
+            g.equals("w", ignoreCase = true) ||
+            g.equals("girl", ignoreCase = true) ||
+            g.equals("lady", ignoreCase = true)
+        fun isM(g: String) = g.equals("male", ignoreCase = true) ||
+            g.equals("m", ignoreCase = true) ||
+            g.equals("man", ignoreCase = true)
+
+        when {
+            isF(profG) || isF(sessG) || isF(prefG) -> "Female"
+            isM(profG) || isM(sessG) || isM(prefG) -> "Male"
+            profG.isNotEmpty() -> profG
+            sessG.isNotEmpty() -> sessG
+            else -> prefG
+        }
+    }
+
+    val isFemaleAcc = remember(senderGenderResolved, myProfile?.gender, session?.gender) {
+        val profG = (myProfile?.gender ?: "").trim()
+        val sessG = (session?.gender ?: "").trim()
+        val prefG = UserSessionManager.getGender(context).trim()
+        fun isF(g: String) = g.equals("female", ignoreCase = true) ||
+            g.equals("f", ignoreCase = true) ||
+            g.equals("woman", ignoreCase = true) ||
+            g.equals("w", ignoreCase = true) ||
+            g.equals("girl", ignoreCase = true) ||
+            g.equals("lady", ignoreCase = true)
+        isF(senderGenderResolved) || isF(profG) || isF(sessG) || isF(prefG)
+    }
+
+    val isMale = remember(senderGenderResolved, isFemaleAcc) {
+        !isFemaleAcc && (
+            senderGenderResolved.equals("Male", ignoreCase = true) ||
+            senderGenderResolved.equals("m", ignoreCase = true) ||
+            senderGenderResolved.equals("man", ignoreCase = true)
+        )
+    }
+
     var fastReplyRewardsMap by remember { mutableStateOf<Map<Long, Double>>(emptyMap()) }
     val isSenderAdmin = session?.isAdmin == true || myProfile?.isAdmin == true
     val isSenderCoinSeller = session?.isCoinSeller == true || myProfile?.isCoinSeller == true
@@ -208,7 +258,9 @@ fun ConversationScreen(
     val isReceiverCoinSeller = liveTargetUser.isCoinSeller
     val isReceiverAgent = liveTargetUser.isAgent
     // Female users, Admins, Coin Sellers, and Agents can text and be texted for free!
-    val isExempt = !isMale || isSenderAdmin || isSenderCoinSeller || isSenderAgent || isReceiverAdmin || isReceiverCoinSeller || isReceiverAgent
+    val isExempt = isFemaleAcc || isSenderAdmin || isSenderCoinSeller || isSenderAgent || isReceiverAdmin || isReceiverCoinSeller || isReceiverAgent
+    // For photo sending: ONLY admin senders, coin seller senders, and agent senders are exempt from photo coins (40 coins for all other users)
+    val isPhotoExempt = isSenderAdmin || isSenderCoinSeller || isSenderAgent
 
     // Voice Recording State & Audio permission launcher
     val voiceRecordingState by VoiceMessageManager.recordingState.collectAsState()
@@ -256,6 +308,9 @@ fun ConversationScreen(
                 userCurrentCoins = profile.coins
                 UserSessionManager.saveCoins(context, profile.coins)
                 UserSessionManager.saveRoles(context, profile.isAdmin, profile.isCoinSeller, profile.isAgent)
+                if (profile.gender.isNotBlank()) {
+                    UserSessionManager.saveGender(context, profile.gender)
+                }
             } else {
                 val fresh = profileService.fetchCoins(myUserId)
                 if (fresh > 0L) {
@@ -318,7 +373,7 @@ fun ConversationScreen(
             if (!isExempt) {
                 val deductResult = profileService.deductChatCoins(
                     senderId = myUserId,
-                    senderGender = session?.gender ?: "Male",
+                    senderGender = senderGenderResolved,
                     receiverId = targetUser.id,
                     receiverName = targetUser.name,
                     isAdmin = isSenderAdmin,
@@ -339,7 +394,7 @@ fun ConversationScreen(
                 it.senderId.trim().equals(targetUser.id.trim(), ignoreCase = true) && it.id > 0L 
             }
 
-            val createdReplyId = chatService.sendMessageWithId(
+            val sendResult = chatService.sendMessageWithResult(
                 senderId = myUserId,
                 senderName = myName,
                 senderAvatar = myAvatarUrl,
@@ -348,35 +403,37 @@ fun ConversationScreen(
                 messageText = text,
                 context = context
             )
-            val sent = createdReplyId != null || chatService.sendMessage(
-                senderId = myUserId,
-                senderName = myName,
-                senderAvatar = myAvatarUrl,
-                receiverId = targetUser.id,
-                receiverName = targetUser.name,
-                messageText = text,
-                context = context
-            )
-            if (!sent) {
+            if (!sendResult.isSuccess) {
+                // If failed, remove the optimistic placeholder
                 messagesList = messagesList.filter { it.id != tempMsgId }
-            } else if (createdReplyId != null && lastIncomingMaleMsg != null) {
-                // If female responding to male, trigger server-side Fast Reply reward calculation
-                val isMyFemale = (session?.gender ?: myProfile?.gender ?: "").equals("Female", ignoreCase = true)
-                val isTargetMale = targetUser.gender.equals("Male", ignoreCase = true)
-                if (isMyFemale && isTargetMale) {
-                    launch {
-                        try {
-                            val rewardRes = chatService.claimFastReplyReward(
-                                originalMessageId = lastIncomingMaleMsg.id,
-                                replyMessageId = createdReplyId,
-                                context = context
-                            )
-                            if (rewardRes.first && rewardRes.second > 0.0) {
-                                fastReplyRewardsMap = fastReplyRewardsMap + (createdReplyId to rewardRes.second)
-                                val rewardFormatted = String.format(java.util.Locale.US, "%.2f", rewardRes.second)
-                                AppToast.show("⚡ Fast Reply Reward: +$rewardFormatted 💎", isLong = true)
-                            }
-                        } catch (_: Exception) {}
+                AppToast.show("Failed to deliver message. Check connection.")
+            } else {
+                val createdReplyId = sendResult.messageId
+                // Replace optimistic ID with the actual server ID so polling and real-time will never duplicate it
+                if (createdReplyId != null && createdReplyId > 0L) {
+                    messagesList = messagesList.map {
+                        if (it.id == tempMsgId) it.copy(id = createdReplyId, createdAt = sendResult.createdAt ?: it.createdAt) else it
+                    }
+                }
+                if (createdReplyId != null && lastIncomingMaleMsg != null) {
+                    // If female responding to male, trigger server-side Fast Reply reward calculation
+                    val isMyFemale = (session?.gender ?: myProfile?.gender ?: "").equals("Female", ignoreCase = true)
+                    val isTargetMale = targetUser.gender.equals("Male", ignoreCase = true)
+                    if (isMyFemale && isTargetMale) {
+                        launch {
+                            try {
+                                val rewardRes = chatService.claimFastReplyReward(
+                                    originalMessageId = lastIncomingMaleMsg.id,
+                                    replyMessageId = createdReplyId,
+                                    context = context
+                                )
+                                if (rewardRes.first && rewardRes.second > 0.0) {
+                                    fastReplyRewardsMap = fastReplyRewardsMap + (createdReplyId to rewardRes.second)
+                                    val rewardFormatted = String.format(java.util.Locale.US, "%.2f", rewardRes.second)
+                                    AppToast.show("⚡ Fast Reply Reward: +$rewardFormatted 💎", isLong = true)
+                                }
+                            } catch (_: Exception) {}
+                        }
                     }
                 }
             }
@@ -466,7 +523,7 @@ fun ConversationScreen(
                 messageText = giftPayload,
                 context = context
             )
-            activeSentGiftPreview = gift
+            // activeSentGiftPreview = gift
             HapticSoundFeedback.performSuccess(context)
             HapticSoundFeedback.playGiftSentSound()
             AppToast.show("Sent ${gift.emoji} ${gift.name} to ${targetUser.name}!")
@@ -521,7 +578,7 @@ fun ConversationScreen(
             if (!isExempt) {
                 val deductResult = profileService.deductChatCoins(
                     senderId = myUserId,
-                    senderGender = session?.gender ?: "Male",
+                    senderGender = senderGenderResolved,
                     receiverId = targetUser.id,
                     receiverName = targetUser.name,
                     isAdmin = isSenderAdmin,
@@ -662,11 +719,14 @@ fun ConversationScreen(
                             val pendingOptimistic = messagesList.filter { it.id <= 0L }
                             val remainingOptimistic = pendingOptimistic.filter { opt ->
                                 chronological.none { f ->
-                                    f.senderId == opt.senderId && f.receiverId == opt.receiverId &&
+                                    f.senderId.trim().equals(opt.senderId.trim(), ignoreCase = true) &&
+                                    f.receiverId.trim().equals(opt.receiverId.trim(), ignoreCase = true) &&
                                     (f.message == opt.message)
                                 }
                             }
-                            messagesList = chronological + remainingOptimistic
+                            messagesList = (chronological + remainingOptimistic).distinctBy { 
+                                if (it.id > 0L) "srv_${it.id}" else "opt_${it.id}_${it.message}" 
+                            }
                             hasOlderMessages = recent.size >= 20
                         } else {
                             hasOlderMessages = false
@@ -678,32 +738,44 @@ fun ConversationScreen(
                             hasScrolledToBottomInitially = true
                         }
                     } else if (recent.isNotEmpty()) {
-                        // Periodic sync: only append brand-new incoming/outgoing messages
-                        val existingIds = messagesList.map { it.id }.filter { it > 0L }.toSet()
+                        // Periodic sync: reconcile pending optimistic messages in place with server copies
+                        val currentList = messagesList.toMutableList()
+                        recent.forEach { serverMsg ->
+                            val optIdx = currentList.indexOfFirst { opt ->
+                                opt.id <= 0L &&
+                                opt.senderId.trim().equals(serverMsg.senderId.trim(), ignoreCase = true) &&
+                                opt.receiverId.trim().equals(serverMsg.receiverId.trim(), ignoreCase = true) &&
+                                opt.message == serverMsg.message
+                            }
+                            if (optIdx != -1) {
+                                currentList[optIdx] = serverMsg
+                            }
+                        }
+
+                        val existingIds = currentList.map { it.id }.filter { it > 0L }.toSet()
                         val brandNew = recent.filter { it.id !in existingIds }.reversed()
                         if (brandNew.isNotEmpty()) {
                             val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
                             val totalItems = listState.layoutInfo.totalItemsCount
                             val isNearBottom = totalItems == 0 || lastVisible >= totalItems - 3
-                            messagesList = messagesList + brandNew
+                            currentList.addAll(brandNew)
                             if (isNearBottom) {
-                                listState.animateScrollToItem(messagesList.size - 1)
+                                listState.animateScrollToItem(currentList.size - 1)
                             }
                         }
 
                         // Update isRead status in place without disturbing ordering or scroll position
                         val recentMap = recent.associateBy { it.id }
-                        var hasReadStatusChanged = false
-                        val updatedList = messagesList.map { msg ->
+                        val updatedList = currentList.map { msg ->
                             val r = recentMap[msg.id]
                             if (r != null && r.isRead != msg.isRead) {
-                                hasReadStatusChanged = true
                                 msg.copy(isRead = r.isRead)
                             } else msg
+                        }.distinctBy { 
+                            if (it.id > 0L) "srv_${it.id}" else "opt_${it.id}_${it.message}" 
                         }
-                        if (hasReadStatusChanged) {
-                            messagesList = updatedList
-                        }
+
+                        messagesList = updatedList
                     }
 
                     // If female account, sync fast reply reward records from ledger
@@ -714,6 +786,11 @@ fun ConversationScreen(
                                 fastReplyRewardsMap = fastReplyRewardsMap + serverRewards
                             }
                         } catch (_: Exception) {}
+                    }
+
+                    // Live synchronize view-once photo viewed status so sender sees "Photo • Opened" in real time
+                    if (messagesList.isNotEmpty()) {
+                        ViewOncePhotoManager.syncConversationPhotos(context, messagesList)
                     }
 
                     // Mark incoming messages as read in Supabase
@@ -750,12 +827,13 @@ fun ConversationScreen(
                     .fillMaxWidth()
                     .zIndex(10f),
                 color = colors.cardBg,
-                shadowElevation = 3.dp
+                shadowElevation = 4.dp
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                        .defaultMinSize(minHeight = 62.dp)
+                        .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Conversation3DBackButton(
@@ -763,19 +841,19 @@ fun ConversationScreen(
                         isDark = isDark
                     )
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
 
                     // User Profile Info in Header (Clickable -> opens User Details)
                     Row(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(RoundedCornerShape(10.dp))
                             .clickable { onOpenUserDetails(liveTargetUser) }
-                            .padding(vertical = 4.dp, horizontal = 2.dp),
+                            .padding(vertical = 4.dp, horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Avatar
-                        Box(modifier = Modifier.size(42.dp)) {
+                        Box(modifier = Modifier.size(44.dp)) {
                             com.example.data.AvatarHelper.UserAvatarImage(
                                 avatarUrl = if (liveTargetUser.avatarUrl.isNotBlank()) liveTargetUser.avatarUrl else targetUser.avatarUrl,
                                 userId = liveTargetUser.id.ifBlank { targetUser.id },
@@ -807,13 +885,13 @@ fun ConversationScreen(
                                         modifier = Modifier
                                             .size(8.dp)
                                             .clip(CircleShape)
-                                            .background(Color(0xFF4CAF50))
+                                            .background(Color(0xFF00E676))
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
                                         text = "Online",
                                         fontSize = 12.sp,
-                                        color = Color(0xFF4CAF50),
+                                        color = Color(0xFF00E676),
                                         fontWeight = FontWeight.Medium
                                     )
                                 }
@@ -957,13 +1035,13 @@ fun ConversationScreen(
                         }
 
                         items(
-                            items = messagesList,
+                            items = messagesList.distinctBy { if (it.message.startsWith("[gift]")) "${it.senderId}_${it.message.trim()}" else (if (it.id != 0L) it.id.toString() else "${it.senderId}_${it.createdAt}_${it.message.hashCode()}") },
                             key = { msg ->
                                 if (msg.id != 0L) "msg_${msg.id}" else "local_${msg.senderId}_${msg.createdAt}_${msg.message.hashCode()}"
                             }
                         ) { msg ->
                             val isMe = msg.senderId == myUserId
-                            val bubbleBg = if (isMe) (if (isDark) Color(0xFF2E7D32) else Color(0xFFDCF8C6)) else colors.cardBg
+                            val bubbleBg = if (isMe) (if (isDark) Color(0xFFBF360C) else Color(0xFFFFE0B2)) else colors.cardBg
                             val bubbleTextColor = if (isMe) (if (isDark) Color.White else Color.Black) else colors.textPrimary
                             val isVoiceMessage = msg.message.startsWith("[voice]", ignoreCase = true) ||
                                     msg.message.startsWith("voice_", ignoreCase = true) ||
@@ -1027,195 +1105,312 @@ fun ConversationScreen(
                                     }
 
                                 if (isPhotoMessage) {
-                                    val photoKey = ViewOncePhotoManager.generatePhotoKey(msg.id, msg.senderId, msg.createdAt, photoUrlOrUri)
-                                    val isPhotoAlreadyViewed = viewedPhotoKeys.contains(photoKey) || ViewOncePhotoManager.isPhotoViewed(context, photoKey)
+                                    val photoCandidates = remember(msg.id, photoUrlOrUri) {
+                                        ViewOncePhotoManager.generateCandidateKeys(msg.id, photoUrlOrUri)
+                                    }
+                                    val isPhotoAlreadyViewed = photoCandidates.any { viewedPhotoKeys.contains(it) } ||
+                                            ViewOncePhotoManager.isPhotoViewed(context, msg.id, photoUrlOrUri)
 
-                                    if (isPhotoAlreadyViewed) {
-                                        // VIEWED / EXPIRED STATE: Permanent "Photo • Opened" badge that won't open again
-                                        Surface(
-                                            shape = RoundedCornerShape(16.dp),
-                                            color = if (isMe) (if (isDark) Color(0xFF1E3322) else Color(0xFFE8F5E9)) else (if (isDark) Color(0xFF181720) else Color(0xFFF1F3F5)),
-                                            shadowElevation = 1.dp,
-                                            modifier = Modifier
-                                                .widthIn(min = 140.dp, max = 220.dp)
-                                                .clickable {
-                                                    AppToast.show("This photo was already viewed and expired.")
-                                                }
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                // Muted View Once Circle with "1"
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(26.dp)
-                                                        .clip(CircleShape)
-                                                        .background(if (isDark) Color(0xFF262532) else Color(0xFFE0E0E0)),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Text(
-                                                        text = "1",
-                                                        fontSize = 11.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = if (isDark) Color(0xFF9E9E9E) else Color(0xFF757575)
-                                                    )
-                                                }
-
-                                                Spacer(modifier = Modifier.width(10.dp))
-
-                                                Column {
-                                                    Text(
-                                                        text = "Photo",
-                                                        fontSize = 13.sp,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        color = if (isMe) (if (isDark) Color(0xFFE0E0E0) else Color(0xFF2E7D32)) else colors.textPrimary
-                                                    )
-                                                    Text(
-                                                        text = "Opened",
-                                                        fontSize = 11.sp,
-                                                        fontWeight = FontWeight.Medium,
-                                                        color = if (isDark) Color(0xFF9E9E9E) else Color(0xFF757575)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        // UNOPENED STATE: Completely obscured and blurred so user cannot see contents until tapped
-                                        Surface(
-                                            shape = RoundedCornerShape(16.dp),
-                                            color = if (isDark) Color(0xFF181522) else Color(0xFF232030),
-                                            shadowElevation = 4.dp,
-                                            modifier = Modifier
-                                                .widthIn(min = 160.dp, max = 220.dp)
-                                                .clickable {
-                                                    ViewOncePhotoManager.markPhotoAsViewed(context, photoKey)
-                                                    fullScreenPhotoUrl = photoUrlOrUri
-                                                }
-                                        ) {
-                                            Box(
+                                    if (isMe) {
+                                        // =========================================================================
+                                        // SENDER BUBBLE: SENDER CANNOT OPEN/VIEW ONCE PHOTOS ONCE SENT
+                                        // =========================================================================
+                                        if (isPhotoAlreadyViewed) {
+                                            // Recipient has already opened and viewed the photo
+                                            Surface(
+                                                shape = RoundedCornerShape(16.dp),
+                                                color = if (isDark) Color(0xFF1E3322) else Color(0xFFE8F5E9),
+                                                shadowElevation = 1.dp,
                                                 modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(10.dp)
+                                                    .widthIn(min = 140.dp, max = 220.dp)
+                                                    .clickable {
+                                                        AppToast.show("This photo was opened by the recipient.")
+                                                    }
                                             ) {
-                                                Column(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalAlignment = Alignment.CenterHorizontally
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    // Header tag with View Once badge
-                                                    Row(
+                                                    // Muted View Once Circle with "1"
+                                                    Box(
                                                         modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .clip(RoundedCornerShape(8.dp))
-                                                            .background(Color.White.copy(alpha = 0.08f))
-                                                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                            .size(26.dp)
+                                                            .clip(CircleShape)
+                                                            .background(if (isDark) Color(0xFF262532) else Color(0xFFE0E0E0)),
+                                                        contentAlignment = Alignment.Center
                                                     ) {
-                                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                                            // View Once "1" glowing badge
-                                                            Box(
-                                                                modifier = Modifier
-                                                                    .size(20.dp)
-                                                                    .clip(CircleShape)
-                                                                    .background(
-                                                                        Brush.linearGradient(
-                                                                            listOf(QivoOrange, QivoGold)
-                                                                        )
-                                                                    ),
-                                                                contentAlignment = Alignment.Center
-                                                            ) {
-                                                                Text(
-                                                                    text = "1",
-                                                                    fontSize = 11.sp,
-                                                                    fontWeight = FontWeight.Black,
-                                                                    color = Color.Black
-                                                                )
-                                                            }
-                                                            Spacer(modifier = Modifier.width(6.dp))
-                                                            Text(
-                                                                text = "View Once",
-                                                                fontSize = 11.sp,
-                                                                fontWeight = FontWeight.Bold,
-                                                                color = QivoGold
-                                                            )
-                                                        }
-
-                                                        Icon(
-                                                            imageVector = Icons.Default.Lock,
-                                                            contentDescription = "Encrypted View Once",
-                                                            tint = Color.White.copy(alpha = 0.7f),
-                                                            modifier = Modifier.size(13.dp)
+                                                        Text(
+                                                            text = "1",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = if (isDark) Color(0xFF9E9E9E) else Color(0xFF757575)
                                                         )
                                                     }
 
-                                                    Spacer(modifier = Modifier.height(8.dp))
+                                                    Spacer(modifier = Modifier.width(10.dp))
 
-                                                    // Opaque Privacy Blur Container (Zero content visible before opening)
+                                                    Column {
+                                                        Text(
+                                                            text = "Photo",
+                                                            fontSize = 13.sp,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            color = if (isDark) Color(0xFFE0E0E0) else Color(0xFF2E7D32)
+                                                        )
+                                                        Text(
+                                                            text = "Opened",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                            color = if (isDark) Color(0xFF9E9E9E) else Color(0xFF757575)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            // Unopened by recipient: Sender sees "Photo • Sent", cannot open
+                                            Surface(
+                                                shape = RoundedCornerShape(16.dp),
+                                                color = if (isDark) Color(0xFF2E2016) else Color(0xFFFFF3E0),
+                                                shadowElevation = 1.dp,
+                                                modifier = Modifier
+                                                    .widthIn(min = 140.dp, max = 220.dp)
+                                                    .clickable {
+                                                        AppToast.show("You cannot view photos sent with View Once.")
+                                                    }
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    // View Once "1" glowing badge
                                                     Box(
                                                         modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .height(105.dp)
-                                                            .clip(RoundedCornerShape(12.dp))
+                                                            .size(26.dp)
+                                                            .clip(CircleShape)
                                                             .background(
-                                                                Brush.verticalGradient(
-                                                                  listOf(
-                                                                        Color(0xFF262235),
-                                                                        Color(0xFF12101B)
-                                                                    )
+                                                                Brush.linearGradient(
+                                                                    listOf(QivoOrange, QivoGold)
                                                                 )
                                                             ),
                                                         contentAlignment = Alignment.Center
                                                     ) {
-                                                        // Ambient subtle glow aura
-                                                        Canvas(modifier = Modifier.size(64.dp)) {
-                                                            drawCircle(
-                                                                brush = Brush.radialGradient(
-                                                                    colors = listOf(
-                                                                        QivoOrange.copy(alpha = 0.35f),
-                                                                        Color.Transparent
-                                                                    )
-                                                                )
-                                                            )
-                                                        }
+                                                        Text(
+                                                            text = "1",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Black,
+                                                            color = Color.Black
+                                                        )
+                                                    }
 
-                                                        Column(
-                                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                                            verticalArrangement = Arrangement.Center
+                                                    Spacer(modifier = Modifier.width(10.dp))
+
+                                                    Column {
+                                                        Text(
+                                                            text = "Photo",
+                                                            fontSize = 13.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = if (isDark) Color(0xFFFFCC80) else Color(0xFFBF360C)
+                                                        )
+                                                        Text(
+                                                            text = "Sent",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                            color = if (isDark) Color(0xFFBCAAA4) else Color(0xFF8D6E63)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        // =========================================================================
+                                        // RECIPIENT BUBBLE: Recipient can open once, then permanently locked
+                                        // =========================================================================
+                                        if (isPhotoAlreadyViewed) {
+                                            // Permanently opened/expired state for recipient
+                                            Surface(
+                                                shape = RoundedCornerShape(16.dp),
+                                                color = if (isDark) Color(0xFF181720) else Color(0xFFF1F3F5),
+                                                shadowElevation = 1.dp,
+                                                modifier = Modifier
+                                                    .widthIn(min = 140.dp, max = 220.dp)
+                                                    .clickable {
+                                                        AppToast.show("This photo was already viewed and expired.")
+                                                    }
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    // Muted View Once Circle with "1"
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(26.dp)
+                                                            .clip(CircleShape)
+                                                            .background(if (isDark) Color(0xFF262532) else Color(0xFFE0E0E0)),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Text(
+                                                            text = "1",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = if (isDark) Color(0xFF9E9E9E) else Color(0xFF757575)
+                                                        )
+                                                    }
+
+                                                    Spacer(modifier = Modifier.width(10.dp))
+
+                                                    Column {
+                                                        Text(
+                                                            text = "Photo",
+                                                            fontSize = 13.sp,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            color = colors.textPrimary
+                                                        )
+                                                        Text(
+                                                            text = "Opened",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                            color = if (isDark) Color(0xFF9E9E9E) else Color(0xFF757575)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            // Unopened state for recipient: Tap to open once
+                                            Surface(
+                                                shape = RoundedCornerShape(16.dp),
+                                                color = if (isDark) Color(0xFF181522) else Color(0xFF232030),
+                                                shadowElevation = 4.dp,
+                                                modifier = Modifier
+                                                    .widthIn(min = 160.dp, max = 220.dp)
+                                                    .clickable {
+                                                        ViewOncePhotoManager.markPhotoAsViewed(context, msg.id, photoUrlOrUri)
+                                                        fullScreenPhotoUrl = photoUrlOrUri
+                                                    }
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(10.dp)
+                                                ) {
+                                                    Column(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalAlignment = Alignment.CenterHorizontally
+                                                    ) {
+                                                        // Header tag with View Once badge
+                                                        Row(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .clip(RoundedCornerShape(8.dp))
+                                                                .background(Color.White.copy(alpha = 0.08f))
+                                                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.SpaceBetween
                                                         ) {
-                                                            Box(
-                                                                modifier = Modifier
-                                                                    .size(40.dp)
-                                                                    .clip(CircleShape)
-                                                                    .background(
-                                                                        Brush.linearGradient(
-                                                                            listOf(QivoOrange, QivoGold)
-                                                                        )
-                                                                    ),
-                                                                contentAlignment = Alignment.Center
-                                                            ) {
-                                                                Icon(
-                                                                    imageVector = Icons.Default.Image,
-                                                                    contentDescription = "View Once Photo",
-                                                                    tint = Color.Black,
-                                                                    modifier = Modifier.size(22.dp)
+                                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                                // View Once "1" glowing badge
+                                                                Box(
+                                                                    modifier = Modifier
+                                                                        .size(20.dp)
+                                                                        .clip(CircleShape)
+                                                                        .background(
+                                                                            Brush.linearGradient(
+                                                                                listOf(QivoOrange, QivoGold)
+                                                                            )
+                                                                        ),
+                                                                    contentAlignment = Alignment.Center
+                                                                ) {
+                                                                    Text(
+                                                                        text = "1",
+                                                                        fontSize = 11.sp,
+                                                                        fontWeight = FontWeight.Black,
+                                                                        color = Color.Black
+                                                                    )
+                                                                }
+                                                                Spacer(modifier = Modifier.width(6.dp))
+                                                                Text(
+                                                                    text = "View Once",
+                                                                    fontSize = 11.sp,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = QivoGold
                                                                 )
                                                             }
 
-                                                            Spacer(modifier = Modifier.height(6.dp))
+                                                            Icon(
+                                                                imageVector = Icons.Default.Lock,
+                                                                contentDescription = "Encrypted View Once",
+                                                                tint = Color.White.copy(alpha = 0.7f),
+                                                                modifier = Modifier.size(13.dp)
+                                                            )
+                                                        }
 
-                                                            Text(
-                                                                text = "Photo",
-                                                                fontSize = 12.sp,
-                                                                fontWeight = FontWeight.Bold,
-                                                                color = Color.White
-                                                            )
-                                                            Text(
-                                                                text = "Tap to view",
-                                                                fontSize = 10.sp,
-                                                                fontWeight = FontWeight.Medium,
-                                                                color = QivoGold
-                                                            )
+                                                        Spacer(modifier = Modifier.height(8.dp))
+
+                                                        // Opaque Privacy Blur Container (Zero content visible before opening)
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .height(105.dp)
+                                                                .clip(RoundedCornerShape(12.dp))
+                                                                .background(
+                                                                    Brush.verticalGradient(
+                                                                        listOf(
+                                                                            Color(0xFF262235),
+                                                                            Color(0xFF12101B)
+                                                                        )
+                                                                    )
+                                                                ),
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+                                                            // Ambient subtle glow aura
+                                                            Canvas(modifier = Modifier.size(64.dp)) {
+                                                                drawCircle(
+                                                                    brush = Brush.radialGradient(
+                                                                        colors = listOf(
+                                                                            QivoOrange.copy(alpha = 0.35f),
+                                                                            Color.Transparent
+                                                                        )
+                                                                    )
+                                                                )
+                                                            }
+
+                                                            Column(
+                                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                                verticalArrangement = Arrangement.Center
+                                                            ) {
+                                                                Box(
+                                                                    modifier = Modifier
+                                                                        .size(40.dp)
+                                                                        .clip(CircleShape)
+                                                                        .background(
+                                                                            Brush.linearGradient(
+                                                                                listOf(QivoOrange, QivoGold)
+                                                                            )
+                                                                        ),
+                                                                    contentAlignment = Alignment.Center
+                                                                ) {
+                                                                    Icon(
+                                                                        imageVector = Icons.Default.Image,
+                                                                        contentDescription = "View Once Photo",
+                                                                        tint = Color.Black,
+                                                                        modifier = Modifier.size(22.dp)
+                                                                    )
+                                                                }
+
+                                                                Spacer(modifier = Modifier.height(6.dp))
+
+                                                                Text(
+                                                                    text = "Photo",
+                                                                    fontSize = 12.sp,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = Color.White
+                                                                )
+                                                                Text(
+                                                                    text = "Tap to view",
+                                                                    fontSize = 10.sp,
+                                                                    fontWeight = FontWeight.Medium,
+                                                                    color = QivoGold
+                                                                )
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -1395,8 +1590,8 @@ fun ConversationScreen(
                         ConversationActionButton(
                             text = "Photo",
                             icon = { PhotoGallery3DIcon(size = 20.dp) },
-                            gradientColors = listOf(Color(0xFF00E676), Color(0xFF00C853), Color(0xFF007E33)),
-                            shadowColor = Color(0xFF007E33),
+                            gradientColors = listOf(Color(0xFFFF8D00), Color(0xFFFF6500), Color(0xFFBF360C)),
+                            shadowColor = Color(0xFFBF360C),
                             isEnabled = !isTargetBlocked,
                             onClick = {
                                 if (!com.example.data.NetworkUtils.isOnline(context)) {
@@ -1411,7 +1606,8 @@ fun ConversationScreen(
                                     AppToast.show("You have been blocked.")
                                     return@ConversationActionButton
                                 }
-                                if (!isExempt && userCurrentCoins < 40) {
+                                if (!isPhotoExempt && userCurrentCoins < 40L) {
+                                    insufficientCoinsRequired = 40L
                                     showInsufficientCoinsDialog = true
                                 } else {
                                     showGalleryScreen = true
@@ -1424,8 +1620,8 @@ fun ConversationScreen(
                         ConversationActionButton(
                             text = "Call",
                             icon = { VoiceCall3DIcon(size = 20.dp) },
-                            gradientColors = listOf(Color(0xFF00E676), Color(0xFF00C853), Color(0xFF008733)),
-                            shadowColor = Color(0xFF00C853),
+                            gradientColors = listOf(Color(0xFFFF8D00), Color(0xFFFF6500), Color(0xFFBF360C)),
+                            shadowColor = Color(0xFFFF6500),
                             isEnabled = !isTargetBlocked,
                             onClick = {
                                 if (isBlockedByMe || profileService.isUserBlockedByMe(myUserId, targetUser.id, context)) {
@@ -1486,8 +1682,8 @@ fun ConversationScreen(
                         ConversationActionButton(
                             text = "Gift",
                             icon = { GiftBox3DIcon(size = 20.dp) },
-                            gradientColors = listOf(Color(0xFF26E06D), Color(0xFF00C853), Color(0xFF007E33)),
-                            shadowColor = Color(0xFF007E33),
+                            gradientColors = listOf(Color(0xFFFFB74D), Color(0xFFFF8D00), Color(0xFFBF360C)),
+                            shadowColor = Color(0xFFBF360C),
                             isEnabled = !isTargetBlocked,
                             onClick = {
                                 if (isBlockedByMe || profileService.isUserBlockedByMe(myUserId, targetUser.id, context)) {
@@ -1815,22 +2011,25 @@ fun ConversationScreen(
                                 return@launch
                             }
 
-                            if (!isExempt) {
+                            if (!isPhotoExempt) {
+                                insufficientCoinsRequired = 40L
                                 val deductResult = profileService.deductPhotoCoins(
                                     senderId = myUserId,
-                                    senderGender = session?.gender ?: "Male",
+                                    senderGender = if (isFemaleAcc) "Female" else "Male",
                                     receiverId = targetUser.id,
                                     receiverName = targetUser.name,
                                     isAdmin = isSenderAdmin,
                                     isCoinSeller = isSenderCoinSeller,
                                     isAgent = isSenderAgent,
-                                    receiverIsAdmin = isReceiverAdmin,
-                                    receiverIsCoinSeller = isReceiverCoinSeller,
-                                    receiverIsAgent = isReceiverAgent
+                                    receiverIsAdmin = false,
+                                    receiverIsCoinSeller = false,
+                                    receiverIsAgent = false,
+                                    context = context
                                 )
                                 if (!deductResult.first) {
                                     messagesList = messagesList.filter { it.id != tempMsgId }
-                                    AppToast.show("Insufficient coins to send photo", isLong = true)
+                                    insufficientCoinsRequired = 40L
+                                    AppToast.show("Insufficient coins to send photo (40 coins required)", isLong = true)
                                     showInsufficientCoinsDialog = true
                                     return@launch
                                 }
@@ -1898,7 +2097,7 @@ private fun ReadReceiptIcon(isRead: Boolean) {
             modifier = Modifier
                 .size(13.dp)
                 .clip(CircleShape)
-                .background(Color(0xFF00E676)),
+                .background(Color(0xFFFF9100)),
             contentAlignment = Alignment.Center
         ) {
             Icon(

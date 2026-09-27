@@ -167,8 +167,8 @@ fun FloatingPartyRoomBubble(
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val center = Offset(size.width / 2, size.height / 2)
                 val baseRadius = (size.width / 2) * 0.72f
-                val pulseColor = if (isMusicPlaying) Color(0xFFFF9100) else Color(0xFF00E676)
-                val pulseColor2 = if (isMusicPlaying) Color(0xFFFFD600) else Color(0xFF69F0AE)
+                val pulseColor = if (isMusicPlaying) Color(0xFFFF9100) else Color(0xFFFF8D00)
+                val pulseColor2 = if (isMusicPlaying) Color(0xFFFFD600) else Color(0xFFFFD54F)
 
                 drawCircle(
                     color = pulseColor.copy(alpha = waveAlpha1),
@@ -198,7 +198,7 @@ fun FloatingPartyRoomBubble(
                     brush = if (isMusicPlaying) {
                         Brush.sweepGradient(listOf(Color(0xFFFFD600), Color(0xFFFF6D00), Color(0xFFFF007F), Color(0xFFFFD600)))
                     } else if (isSpeaking) {
-                        Brush.sweepGradient(listOf(Color(0xFF00E676), Color(0xFF76FF03), Color(0xFF00E676)))
+                        Brush.sweepGradient(listOf(Color(0xFFFF8D00), Color(0xFFFFD54F), Color(0xFFFF8D00)))
                     } else if (isSeated) {
                         Brush.linearGradient(listOf(QivoOrange, QivoYellow))
                     } else {
@@ -254,7 +254,7 @@ fun FloatingPartyRoomBubble(
 
                 // Animated Beat Lines on the reduced circle when speaking or music is playing
                 if (isAudioActive) {
-                    val beatColor = if (isMusicPlaying) Color(0xFFFFD600) else Color(0xFF00E676)
+                    val beatColor = if (isMusicPlaying) Color(0xFFFFD600) else Color(0xFFFF8D00)
                     Row(
                         modifier = Modifier
                             .align(Alignment.Center)
@@ -300,7 +300,7 @@ fun FloatingPartyRoomBubble(
                             Icon(
                                 imageVector = Icons.Default.Mic,
                                 contentDescription = "Speaking",
-                                tint = if (isSpeaking) Color(0xFF00E676) else Color.White,
+                                tint = if (isSpeaking) Color(0xFFFF8D00) else Color.White,
                                 modifier = Modifier.size(12.dp)
                             )
                         }

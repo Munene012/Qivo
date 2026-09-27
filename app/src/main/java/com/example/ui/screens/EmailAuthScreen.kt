@@ -104,6 +104,7 @@ fun EmailAuthScreen(
     if (selectedLegalDoc != null) {
         LegalWebViewScreen(
             initialType = selectedLegalDoc!!,
+            showTabs = false,
             onClose = { selectedLegalDoc = null }
         )
         return
@@ -265,316 +266,280 @@ fun EmailAuthScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = 24.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Spacer(modifier = Modifier.height(12.dp))
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Spacer(modifier = Modifier.height(8.dp))
 
-            // Top Navigation Bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    onClick = onNavigateBack,
-                    shape = CircleShape,
-                    color = Color(0xFFF1F5F9),
-                    modifier = Modifier.size(40.dp)
+                // Top Navigation Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
+                    Surface(
+                        onClick = onNavigateBack,
+                        shape = CircleShape,
+                        color = Color(0xFFF1F5F9),
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = Color(0xFF0F172A),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Text(
+                        text = "Continue with Email",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0F172A)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(36.dp))
+
+                // Email Address Input Block
+                Text(
+                    text = "Email Address",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF334155),
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                OutlinedTextField(
+                    value = emailInput,
+                    onValueChange = {
+                        emailInput = it
+                        errorMessage = null
+                    },
+                    placeholder = {
+                        Text(
+                            text = "e.g. name@domain.com",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 15.sp
+                        )
+                    },
+                    leadingIcon = {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color(0xFF0F172A),
+                            imageVector = Icons.Default.Email,
+                            contentDescription = "Email Icon",
+                            tint = if (emailInput.isNotBlank()) QivoOrange else Color(0xFF94A3B8),
                             modifier = Modifier.size(20.dp)
                         )
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Email,
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Color(0xFFF8FAFC),
+                        unfocusedContainerColor = Color(0xFFF8FAFC),
+                        focusedBorderColor = QivoOrange,
+                        unfocusedBorderColor = Color(0xFFE2E8F0),
+                        focusedTextColor = Color(0xFF0F172A),
+                        unfocusedTextColor = Color(0xFF0F172A)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(58.dp)
+                        .testTag("email_input_field")
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Password Input Block
+                Text(
+                    text = "Password",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF334155),
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                OutlinedTextField(
+                    value = passwordInput,
+                    onValueChange = {
+                        passwordInput = it
+                        errorMessage = null
+                    },
+                    placeholder = {
+                        Text(
+                            text = "At least 6 characters",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 15.sp
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = "Password Icon",
+                            tint = if (passwordInput.isNotBlank()) QivoOrange else Color(0xFF94A3B8),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            focusManager.clearFocus()
+                            performSignIn()
+                        }
+                    ),
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(
+                                imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                contentDescription = "Toggle password visibility",
+                                tint = Color(0xFF64748B),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Color(0xFFF8FAFC),
+                        unfocusedContainerColor = Color(0xFFF8FAFC),
+                        focusedBorderColor = QivoOrange,
+                        unfocusedBorderColor = Color(0xFFE2E8F0),
+                        focusedTextColor = Color(0xFF0F172A),
+                        unfocusedTextColor = Color(0xFF0F172A)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(58.dp)
+                        .testTag("password_input_field")
+                )
+
+                // Feedback / Error Banner
+                if (errorMessage != null) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFFFEF2F2))
+                            .border(1.dp, Color(0xFFFCA5A5), RoundedCornerShape(12.dp))
+                            .padding(14.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.ErrorOutline,
+                                contentDescription = null,
+                                tint = Color(0xFFDC2626),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = errorMessage ?: "",
+                                color = Color(0xFFB91C1C),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Text(
-                    text = "Sign In / Register",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF0F172A)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(28.dp))
-
-            // Brand Accent Badge
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFFFFF7ED))
-                    .border(1.dp, Color(0xFFFFEDD5), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    text = "QIVO ACCOUNT",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = QivoOrange,
-                    letterSpacing = 0.5.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Beautiful Structured Headline
-            Text(
-                text = "Welcome to Qivo",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = Color(0xFF0F172A),
-                letterSpacing = (-0.5).sp
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Text(
-                text = "Enter your email address and password to log in or create a brand new account.",
-                fontSize = 14.sp,
-                color = Color(0xFF64748B),
-                lineHeight = 20.sp
-            )
-
-            Spacer(modifier = Modifier.height(28.dp))
-
-            // Email Address Input Block
-            Text(
-                text = "Email Address",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color(0xFF334155),
-                modifier = Modifier.padding(bottom = 6.dp)
-            )
-
-            OutlinedTextField(
-                value = emailInput,
-                onValueChange = {
-                    emailInput = it
-                    errorMessage = null
-                },
-                placeholder = {
-                    Text(
-                        text = "e.g. name@domain.com",
-                        color = Color(0xFF94A3B8),
-                        fontSize = 15.sp
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Email,
-                        contentDescription = "Email Icon",
-                        tint = if (emailInput.isNotBlank()) QivoOrange else Color(0xFF94A3B8),
-                        modifier = Modifier.size(20.dp)
-                    )
-                },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Email,
-                    imeAction = ImeAction.Next
-                ),
-                keyboardActions = KeyboardActions(
-                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
-                ),
-                shape = RoundedCornerShape(14.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFFF8FAFC),
-                    unfocusedContainerColor = Color(0xFFF8FAFC),
-                    focusedBorderColor = QivoOrange,
-                    unfocusedBorderColor = Color(0xFFE2E8F0),
-                    focusedTextColor = Color(0xFF0F172A),
-                    unfocusedTextColor = Color(0xFF0F172A)
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .testTag("email_input_field")
-            )
-
-            Spacer(modifier = Modifier.height(18.dp))
-
-            // Password Input Block
-            Text(
-                text = "Password",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color(0xFF334155),
-                modifier = Modifier.padding(bottom = 6.dp)
-            )
-
-            OutlinedTextField(
-                value = passwordInput,
-                onValueChange = {
-                    passwordInput = it
-                    errorMessage = null
-                },
-                placeholder = {
-                    Text(
-                        text = "At least 6 characters",
-                        color = Color(0xFF94A3B8),
-                        fontSize = 15.sp
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Lock,
-                        contentDescription = "Password Icon",
-                        tint = if (passwordInput.isNotBlank()) QivoOrange else Color(0xFF94A3B8),
-                        modifier = Modifier.size(20.dp)
-                    )
-                },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Password,
-                    imeAction = ImeAction.Done
-                ),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        focusManager.clearFocus()
-                        performSignIn()
-                    }
-                ),
-                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                trailingIcon = {
-                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                        Icon(
-                            imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                            contentDescription = "Toggle password visibility",
-                            tint = Color(0xFF64748B),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                },
-                shape = RoundedCornerShape(14.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFFF8FAFC),
-                    unfocusedContainerColor = Color(0xFFF8FAFC),
-                    focusedBorderColor = QivoOrange,
-                    unfocusedBorderColor = Color(0xFFE2E8F0),
-                    focusedTextColor = Color(0xFF0F172A),
-                    unfocusedTextColor = Color(0xFF0F172A)
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .testTag("password_input_field")
-            )
-
-            // Feedback / Error Banner
-            if (errorMessage != null) {
-                Spacer(modifier = Modifier.height(14.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFFFEF2F2))
-                        .border(1.dp, Color(0xFFFCA5A5), RoundedCornerShape(12.dp))
-                        .padding(12.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.ErrorOutline,
-                            contentDescription = null,
-                            tint = Color(0xFFDC2626),
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+                if (infoMessage != null) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFFF0FDF4))
+                            .border(1.dp, Color(0xFF86EFAC), RoundedCornerShape(12.dp))
+                            .padding(14.dp)
+                    ) {
                         Text(
-                            text = errorMessage ?: "",
-                            color = Color(0xFFB91C1C),
+                            text = infoMessage ?: "",
+                            color = Color(0xFF15803D),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium
                         )
                     }
                 }
-            }
 
-            if (infoMessage != null) {
-                Spacer(modifier = Modifier.height(14.dp))
-                Box(
+                Spacer(modifier = Modifier.height(36.dp))
+
+                // Log In Button (Primary Orange Pill)
+                Button(
+                    onClick = { performSignIn() },
+                    enabled = !isLoading,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFFF0FDF4))
-                        .border(1.dp, Color(0xFF86EFAC), RoundedCornerShape(12.dp))
-                        .padding(12.dp)
+                        .height(54.dp)
+                        .shadow(elevation = 2.dp, shape = CircleShape)
+                        .testTag("login_action_button"),
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = QivoOrange,
+                        contentColor = Color.White
+                    )
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(
+                            text = "Log In",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Sign Up Button (Secondary Dark Charcoal Pill)
+                Button(
+                    onClick = { performSignUp() },
+                    enabled = !isLoading,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                        .testTag("signup_action_button"),
+                    shape = CircleShape,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF0F172A),
+                        contentColor = Color.White
+                    )
                 ) {
                     Text(
-                        text = infoMessage ?: "",
-                        color = Color(0xFF15803D),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(30.dp))
-
-            // Log In Button (Primary Orange Pill)
-            Button(
-                onClick = { performSignIn() },
-                enabled = !isLoading,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-                    .shadow(elevation = 2.dp, shape = CircleShape)
-                    .testTag("login_action_button"),
-                shape = CircleShape,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = QivoOrange,
-                    contentColor = Color.White
-                )
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Text(
-                        text = "Log In",
+                        text = "Sign Up",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Sign Up Button (Secondary Dark Charcoal Pill)
-            Button(
-                onClick = { performSignUp() },
-                enabled = !isLoading,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-                    .testTag("signup_action_button"),
-                shape = CircleShape,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF0F172A),
-                    contentColor = Color.White
-                )
-            ) {
-                Text(
-                    text = "Sign Up / Create Account",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Clean, Interactive Terms of Service & Privacy Policy Footer
+            // Clean, Interactive Terms of Service & Privacy Policy Footer at bottom
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 24.dp),
+                    .padding(bottom = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
@@ -583,7 +548,7 @@ fun EmailAuthScreen(
                     color = Color(0xFF64748B),
                     textAlign = TextAlign.Center
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center

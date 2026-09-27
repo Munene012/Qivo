@@ -327,7 +327,7 @@ fun LevelScreen(
                     ),
                     border = BorderStroke(
                         1.dp,
-                        if (isUnlocked) Color(0xFF00E676).copy(alpha = 0.5f) else Color(0xFFFF9800).copy(alpha = 0.5f)
+                        if (isUnlocked) Color(0xFFFF9800).copy(alpha = 0.5f) else Color(0xFFFF9800).copy(alpha = 0.2f)
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -340,13 +340,13 @@ fun LevelScreen(
                         Surface(
                             modifier = Modifier.size(44.dp),
                             shape = CircleShape,
-                            color = if (isUnlocked) Color(0xFF00E676).copy(alpha = 0.2f) else Color(0xFFFF9800).copy(alpha = 0.2f)
+                            color = if (isUnlocked) Color(0xFFFF9800).copy(alpha = 0.2f) else Color(0xFFFF9800).copy(alpha = 0.1f)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = if (isUnlocked) Icons.Default.Visibility else Icons.Default.Lock,
                                     contentDescription = null,
-                                    tint = if (isUnlocked) Color(0xFF00E676) else Color(0xFFFF9800),
+                                    tint = if (isUnlocked) Color(0xFFFF9800) else Color(0xFFFF9800),
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
@@ -378,8 +378,8 @@ fun LevelScreen(
                                 onClick = onNavigateToVisitors,
                                 shape = RoundedCornerShape(10.dp),
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF00E676),
-                                    contentColor = Color.Black
+                                    containerColor = Color(0xFFFF8D00),
+                                    contentColor = Color.White
                                 ),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                             ) {
@@ -582,7 +582,7 @@ private fun TierRow(
             Icon(
                 imageVector = Icons.Default.CheckCircle,
                 contentDescription = "Achieved",
-                tint = if (isCurrent) QivoYellow else Color(0xFF00E676),
+                tint = if (isCurrent) QivoYellow else Color(0xFFFF9800),
                 modifier = Modifier.size(18.dp)
             )
         } else {

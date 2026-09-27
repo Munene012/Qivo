@@ -459,7 +459,7 @@ fun IceCream3DGiftIcon(modifier: Modifier = Modifier, size: Dp = 36.dp) {
 
         // Colorful Sugar Sprinkles
         drawCircle(Color(0xFF00E5FF), radius = w * 0.025f, center = Offset(w * 0.40f, h * 0.28f))
-        drawCircle(Color(0xFF76FF03), radius = w * 0.025f, center = Offset(w * 0.60f, h * 0.30f))
+        drawCircle(Color(0xFFFFD54F), radius = w * 0.025f, center = Offset(w * 0.60f, h * 0.30f))
         drawCircle(Color(0xFFFF1744), radius = w * 0.025f, center = Offset(w * 0.48f, h * 0.36f))
 
         // Glossy Maraschino Cherry with Curved Stem
@@ -932,7 +932,7 @@ fun MagicWand3DGiftIcon(modifier: Modifier = Modifier, size: Dp = 36.dp) {
         // Floating Stardust Particles
         drawCircle(Color(0xFF00E5FF), radius = w * 0.04f, center = Offset(w * 0.36f, h * 0.24f))
         drawCircle(Color(0xFFFF4081), radius = w * 0.035f, center = Offset(w * 0.88f, h * 0.48f))
-        drawCircle(Color(0xFF76FF03), radius = w * 0.025f, center = Offset(w * 0.85f, h * 0.14f))
+        drawCircle(Color(0xFFFFD54F), radius = w * 0.025f, center = Offset(w * 0.85f, h * 0.14f))
     }
 }
 
@@ -1442,10 +1442,10 @@ fun Generic3DGiftBoxIcon(
             size = Size(w * 0.76f, h * 0.16f)
         )
 
-        // 3D Gift Box Main Container (Emerald & Jade Gradient)
+        // 3D Gift Box Main Container (Sunset Amber & Gold Gradient)
         drawRoundRect(
             brush = Brush.linearGradient(
-                listOf(Color(0xFF00E676), Color(0xFF00C853), Color(0xFF007E33), Color(0xFF004D20)),
+                listOf(Color(0xFFFF9100), Color(0xFFFF6D00), Color(0xFFE65100), Color(0xFFBF360C)),
                 start = Offset(w * 0.15f, h * 0.36f),
                 end = Offset(w * 0.85f, h * 0.84f)
             ),
@@ -1457,7 +1457,7 @@ fun Generic3DGiftBoxIcon(
         // 3D Overhanging Box Lid
         drawRoundRect(
             brush = Brush.linearGradient(
-                listOf(Color(0xFF69F0AE), Color(0xFF00C853), Color(0xFF007E33)),
+                listOf(Color(0xFFFFB74D), Color(0xFFFF9100), Color(0xFFE65100)),
                 start = Offset(w * 0.10f, h * 0.22f),
                 end = Offset(w * 0.90f, h * 0.38f)
             ),

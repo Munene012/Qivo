@@ -55,6 +55,7 @@ object AppDataCacheManager {
                     put("is_coinseller", profile.isCoinSeller)
                     put("is_agent", profile.isAgent)
                     put("is_online", profile.isOnline)
+                    put("last_active_at", profile.lastActiveAt)
                     put("social_preferences", profile.socialPreferences)
                     put("occupation", profile.occupation)
                     put("languages", profile.languages)
@@ -98,6 +99,7 @@ object AppDataCacheManager {
                         isCoinSeller = obj.optBoolean("is_coinseller", false),
                         isAgent = obj.optBoolean("is_agent", false),
                         isOnline = obj.optBoolean("is_online", false),
+                        lastActiveAt = obj.optString("last_active_at", ""),
                         socialPreferences = obj.optString("social_preferences", "Friendship & Discovery"),
                         occupation = obj.optString("occupation", "Choose"),
                         languages = obj.optString("languages", "Choose"),
@@ -453,6 +455,7 @@ object AppDataCacheManager {
                         isCoinSeller = obj.optBoolean("is_coinseller", false),
                         isAgent = obj.optBoolean("is_agent", false),
                         isOnline = obj.optBoolean("is_online", false),
+                        lastActiveAt = obj.optString("last_active_at", ""),
                         socialPreferences = obj.optString("social_preferences", "Friendship & Discovery")
                     )
                 )
@@ -472,10 +475,17 @@ object AppDataCacheManager {
         userId: String,
         messages: List<ChatMessage>
     ) = withContext(Dispatchers.IO) {
-        if (userId.isBlank()) return@withContext
+        val cleanUserId = userId.trim()
+        if (cleanUserId.isBlank()) return@withContext
         try {
             val jsonArray = JSONArray()
-            messages.take(300).forEach { msg ->
+            val userOnly = messages.filter { msg ->
+                val s = msg.senderId.trim()
+                val r = msg.receiverId.trim()
+                (s.equals(cleanUserId, ignoreCase = true) || r.equals(cleanUserId, ignoreCase = true)) &&
+                !s.equals(r, ignoreCase = true)
+            }
+            userOnly.take(300).forEach { msg ->
                 val obj = JSONObject().apply {
                     put("id", msg.id)
                     put("sender_id", msg.senderId)
@@ -489,8 +499,8 @@ object AppDataCacheManager {
                 }
                 jsonArray.put(obj)
             }
-            getPrefs(context).edit().putString(KEY_CHAT_MESSAGES_PREFIX + userId.trim(), jsonArray.toString()).apply()
-            Log.d(TAG, "Persistently cached ${messages.size} chat messages for user: $userId")
+            getPrefs(context).edit().putString(KEY_CHAT_MESSAGES_PREFIX + cleanUserId, jsonArray.toString()).apply()
+            Log.d(TAG, "Persistently cached ${userOnly.size} chat messages for user: $cleanUserId")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to save chat messages cache: ${e.message}")
         }
@@ -500,21 +510,27 @@ object AppDataCacheManager {
         context: Context,
         userId: String
     ): List<ChatMessage> {
-        if (userId.isBlank()) return emptyList()
+        val cleanUserId = userId.trim()
+        if (cleanUserId.isBlank()) return emptyList()
         val list = mutableListOf<ChatMessage>()
         try {
-            val jsonStr = getPrefs(context).getString(KEY_CHAT_MESSAGES_PREFIX + userId.trim(), null) ?: return emptyList()
+            val jsonStr = getPrefs(context).getString(KEY_CHAT_MESSAGES_PREFIX + cleanUserId, null) ?: return emptyList()
             if (jsonStr.isBlank()) return emptyList()
             val jsonArray = JSONArray(jsonStr)
             for (i in 0 until jsonArray.length()) {
                 val obj = jsonArray.getJSONObject(i)
+                val sId = obj.optString("sender_id", "").trim()
+                val rId = obj.optString("receiver_id", "").trim()
+                if ((!sId.equals(cleanUserId, ignoreCase = true) && !rId.equals(cleanUserId, ignoreCase = true)) || sId.equals(rId, ignoreCase = true)) {
+                    continue
+                }
                 list.add(
                     ChatMessage(
                         id = obj.optLong("id", 0L),
-                        senderId = obj.optString("sender_id", ""),
+                        senderId = sId,
                         senderName = obj.optString("sender_name", "User"),
                         senderAvatar = obj.optString("sender_avatar", ""),
-                        receiverId = obj.optString("receiver_id", ""),
+                        receiverId = rId,
                         receiverName = obj.optString("receiver_name", "User"),
                         message = obj.optString("message", ""),
                         createdAt = obj.optString("created_at", ""),

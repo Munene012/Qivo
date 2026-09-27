@@ -382,13 +382,13 @@ fun ManageRolesScreen(
                                         modifier = Modifier
                                             .size(38.dp)
                                             .clip(RoundedCornerShape(10.dp))
-                                            .background(Color(0xFF00C853).copy(alpha = 0.15f)),
+                                            .background(Color(0xFFFF8D00).copy(alpha = 0.15f)),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Handshake,
                                             contentDescription = null,
-                                            tint = Color(0xFF00C853),
+                                            tint = Color(0xFFFF8D00),
                                             modifier = Modifier.size(22.dp)
                                         )
                                     }
@@ -417,7 +417,7 @@ fun ManageRolesScreen(
                                     onCheckedChange = { isCoinSellerChecked = it },
                                     colors = SwitchDefaults.colors(
                                         checkedThumbColor = Color.White,
-                                        checkedTrackColor = Color(0xFF00C853)
+                                        checkedTrackColor = Color(0xFFFF6500)
                                     ),
                                     modifier = Modifier.testTag("switch_is_coinseller")
                                 )
@@ -634,7 +634,7 @@ fun ManageRolesScreen(
 
                                 if (u.isCoinSeller) {
                                     Surface(
-                                        color = Color(0xFF00C853),
+                                        color = Color(0xFFFF8D00),
                                         shape = RoundedCornerShape(8.dp)
                                     ) {
                                         Text(

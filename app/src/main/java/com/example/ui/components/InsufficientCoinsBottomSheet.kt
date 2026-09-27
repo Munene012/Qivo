@@ -266,7 +266,7 @@ fun InsufficientCoinsBottomSheet(
                     coins = 1000,
                     priceText = "KES 160",
                     badge = "BEST VALUE",
-                    badgeColor = Color(0xFF00C853),
+                    badgeColor = Color(0xFFFF8D00),
                     colors = colors,
                     isDark = isDark,
                     onClick = { initiateCheckout(pkg1000) }

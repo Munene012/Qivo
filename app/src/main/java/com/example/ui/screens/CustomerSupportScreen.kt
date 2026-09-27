@@ -67,10 +67,10 @@ fun CustomerSupportScreen(
                         } else {
                             Brush.verticalGradient(
                                 listOf(
-                                    Color(0xFF009639), // Deep Emerald
-                                    Color(0xFF00B04A), // Jewel Jade
-                                    Color(0xFF00C853), // Vivid Emerald
-                                    Color(0xFF26E06D)  // Mint Emerald
+                                    Color(0xFFBF360C),
+                                    Color(0xFFE65100),
+                                    Color(0xFFFF6500),
+                                    Color(0xFFFF8D00)
                                 )
                             )
                         }
@@ -112,7 +112,7 @@ fun CustomerSupportScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(54.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C853)),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF6500)),
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     WhatsApp3DIcon(size = 28.dp)
@@ -149,8 +149,8 @@ fun CustomerSupportScreen(
                         .background(
                             Brush.verticalGradient(
                                 colors = listOf(
-                                    Color(0xFF00C853),
-                                    Color(0xFF00897B)
+                                    Color(0xFFFF6500),
+                                    Color(0xFFBF360C)
                                 )
                             )
                         )
@@ -212,15 +212,19 @@ fun CustomerSupportScreen(
             SupportChannelCard(
                 icon = { EmailHelpdesk3DIcon(size = 46.dp) },
                 title = "Email Helpdesk",
-                subtitle = "mnene5060@gmail.com",
+                subtitle = "mnene5060@gmail.com (Tap to write)",
                 onClick = {
                     try {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                        val clip = android.content.ClipData.newPlainText("Support Email", "mnene5060@gmail.com")
+                        clipboard?.setPrimaryClip(clip)
                         val emailIntent = Intent(Intent.ACTION_SENDTO).apply {
                             data = Uri.parse("mailto:mnene5060@gmail.com")
+                            putExtra(Intent.EXTRA_SUBJECT, "QIVO Support Request")
                         }
                         context.startActivity(emailIntent)
                     } catch (e: Exception) {
-                        AppToast.show("mnene5060@gmail.com")
+                        AppToast.show("Copied support email: mnene5060@gmail.com")
                     }
                 }
             )

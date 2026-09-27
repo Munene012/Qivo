@@ -287,8 +287,8 @@ fun IncomeScreen(
         }
     }
 
-    val mintGreenTop = Color(0xFF33DF89)
-    val mintGreenDark = Color(0xFF22C55E)
+    val mintGreenTop = Color(0xFFFF6500)
+    val mintGreenDark = Color(0xFFE65100)
     val lightSurfaceBg = if (isDark) Color(0xFF141A1F) else Color(0xFFFFFFFF)
 
     Box(
@@ -297,14 +297,14 @@ fun IncomeScreen(
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        if (isDark) Color(0xFF0D3320) else mintGreenTop,
-                        if (isDark) Color(0xFF082215) else mintGreenDark
+                        if (isDark) Color(0xFF261008) else mintGreenTop,
+                        if (isDark) Color(0xFF120703) else mintGreenDark
                     )
                 )
             )
             .testTag("income_screen")
     ) {
-        // Polka dot pattern texture on the mint green background
+        // Polka dot pattern texture on the luxury amber background
         Canvas(modifier = Modifier.fillMaxSize()) {
             val dotRadius = 2.dp.toPx()
             val spacing = 22.dp.toPx()
@@ -475,20 +475,20 @@ fun IncomeScreen(
                                     text = "Official Rate: 5,000 💎 = 90 Coins",
                                     fontSize = 12.5.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = if (isDark) Color(0xFF34D399) else Color(0xFF059669)
+                                    color = if (isDark) Color(0xFFFF8D00) else Color(0xFFE65100)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Icon(
                                     imageVector = Icons.Default.Lock,
                                     contentDescription = null,
-                                    tint = if (isDark) Color(0xFF34D399) else Color(0xFF059669),
+                                    tint = if (isDark) Color(0xFFFF8D00) else Color(0xFFE65100),
                                     modifier = Modifier.size(12.dp)
                                 )
                                 Text(
                                     text = "Server-Verified",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isDark) Color(0xFF34D399) else Color(0xFF059669)
+                                    color = if (isDark) Color(0xFFFF8D00) else Color(0xFFE65100)
                                 )
                             }
                         }
@@ -566,7 +566,7 @@ fun IncomeScreen(
                                     border = BorderStroke(
                                         width = if (isSelected) 2.dp else 1.dp,
                                         color = when {
-                                            isSelected -> if (isDark) Color(0xFF34D399) else Color(0xFF10B981)
+                                            isSelected -> if (isDark) Color(0xFFFF8D00) else Color(0xFFFF6500)
                                             else -> if (isDark) Color(0xFF334155) else Color(0xFFE5E7EB)
                                         }
                                     ),
@@ -606,7 +606,7 @@ fun IncomeScreen(
                                                     fontSize = 15.sp,
                                                     fontWeight = FontWeight.ExtraBold,
                                                     color = if (isSelected) {
-                                                        if (isDark) Color(0xFF34D399) else Color(0xFF047857)
+                                                        if (isDark) Color(0xFFFF8D00) else Color(0xFFE65100)
                                                     } else colors.textPrimary
                                                 )
                                             }
@@ -641,7 +641,7 @@ fun IncomeScreen(
                             border = BorderStroke(
                                 width = if (isCustomMode) 2.dp else 1.dp,
                                 color = if (isCustomMode) {
-                                    if (isDark) Color(0xFF34D399) else Color(0xFF10B981)
+                                    if (isDark) Color(0xFFFF8D00) else Color(0xFFFF6500)
                                 } else if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0)
                             )
                         ) {
@@ -665,14 +665,14 @@ fun IncomeScreen(
                                                 customDiamondInput = liveDiamonds.toString()
                                             },
                                             shape = RoundedCornerShape(8.dp),
-                                            color = if (isDark) Color(0xFF0F2E1E) else Color(0xFFD1FAE5)
+                                            color = if (isDark) Color(0xFF331600) else Color(0xFFFFF3E0)
                                         ) {
                                             Text(
                                                 text = "MAX",
                                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.ExtraBold,
-                                                color = if (isDark) Color(0xFF34D399) else Color(0xFF059669)
+                                                color = if (isDark) Color(0xFFFF8D00) else Color(0xFFE65100)
                                             )
                                         }
                                     }
@@ -719,7 +719,7 @@ fun IncomeScreen(
                                     keyboardActions = KeyboardActions(onDone = { keyboardController?.hide() }),
                                     shape = RoundedCornerShape(12.dp),
                                     colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = if (isDark) Color(0xFF34D399) else Color(0xFF10B981),
+                                        focusedBorderColor = if (isDark) Color(0xFFFF8D00) else Color(0xFFFF6500),
                                         unfocusedBorderColor = if (isDark) Color(0xFF334155) else Color(0xFFCBD5E1),
                                         focusedContainerColor = if (isDark) Color(0xFF111827) else Color.White,
                                         unfocusedContainerColor = if (isDark) Color(0xFF111827) else Color.White
@@ -768,7 +768,7 @@ fun IncomeScreen(
                                 .shadow(if (canExchange) 6.dp else 0.dp, RoundedCornerShape(16.dp)),
                             shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (!isOnline) Color(0xFFDC2626) else if (isDark) Color(0xFF22C55E) else Color(0xFF10B981),
+                                containerColor = if (!isOnline) Color(0xFFDC2626) else if (isDark) Color(0xFFFF8D00) else Color(0xFFFF6500),
                                 disabledContainerColor = if (isDark) Color(0xFF1E293B) else Color(0xFFE2E8F0)
                             )
                         ) {
@@ -906,11 +906,11 @@ fun IncomeScreen(
                 TabRow(
                     selectedTabIndex = historyFilter,
                     containerColor = Color.Transparent,
-                    contentColor = if (isDark) Color(0xFF34D399) else Color(0xFF10B981),
+                    contentColor = if (isDark) Color(0xFFFF8D00) else Color(0xFFFF6500),
                     indicator = { tabPositions ->
                         TabRowDefaults.SecondaryIndicator(
                             Modifier.tabIndicatorOffset(tabPositions[historyFilter]),
-                            color = if (isDark) Color(0xFF34D399) else Color(0xFF10B981)
+                            color = if (isDark) Color(0xFFFF8D00) else Color(0xFFFF6500)
                         )
                     }
                 ) {
@@ -924,7 +924,7 @@ fun IncomeScreen(
                                     fontSize = 12.5.sp,
                                     fontWeight = if (historyFilter == index) FontWeight.Bold else FontWeight.Normal,
                                     color = if (historyFilter == index) {
-                                        if (isDark) Color(0xFF34D399) else Color(0xFF047857)
+                                        if (isDark) Color(0xFFFF8D00) else Color(0xFFE65100)
                                     } else colors.textSecondary
                                 )
                             }
@@ -943,7 +943,7 @@ fun IncomeScreen(
                     ) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(30.dp),
-                            color = if (isDark) Color(0xFF34D399) else Color(0xFF10B981)
+                            color = if (isDark) Color(0xFFFF8D00) else Color(0xFFFF6500)
                         )
                     }
                 } else if (filteredTransactions.isEmpty()) {
@@ -1043,7 +1043,7 @@ fun IncomeScreen(
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Black,
                                             color = if (isIncome) {
-                                                if (isDark) Color(0xFF34D399) else Color(0xFF059669)
+                                                if (isDark) Color(0xFFFF8D00) else Color(0xFFE65100)
                                             } else {
                                                 if (isDark) Color(0xFFFB923C) else Color(0xFFEA580C)
                                             }
@@ -1052,7 +1052,7 @@ fun IncomeScreen(
                                             text = tx.status,
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = if (isDark) Color(0xFF34D399) else Color(0xFF059669)
+                                            color = if (isDark) Color(0xFFFF8D00) else Color(0xFFE65100)
                                         )
                                     }
                                 }
@@ -1085,7 +1085,7 @@ fun IncomeScreen(
                             .clip(CircleShape)
                             .background(
                                 Brush.radialGradient(
-                                    listOf(Color(0xFF34D399), Color(0xFF059669))
+                                    listOf(Color(0xFFFF8D00), Color(0xFFFF6500))
                                 )
                             ),
                         contentAlignment = Alignment.Center
@@ -1152,7 +1152,7 @@ fun IncomeScreen(
                         onClick = { showSuccessDialog = false },
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isDark) Color(0xFF22C55E) else Color(0xFF10B981)
+                            containerColor = if (isDark) Color(0xFFFF8D00) else Color(0xFFFF6500)
                         ),
                         modifier = Modifier
                             .fillMaxWidth()

@@ -339,7 +339,7 @@ private fun FriendItemCard(
                             .background(colors.cardBg)
                             .padding(2.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF4CAF50))
+                            .background(Color(0xFF00E676))
                     )
                 }
             }
@@ -363,13 +363,13 @@ private fun FriendItemCard(
                     // Mutual Friend Badge
                     Surface(
                         shape = RoundedCornerShape(6.dp),
-                        color = Color(0xFF00C853).copy(alpha = 0.2f)
+                        color = Color(0xFFFF9800).copy(alpha = 0.15f)
                     ) {
                         Text(
                             text = "🤝 Mutual",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF00C853),
+                            color = Color(0xFFFF8D00),
                             modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
                         )
                     }
@@ -381,7 +381,7 @@ private fun FriendItemCard(
                     val isFemale = user.gender.equals("Female", true)
                     Surface(
                         shape = RoundedCornerShape(6.dp),
-                        color = if (isFemale) Color(0xFFE2C485) else Color(0xFFD4C8B8)
+                        color = if (isFemale) Color(0xFFF48FB1) else Color(0xFF90CAF9)
                     ) {
                         Text(
                             text = if (isFemale) "♀" else "♂",

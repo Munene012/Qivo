@@ -68,12 +68,20 @@ USING (auth.uid()::text = user_id::text);
 -- ============================================================================
 -- RPC 1: deduct_chat_coins
 -- Male users charged 15 coins to message.
--- Female users, Admins, Coin Sellers, and Agents message for 0 coins.
+-- Female users, Admins, Coin Sellers, and Agents message for 0 coins (100% Free).
 -- ============================================================================
+DROP FUNCTION IF EXISTS public.deduct_chat_coins(TEXT, TEXT, BIGINT, TEXT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS public.deduct_chat_coins(TEXT, TEXT, BIGINT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS public.deduct_chat_coins(TEXT, TEXT, BIGINT) CASCADE;
+DROP FUNCTION IF EXISTS public.deduct_chat_coins(TEXT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS public.deduct_chat_coins() CASCADE;
+
 CREATE OR REPLACE FUNCTION public.deduct_chat_coins(
     p_sender_id TEXT,
     p_receiver_id TEXT,
-    p_amount BIGINT DEFAULT 15
+    p_amount BIGINT DEFAULT 15,
+    p_sender_gender TEXT DEFAULT '',
+    p_receiver_name TEXT DEFAULT ''
 )
 RETURNS JSONB AS $$
 DECLARE
@@ -87,9 +95,11 @@ DECLARE
     v_receiver_coinseller BOOLEAN;
     v_receiver_agent BOOLEAN;
     v_receiver_name TEXT;
+    v_effective_gender TEXT;
+    v_is_female BOOLEAN;
 BEGIN
-    p_sender_id := trim(p_sender_id);
-    p_receiver_id := trim(p_receiver_id);
+    p_sender_id := trim(COALESCE(p_sender_id, ''));
+    p_receiver_id := trim(COALESCE(p_receiver_id, ''));
 
     -- 1. Check sender profile with ROW LOCK
     SELECT COALESCE(coins, 0), COALESCE(gender, 'Other'), COALESCE(is_admin, false), COALESCE(is_coinseller, false), COALESCE(is_agent, false)
@@ -99,7 +109,11 @@ BEGIN
     FOR UPDATE;
 
     IF NOT FOUND THEN
-        RETURN jsonb_build_object('success', false, 'error', 'SENDER_NOT_FOUND', 'message', 'Sender profile not found');
+        v_sender_coins := 0;
+        v_sender_gender := 'Other';
+        v_sender_admin := false;
+        v_sender_coinseller := false;
+        v_sender_agent := false;
     END IF;
 
     -- 2. Check receiver profile
@@ -108,8 +122,19 @@ BEGIN
     FROM public.profiles
     WHERE id::text = p_receiver_id;
 
-    -- 3. Check exemptions (Female, Admin, Coin Seller, Agent)
-    IF lower(v_sender_gender) <> 'male' OR v_sender_admin OR v_sender_coinseller OR v_sender_agent 
+    IF v_receiver_name IS NULL OR v_receiver_name = 'User' THEN
+        v_receiver_name := COALESCE(NULLIF(trim(p_receiver_name), ''), 'User');
+    END IF;
+
+    -- 3. Resolve gender (prioritize female if client or DB indicates female)
+    v_effective_gender := lower(trim(COALESCE(NULLIF(p_sender_gender, ''), v_sender_gender, 'Other')));
+    v_is_female := v_effective_gender IN ('female', 'f', 'woman', 'w', 'girl', 'lady')
+                   OR lower(trim(v_sender_gender)) IN ('female', 'f', 'woman', 'w', 'girl', 'lady');
+
+    -- 4. Check exemptions (Female, Admin, Coin Seller, Agent)
+    IF v_is_female 
+       OR (v_effective_gender NOT IN ('male', 'm', 'man') AND lower(trim(v_sender_gender)) NOT IN ('male', 'm', 'man'))
+       OR v_sender_admin OR v_sender_coinseller OR v_sender_agent 
        OR COALESCE(v_receiver_admin, false) OR COALESCE(v_receiver_coinseller, false) OR COALESCE(v_receiver_agent, false) THEN
         RETURN jsonb_build_object(
             'success', true,
@@ -118,11 +143,11 @@ BEGIN
             'coins_deducted', 0,
             'amount_to_be_deducted', p_amount,
             'new_balance', v_sender_coins,
-            'message', '0 coins deducted (Free message exemption). Remaining balance: ' || v_sender_coins || ' coins.'
+            'message', '0 coins deducted (Free message exemption for female users, admins, coin sellers, and agents). Remaining balance: ' || v_sender_coins || ' coins.'
         );
     END IF;
 
-    -- 4. Check balance
+    -- 5. Check balance for male users
     IF v_sender_coins < p_amount THEN
         RETURN jsonb_build_object(
             'success', false,
@@ -135,14 +160,14 @@ BEGIN
         );
     END IF;
 
-    -- 5. Deduct coins atomically
+    -- 6. Deduct coins atomically for male non-exempt users
     UPDATE public.profiles
     SET coins = coins - p_amount,
         updated_at = now()
     WHERE id::text = p_sender_id
     RETURNING coins INTO v_new_balance;
 
-    -- 6. Insert audit transaction
+    -- 7. Insert audit transaction
     INSERT INTO public.coin_transactions (
         user_id, amount, type, title, description, created_at
     ) VALUES (
@@ -166,52 +191,73 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
-GRANT EXECUTE ON FUNCTION public.deduct_chat_coins(TEXT, TEXT, BIGINT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.deduct_chat_coins(TEXT, TEXT, BIGINT, TEXT, TEXT) TO anon, authenticated, service_role;
 
 
 -- ============================================================================
 -- RPC 2: deduct_photo_coins
--- Male users charged 40 coins to send a photo.
--- Exempt for females, admins, coin sellers, agents.
+-- 40 coins deducted for ALL users sending photos.
+-- ONLY Admins, Coin Sellers, and Agents are exempt (0 coins deducted).
 -- ============================================================================
+DROP FUNCTION IF EXISTS public.deduct_photo_coins(TEXT, TEXT, BIGINT, TEXT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS public.deduct_photo_coins(TEXT, TEXT, BIGINT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS public.deduct_photo_coins(TEXT, TEXT, TEXT, BIGINT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS public.deduct_photo_coins(TEXT, TEXT, TEXT, BIGINT) CASCADE;
+DROP FUNCTION IF EXISTS public.deduct_photo_coins(TEXT, TEXT, BIGINT) CASCADE;
+DROP FUNCTION IF EXISTS public.deduct_photo_coins(TEXT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS public.deduct_photo_coins() CASCADE;
+
 CREATE OR REPLACE FUNCTION public.deduct_photo_coins(
     p_sender_id TEXT,
-    p_receiver_id TEXT,
-    p_amount BIGINT DEFAULT 40
+    p_receiver_id TEXT DEFAULT '',
+    p_amount BIGINT DEFAULT 40,
+    p_receiver_name TEXT DEFAULT ''
 )
 RETURNS JSONB AS $$
 DECLARE
+    v_caller_id TEXT;
     v_sender_coins BIGINT;
     v_new_balance BIGINT;
-    v_sender_gender TEXT;
     v_sender_admin BOOLEAN;
     v_sender_coinseller BOOLEAN;
     v_sender_agent BOOLEAN;
-    v_receiver_admin BOOLEAN;
-    v_receiver_coinseller BOOLEAN;
-    v_receiver_agent BOOLEAN;
     v_receiver_name TEXT;
 BEGIN
-    p_sender_id := trim(p_sender_id);
-    p_receiver_id := trim(p_receiver_id);
+    v_caller_id := COALESCE(NULLIF(auth.uid()::text, ''), trim(COALESCE(p_sender_id, '')));
 
-    SELECT COALESCE(coins, 0), COALESCE(gender, 'Other'), COALESCE(is_admin, false), COALESCE(is_coinseller, false), COALESCE(is_agent, false)
-    INTO v_sender_coins, v_sender_gender, v_sender_admin, v_sender_coinseller, v_sender_agent
+    IF v_caller_id IS NULL OR v_caller_id = '' THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'AUTHENTICATION_REQUIRED',
+            'message', 'Authentication required for photo coin deduction.'
+        );
+    END IF;
+
+    -- Lock sender row for atomic balance check and deduction
+    SELECT COALESCE(coins, 0), COALESCE(is_admin, false), COALESCE(is_coinseller, false), COALESCE(is_agent, false)
+    INTO v_sender_coins, v_sender_admin, v_sender_coinseller, v_sender_agent
     FROM public.profiles
-    WHERE id::text = p_sender_id
+    WHERE id::text = v_caller_id
     FOR UPDATE;
 
     IF NOT FOUND THEN
-        RETURN jsonb_build_object('success', false, 'error', 'SENDER_NOT_FOUND', 'message', 'Sender profile not found');
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'USER_NOT_FOUND',
+            'message', 'User profile not found.'
+        );
     END IF;
 
-    SELECT COALESCE(name, 'User'), COALESCE(is_admin, false), COALESCE(is_coinseller, false), COALESCE(is_agent, false)
-    INTO v_receiver_name, v_receiver_admin, v_receiver_coinseller, v_receiver_agent
-    FROM public.profiles
-    WHERE id::text = p_receiver_id;
+    -- Resolve receiver name
+    v_receiver_name := COALESCE(NULLIF(trim(p_receiver_name), ''), 'User');
+    IF v_receiver_name = 'User' AND p_receiver_id IS NOT NULL AND trim(p_receiver_id) <> '' THEN
+        SELECT COALESCE(name, 'User') INTO v_receiver_name
+        FROM public.profiles
+        WHERE id::text = trim(p_receiver_id);
+    END IF;
 
-    IF lower(v_sender_gender) <> 'male' OR v_sender_admin OR v_sender_coinseller OR v_sender_agent 
-       OR COALESCE(v_receiver_admin, false) OR COALESCE(v_receiver_coinseller, false) OR COALESCE(v_receiver_agent, false) THEN
+    -- EXEMPTION RULE: ONLY Admin, Coin Seller, and Agent send photos for free
+    IF v_sender_admin OR v_sender_coinseller OR v_sender_agent THEN
         RETURN jsonb_build_object(
             'success', true,
             'exempt', true,
@@ -219,10 +265,11 @@ BEGIN
             'coins_deducted', 0,
             'amount_to_be_deducted', p_amount,
             'new_balance', v_sender_coins,
-            'message', '0 coins deducted (Exempt). Remaining balance: ' || v_sender_coins || ' coins.'
+            'message', '0 coins deducted (Free photo exemption for admin, coin seller, and agent). Remaining balance: ' || v_sender_coins || ' coins.'
         );
     END IF;
 
+    -- Insufficient balance check
     IF v_sender_coins < p_amount THEN
         RETURN jsonb_build_object(
             'success', false,
@@ -231,24 +278,26 @@ BEGIN
             'required', p_amount,
             'amount_to_be_deducted', p_amount,
             'coins_deducted', 0,
-            'message', 'Insufficient coins: ' || p_amount || ' coins required to be deducted, but current balance is ' || v_sender_coins || ' coins.'
+            'message', 'Insufficient coins: ' || p_amount || ' coins required to send photo, but current balance is ' || v_sender_coins || ' coins.'
         );
     END IF;
 
+    -- Deduct coins atomically
     UPDATE public.profiles
     SET coins = coins - p_amount,
         updated_at = now()
-    WHERE id::text = p_sender_id
+    WHERE id::text = v_caller_id
     RETURNING coins INTO v_new_balance;
 
+    -- Record transaction
     INSERT INTO public.coin_transactions (
         user_id, amount, type, title, description, created_at
     ) VALUES (
-        p_sender_id,
+        v_caller_id,
         -p_amount,
         'PHOTO_DEDUCT',
         'Photo to ' || COALESCE(v_receiver_name, 'User'),
-        p_amount || ' Coins deducted for sending photo to ' || COALESCE(v_receiver_name, 'User'),
+        p_amount || ' Coins deducted for photo to ' || COALESCE(v_receiver_name, 'User'),
         now()
     );
 
@@ -259,12 +308,12 @@ BEGIN
         'coins_deducted', p_amount,
         'amount_to_be_deducted', p_amount,
         'new_balance', v_new_balance,
-        'message', p_amount || ' coins deducted for photo message. Remaining balance: ' || v_new_balance || ' coins.'
+        'message', p_amount || ' coins deducted for photo. Remaining balance: ' || v_new_balance || ' coins.'
     );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
-GRANT EXECUTE ON FUNCTION public.deduct_photo_coins(TEXT, TEXT, BIGINT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.deduct_photo_coins(TEXT, TEXT, BIGINT, TEXT) TO anon, authenticated, service_role;
 
 
 -- ============================================================================
@@ -1030,8 +1079,13 @@ GRANT EXECUTE ON FUNCTION public.transfer_coins_to_numeric_id(TEXT, BOOLEAN, BOO
 
 -- ============================================================================
 -- RPC 12: award_coins
--- Handles Admin awards and Coin Seller transfers to numeric ID server-side.
+-- Handles Admin awards (Unlimited coins) and Coin Seller transfers to numeric ID server-side.
 -- ============================================================================
+DROP FUNCTION IF EXISTS public.award_coins(TEXT, BIGINT, BOOLEAN, BOOLEAN, BIGINT, BIGINT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS public.award_coins(TEXT, BIGINT, BOOLEAN, BOOLEAN, BIGINT, BIGINT) CASCADE;
+DROP FUNCTION IF EXISTS public.award_coins(TEXT, BIGINT, BOOLEAN, BOOLEAN, BIGINT) CASCADE;
+DROP FUNCTION IF EXISTS public.award_coins() CASCADE;
+
 CREATE OR REPLACE FUNCTION public.award_coins(
     p_sender_id TEXT,
     p_sender_numeric_id BIGINT,
@@ -1045,17 +1099,20 @@ RETURNS JSONB AS $$
 DECLARE
     v_sender_coins BIGINT;
     v_sender_actual_id TEXT;
+    v_sender_db_admin BOOLEAN;
+    v_sender_db_seller BOOLEAN;
+    v_effective_admin BOOLEAN;
     v_target_id TEXT;
     v_target_name TEXT;
     v_seller_new_coins BIGINT := -1;
     v_target_new_coins BIGINT;
 BEGIN
-    p_sender_id := trim(p_sender_id);
+    p_sender_id := trim(COALESCE(p_sender_id, ''));
     IF p_amount <= 0 THEN
         RETURN jsonb_build_object('success', false, 'error', 'INVALID_AMOUNT', 'message', 'Amount must be greater than 0');
     END IF;
 
-    -- Find target profile
+    -- 1. Find target recipient profile
     SELECT id::text, COALESCE(name, 'User')
     INTO v_target_id, v_target_name
     FROM public.profiles
@@ -1066,16 +1123,19 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'error', 'TARGET_NOT_FOUND', 'message', 'User with Numeric ID ' || p_target_numeric_id || ' not found.');
     END IF;
 
-    -- If NOT admin, deduct from coin seller
-    IF NOT COALESCE(p_is_admin, false) THEN
-        SELECT id::text, COALESCE(coins, 0)
-        INTO v_sender_actual_id, v_sender_coins
-        FROM public.profiles
-        WHERE (p_sender_id <> '' AND id::text = p_sender_id)
-           OR (p_sender_numeric_id > 0 AND numeric_id = p_sender_numeric_id)
-        FOR UPDATE;
+    -- 2. Check sender profile and verify Admin / Coin Seller status
+    SELECT id::text, COALESCE(coins, 0), COALESCE(is_admin, false), COALESCE(is_coinseller, false)
+    INTO v_sender_actual_id, v_sender_coins, v_sender_db_admin, v_sender_db_seller
+    FROM public.profiles
+    WHERE (p_sender_id <> '' AND id::text = p_sender_id)
+       OR (p_sender_numeric_id > 0 AND numeric_id = p_sender_numeric_id)
+    FOR UPDATE;
 
-        IF NOT FOUND THEN
+    v_effective_admin := COALESCE(p_is_admin, false) OR COALESCE(v_sender_db_admin, false);
+
+    -- 3. If NOT admin -> Sender is Coin Seller: DEDUCT from coin seller's balance
+    IF NOT v_effective_admin THEN
+        IF v_sender_actual_id IS NULL THEN
             RETURN jsonb_build_object('success', false, 'error', 'SENDER_NOT_FOUND', 'message', 'Sender profile not found.');
         END IF;
 
@@ -1099,9 +1159,24 @@ BEGIN
             'Transferred ' || p_amount || ' coins to ' || v_target_name || ' (ID: ' || p_target_numeric_id || ')',
             now()
         );
+    ELSE
+        -- Admin: UNLIMITED coins. Log audit without deducting from admin's balance
+        IF v_sender_actual_id IS NOT NULL THEN
+            v_seller_new_coins := v_sender_coins;
+            INSERT INTO public.coin_transactions (
+                user_id, amount, type, title, description, created_at
+            ) VALUES (
+                v_sender_actual_id,
+                0,
+                'ADMIN_AWARD',
+                'Admin Coin Award',
+                'Admin awarded ' || p_amount || ' coins to ' || v_target_name || ' (ID: ' || p_target_numeric_id || ')',
+                now()
+            );
+        END IF;
     END IF;
 
-    -- Credit target
+    -- 4. Credit target recipient with coins
     UPDATE public.profiles
     SET coins = COALESCE(coins, 0) + p_amount,
         updated_at = now()
@@ -1113,9 +1188,9 @@ BEGIN
     ) VALUES (
         v_target_id,
         p_amount,
-        CASE WHEN COALESCE(p_is_admin, false) THEN 'AWARD' ELSE 'TRANSFER' END,
-        CASE WHEN COALESCE(p_is_admin, false) THEN 'Admin Coin Award' ELSE 'P2P Coin Transfer' END,
-        COALESCE(NULLIF(trim(p_reason), ''), CASE WHEN COALESCE(p_is_admin, false) THEN 'Awarded by Administrator' ELSE 'Received from Seller ID ' || p_sender_numeric_id END),
+        CASE WHEN v_effective_admin THEN 'AWARD' ELSE 'TRANSFER' END,
+        CASE WHEN v_effective_admin THEN 'Admin Coin Award' ELSE 'P2P Coin Transfer' END,
+        COALESCE(NULLIF(trim(p_reason), ''), CASE WHEN v_effective_admin THEN 'Awarded by Administrator' ELSE 'Received from Seller ID ' || COALESCE(p_sender_numeric_id, 0) END),
         now()
     );
 
@@ -1129,5 +1204,6 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 GRANT EXECUTE ON FUNCTION public.award_coins(TEXT, BIGINT, BOOLEAN, BOOLEAN, BIGINT, BIGINT, TEXT) TO anon, authenticated, service_role;
+
 
 

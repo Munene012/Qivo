@@ -503,11 +503,11 @@ fun GameCenterScreen(
                         GameSelectionCard(
                             title = "Lucky Dice",
                             tag = "Up to 6x Win",
-                            tagColor = Color(0xFF10B981),
+                            tagColor = Color(0xFFFF9100),
                             description = "Roll the lucky dice and guess the winning numbers or high/low sum total!",
                             iconEmoji = "🎲",
                             features = listOf("Dual Dice", "Guess Numbers", "Up to 6x"),
-                            gradient = Brush.linearGradient(listOf(Color(0xFF059669), Color(0xFF047857))),
+                            gradient = Brush.linearGradient(listOf(Color(0xFFE65100), Color(0xFFBF360C))),
                             isDark = isDark,
                             colors = colors,
                             onClick = { selectedGame = GameType.LUCKY_DICE }
@@ -834,7 +834,7 @@ fun GameCenterScreen(
                             text = "+%,d Coins!".format(payout),
                             fontSize = 26.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF4CAF50)
+                            color = Color(0xFFFF9100)
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
@@ -908,7 +908,7 @@ fun SpinWheelGame(
     val slices = remember {
         listOf(
             0.0 to Color(0xFFE53935),     // 0x
-            1.5 to Color(0xFF43A047),     // 1.5x
+            1.5 to Color(0xFFFF9800),     // 1.5x
             0.5 to Color(0xFFFB8C00),     // 0.5x
             2.0 to Color(0xFF1E88E5),     // 2x
             0.0 to Color(0xFFE53935),     // 0x
@@ -1487,7 +1487,7 @@ fun MysteryChestGame(
                                     text = "${chestRewards[i]}x",
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Black,
-                                    color = if (chestRewards[i] > 0) Color(0xFF4CAF50) else Color(0xFFE53935)
+                                    color = if (chestRewards[i] > 0) Color(0xFFFF9100) else Color(0xFFE53935)
                                 )
                             }
                         } else {
@@ -1724,7 +1724,7 @@ private fun RecentGameRoundsSection(
                             text = if (item.isWin) "+${item.payoutAmount} Coins" else "0 Coins",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = if (item.isWin) Color(0xFF4CAF50) else Color(0xFFE53935)
+                            color = if (item.isWin) Color(0xFFFF9100) else Color(0xFFE53935)
                         )
                     }
                 }

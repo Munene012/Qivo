@@ -64,15 +64,15 @@ fun VoiceMessageBubble(
     val totalSec = if (durationSeconds > 0) durationSeconds else if (isThisActive && playbackState.totalDurationMs > 0) playbackState.totalDurationMs / 1000 else 0
 
     val primaryColor = if (isMe) {
-        if (isDark) Color(0xFF00E676) else Color(0xFF00C853)
+        if (isDark) Color(0xFFFF8D00) else Color(0xFFFF6500)
     } else {
-        if (isDark) Color(0xFF69F0AE) else Color(0xFF007E33)
+        if (isDark) Color(0xFFFFD54F) else Color(0xFFE65100)
     }
 
     val bubbleBg = if (isMe) {
-        if (isDark) Color(0xFF102416) else Color(0xFFEDF8F1)
+        if (isDark) Color(0xFF1E172B) else Color(0xFFF7F5FC)
     } else {
-        if (isDark) Color(0xFF142017) else Color(0xFFF0F6F2)
+        if (isDark) Color(0xFF1A1626) else Color(0xFFF4F2FA)
     }
 
     val infiniteTransition = rememberInfiniteTransition(label = "wave_anim")
@@ -96,8 +96,8 @@ fun VoiceMessageBubble(
         color = bubbleBg,
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            if (isMe) (if (isDark) Color(0xFF388E3C).copy(alpha = 0.6f) else Color(0xFFA5D6A7))
-            else (if (isDark) Color(0xFFBA68C8).copy(alpha = 0.4f) else Color(0xFFE1BEE7))
+            if (isMe) (if (isDark) Color(0xFFD84315).copy(alpha = 0.6f) else Color(0xFFFFD54F))
+            else (if (isDark) Color(0xFF7C4DFF).copy(alpha = 0.4f) else Color(0xFFE040FB))
         ),
         shadowElevation = 1.5.dp,
         modifier = modifier.widthIn(min = 190.dp, max = 270.dp)
@@ -115,8 +115,8 @@ fun VoiceMessageBubble(
                     .clip(CircleShape)
                     .background(
                         Brush.linearGradient(
-                            if (isMe) listOf(Color(0xFF007E33), Color(0xFF00C853))
-                            else listOf(Color(0xFF004D20), Color(0xFF009639))
+                            if (isMe) listOf(Color(0xFFFF6500), Color(0xFFFF8D00))
+                            else listOf(Color(0xFF7C4DFF), Color(0xFFE040FB))
                         )
                     )
                     .clickable(

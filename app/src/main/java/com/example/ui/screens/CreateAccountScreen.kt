@@ -470,7 +470,7 @@ fun CreateAccountScreen(
                         .weight(1f)
                         .height(180.dp)
                         .then(
-                            if (isMaleSelected) Modifier.border(2.5.dp, Color(0xFF4CAF50), RoundedCornerShape(28.dp))
+                            if (isMaleSelected) Modifier.border(2.5.dp, Color(0xFFFF6500), RoundedCornerShape(28.dp))
                             else Modifier
                         ),
                     shape = RoundedCornerShape(28.dp),
@@ -498,7 +498,7 @@ fun CreateAccountScreen(
                             Icon(
                                 imageVector = Icons.Default.Male,
                                 contentDescription = "Male",
-                                tint = Color(0xFF2E7D32),
+                                tint = Color(0xFFFF8D00),
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
@@ -661,11 +661,11 @@ fun CreateAccountScreen(
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color.Black,
-                    contentColor = Color(0xFFB3FF00) // Neon Yellow/Green text
+                    contentColor = Color(0xFFFFD54F) // Warm Gold text
                 )
             ) {
                 if (isSavingProfile) {
-                    CircularProgressIndicator(color = Color(0xFFB3FF00), modifier = Modifier.size(24.dp))
+                    CircularProgressIndicator(color = Color(0xFFFFD54F), modifier = Modifier.size(24.dp))
                 } else {
                     Text(
                         text = "Next: Profile Picture",

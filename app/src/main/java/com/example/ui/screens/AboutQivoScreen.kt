@@ -181,8 +181,8 @@ fun AboutQivoScreen(
 
                     Surface(
                         shape = RoundedCornerShape(16.dp),
-                        color = if (isDark) Color(0x3300C853) else Color(0x1A00C853),
-                        border = BorderStroke(1.dp, Color(0xFF00C853).copy(alpha = 0.5f))
+                        color = if (isDark) Color(0x33FF6500) else Color(0x1AFF6500),
+                        border = BorderStroke(1.dp, Color(0xFFFF6500).copy(alpha = 0.5f))
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -191,7 +191,7 @@ fun AboutQivoScreen(
                             Icon(
                                 imageVector = Icons.Default.CheckCircle,
                                 contentDescription = null,
-                                tint = Color(0xFF00C853),
+                                tint = Color(0xFFFF6500),
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
@@ -199,7 +199,7 @@ fun AboutQivoScreen(
                                 text = "Version 1.0.0 (Official Build)",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isDark) Color(0xFF69F0AE) else Color(0xFF007E33)
+                                color = if (isDark) Color(0xFFFFD54F) else Color(0xFFD84315)
                             )
                         }
                     }

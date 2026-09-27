@@ -281,8 +281,8 @@ fun CoinHistoryScreen(
                             Surface(
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(14.dp),
-                                color = if (isDark) Color(0xFF0F291E) else Color(0xFFE8F5E9),
-                                border = BorderStroke(1.dp, Color(0xFF00C853).copy(alpha = 0.3f))
+                                color = if (isDark) Color(0xFF331600) else Color(0xFFFFF3E0),
+                                border = BorderStroke(1.dp, Color(0xFFFF8D00).copy(alpha = 0.3f))
                             ) {
                                 Row(
                                     modifier = Modifier.padding(10.dp),
@@ -292,13 +292,13 @@ fun CoinHistoryScreen(
                                         modifier = Modifier
                                             .size(28.dp)
                                             .clip(CircleShape)
-                                            .background(Color(0xFF00C853).copy(alpha = 0.2f)),
+                                            .background(Color(0xFFFF8D00).copy(alpha = 0.2f)),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.ArrowDownward,
                                             contentDescription = null,
-                                            tint = Color(0xFF00C853),
+                                            tint = Color(0xFFFF8D00),
                                             modifier = Modifier.size(16.dp)
                                         )
                                     }
@@ -313,7 +313,7 @@ fun CoinHistoryScreen(
                                             text = "+$totalEarned",
                                             fontSize = 13.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF00C853)
+                                            color = Color(0xFFFF8D00)
                                         )
                                     }
                                 }
@@ -610,24 +610,24 @@ private fun TransactionAuditItem(
                     text = if (isPositive) "+${tx.amount}" else "${tx.amount}",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Black,
-                    color = if (isPositive) Color(0xFF00C853) else Color(0xFFE53935)
+                    color = if (isPositive) Color(0xFFFF8D00) else Color(0xFFE53935)
                 )
                 Text(
                     text = "Coins",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (isPositive) Color(0xFF00C853) else Color(0xFFE53935)
+                    color = if (isPositive) Color(0xFFFF8D00) else Color(0xFFE53935)
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Surface(
                     shape = RoundedCornerShape(4.dp),
-                    color = if (isDark) Color(0xFF1E2A1E) else Color(0xFFE8F5E9)
+                    color = if (isDark) Color(0xFF331600) else Color(0xFFFFF3E0)
                 ) {
                     Text(
                         text = tx.status,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF00C853),
+                        color = Color(0xFFFF8D00),
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                     )
                 }
@@ -648,7 +648,7 @@ private fun getTransactionVisuals(tx: CoinTransaction): Triple<ImageVector, Colo
             Triple(Icons.Default.Stars, Color(0xFFFFB300), "Daily Claim")
         }
         upperType.contains("RECHARGE") || upperTitle.contains("RECHARGE") || tx.amount > 100 -> {
-            Triple(Icons.Default.AccountBalanceWallet, Color(0xFF00C853), "Recharge")
+            Triple(Icons.Default.AccountBalanceWallet, Color(0xFFFF8D00), "Recharge")
         }
         upperType.contains("CHAT") || upperTitle.contains("MESSAGE") -> {
             Triple(Icons.AutoMirrored.Filled.Chat, Color(0xFFFF7043), "Text Chat")
@@ -668,7 +668,7 @@ private fun getTransactionVisuals(tx: CoinTransaction): Triple<ImageVector, Colo
         }
         else -> {
             if (tx.amount >= 0) {
-                Triple(Icons.Default.AccountBalanceWallet, Color(0xFF00C853), "Reward")
+                Triple(Icons.Default.AccountBalanceWallet, Color(0xFFFF8D00), "Reward")
             } else {
                 Triple(Icons.Default.AccountBalanceWallet, Color(0xFFE53935), "Deduction")
             }

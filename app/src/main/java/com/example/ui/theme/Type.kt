@@ -8,16 +8,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.example.R
 
-// Google Font Fredoka - Rounded, playful font family with full multi-variant weight spectrum
+// Google Font Fredoka - Rounded, playful font family with softened weight spectrum to reduce heaviness
 val FredokaFontFamily: FontFamily = FontFamily(
     Font(R.font.fredoka_light, weight = FontWeight.Thin),
     Font(R.font.fredoka_light, weight = FontWeight.ExtraLight),
     Font(R.font.fredoka_light, weight = FontWeight.Light),
     Font(R.font.fredoka_regular, weight = FontWeight.Normal),
-    Font(R.font.fredoka_medium, weight = FontWeight.Medium),
-    Font(R.font.fredoka_semibold, weight = FontWeight.SemiBold),
-    Font(R.font.fredoka_bold, weight = FontWeight.Bold),
-    Font(R.font.fredoka_bold, weight = FontWeight.ExtraBold),
+    Font(R.font.fredoka_regular, weight = FontWeight.Medium),
+    Font(R.font.fredoka_medium, weight = FontWeight.SemiBold),
+    Font(R.font.fredoka_medium, weight = FontWeight.Bold),
+    Font(R.font.fredoka_semibold, weight = FontWeight.ExtraBold),
     Font(R.font.fredoka_bold, weight = FontWeight.Black)
 )
 
@@ -32,30 +32,30 @@ val PacificoFontFamily: FontFamily = FontFamily(
 
 // Dedicated font weight variants for semantic app components
 object AppTypographyVariants {
-    // Bold variants for User Names, App & Button titles
+    // Softened bold variants for User Names, App & Button titles
     val ButtonLabel = TextStyle(
         fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 15.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.2.sp
     )
     val ButtonLabelLarge = TextStyle(
         fontFamily = AppFontFamily,
-        fontWeight = FontWeight.ExtraBold,
+        fontWeight = FontWeight.Bold,
         fontSize = 16.sp,
         lineHeight = 22.sp,
         letterSpacing = 0.3.sp
     )
     val UserName = TextStyle(
         fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 16.sp,
         lineHeight = 22.sp
     )
     val UserNameLarge = TextStyle(
         fontFamily = AppFontFamily,
-        fontWeight = FontWeight.ExtraBold,
+        fontWeight = FontWeight.Bold,
         fontSize = 20.sp,
         lineHeight = 26.sp
     )
@@ -63,98 +63,98 @@ object AppTypographyVariants {
     // Slim variants for Message contents and body text
     val MessageBubble = TextStyle(
         fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Light,
+        fontWeight = FontWeight.Normal,
         fontSize = 15.sp,
         lineHeight = 21.sp,
         letterSpacing = 0.2.sp
     )
     val MessagePreview = TextStyle(
         fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Light,
+        fontWeight = FontWeight.Normal,
         fontSize = 13.sp,
         lineHeight = 18.sp,
         letterSpacing = 0.15.sp
     )
     val BodySlim = TextStyle(
         fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Light,
+        fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
         lineHeight = 20.sp
     )
 }
 
-// Material 3 typography with Fredoka rounded typography across all scale tiers
+// Material 3 typography with refined Fredoka rounded typography across all scale tiers
 val Typography = Typography(
-    // Large display headings (Fredoka Black & ExtraBold)
+    // Large display headings (Fredoka Bold & SemiBold)
     displayLarge = TextStyle(
         fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Black,
+        fontWeight = FontWeight.Bold,
         fontSize = 57.sp,
         lineHeight = 64.sp,
         letterSpacing = (-0.25).sp
     ),
     displayMedium = TextStyle(
         fontFamily = AppFontFamily,
-        fontWeight = FontWeight.ExtraBold,
+        fontWeight = FontWeight.Bold,
         fontSize = 45.sp,
         lineHeight = 52.sp,
         letterSpacing = 0.sp
     ),
     displaySmall = TextStyle(
         fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 36.sp,
         lineHeight = 44.sp,
         letterSpacing = 0.sp
     ),
 
-    // Screen and section headlines (Fredoka Bold & ExtraBold)
+    // Screen and section headlines (Fredoka Bold & SemiBold)
     headlineLarge = TextStyle(
         fontFamily = AppFontFamily,
-        fontWeight = FontWeight.ExtraBold,
+        fontWeight = FontWeight.Bold,
         fontSize = 32.sp,
         lineHeight = 40.sp,
         letterSpacing = 0.sp
     ),
     headlineMedium = TextStyle(
         fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 28.sp,
         lineHeight = 36.sp,
         letterSpacing = 0.sp
     ),
     headlineSmall = TextStyle(
         fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 24.sp,
         lineHeight = 32.sp,
         letterSpacing = 0.sp
     ),
 
-    // Titles (Fredoka Bold & SemiBold for User Names and Section Headers)
+    // Titles (Fredoka SemiBold & Medium for User Names and Section Headers)
     titleLarge = TextStyle(
         fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 22.sp,
         lineHeight = 28.sp,
         letterSpacing = 0.sp
     ),
     titleMedium = TextStyle(
         fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.Medium,
         fontSize = 16.sp,
         lineHeight = 24.sp,
         letterSpacing = 0.15.sp
     ),
     titleSmall = TextStyle(
         fontFamily = AppFontFamily,
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Medium,
         fontSize = 14.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.1.sp
     ),
 
-    // Body text (Fredoka Light & Normal for messages and description text)
+    // Body text (Fredoka Normal for clean readability)
     bodyLarge = TextStyle(
         fontFamily = AppFontFamily,
         fontWeight = FontWeight.Normal,
@@ -164,39 +164,39 @@ val Typography = Typography(
     ),
     bodyMedium = TextStyle(
         fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Light,
+        fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.25.sp
     ),
     bodySmall = TextStyle(
         fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Light,
+        fontWeight = FontWeight.Normal,
         fontSize = 12.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.4.sp
     ),
 
-    // Buttons and Action elements (Fredoka Bold & ExtraBold)
+    // Buttons and Action elements (Fredoka SemiBold)
     labelLarge = TextStyle(
         fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 14.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.1.sp
     ),
 
-    // Important labels and tags (Fredoka Bold & SemiBold)
+    // Important labels and tags (Fredoka Medium)
     labelMedium = TextStyle(
         fontFamily = AppFontFamily,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.Medium,
         fontSize = 12.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.5.sp
     ),
     labelSmall = TextStyle(
         fontFamily = AppFontFamily,
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Normal,
         fontSize = 11.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.5.sp

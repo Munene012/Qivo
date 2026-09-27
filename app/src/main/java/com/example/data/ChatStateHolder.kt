@@ -43,13 +43,26 @@ object ChatStateHolder {
     private val profileService = SupabaseProfileService()
 
     private var activeWebSocket: WebSocket? = null
-    private var connectedUserId: String = ""
+    var connectedUserId: String = ""
+        private set
     private var isSubscribed = false
+    private var heartbeatJob: Job? = null
+    private var continuousPollingJob: Job? = null
+    private var appContext: Context? = null
 
     private fun setMessagesList(list: List<ChatMessage>) {
-        _messagesList.value = list
-        if (connectedUserId.isNotBlank()) {
-            val unread = list.count { !it.isRead && it.receiverId.trim().equals(connectedUserId, ignoreCase = true) }
+        val uId = connectedUserId.trim()
+        val filtered = if (uId.isNotBlank()) {
+            list.filter { msg ->
+                val s = msg.senderId.trim()
+                val r = msg.receiverId.trim()
+                (s.equals(uId, ignoreCase = true) || r.equals(uId, ignoreCase = true)) &&
+                !s.equals(r, ignoreCase = true)
+            }
+        } else list
+        _messagesList.value = filtered
+        if (uId.isNotBlank()) {
+            val unread = filtered.count { !it.isRead && it.receiverId.trim().equals(uId, ignoreCase = true) }
             SupabaseChatService.setUnreadCount(unread)
             Log.d(TAG, "Global unread count changed: $unread")
         }
@@ -71,7 +84,30 @@ object ChatStateHolder {
         return false
     }
 
+    fun startContinuousPolling(context: Context, userId: String) {
+        val uId = userId.trim()
+        if (uId.isBlank()) return
+        continuousPollingJob?.cancel()
+        continuousPollingJob = scope.launch {
+            while (isActive && connectedUserId.equals(uId, ignoreCase = true)) {
+                delay(3500L) // Poll every 3.5s for seamless background updates across all screens
+                val ctx = appContext ?: context.applicationContext
+                if (isNetworkAvailable(ctx)) {
+                    try {
+                        val recent = chatService.checkRecentIncomingMessages(uId, ctx, limit = 40)
+                        if (recent.isNotEmpty()) {
+                            appendOrUpdateMessages(recent)
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Continuous message polling error: ${e.message}")
+                    }
+                }
+            }
+        }
+    }
+
     fun initialize(context: Context, currentUserId: String) {
+        appContext = context.applicationContext
         if (currentUserId.isBlank()) {
             setMessagesList(emptyList())
             _hasCompletedInitialSync.value = false
@@ -80,13 +116,16 @@ object ChatStateHolder {
         }
 
         if (connectedUserId == currentUserId) {
-            // Already initialized for this user, trigger a background sync to check for updates
+            // Ensure continuous polling & realtime are actively running
+            startContinuousPolling(context, currentUserId)
+            connectRealtime(currentUserId)
             syncWithNetwork(context, currentUserId)
             return
         }
 
         connectedUserId = currentUserId
         _hasCompletedInitialSync.value = false
+        startContinuousPolling(context, currentUserId)
 
         // Populate profilesMap immediately and synchronously so there's no split-second "QIVO User" pop-up!
         try {
@@ -105,8 +144,16 @@ object ChatStateHolder {
                     AppDataCacheManager.getCachedChatMessagesSync(context, currentUserId)
                 }
                 
+                // Filter messages belonging to current user only
+                val userMsgs = msgs.filter { msg ->
+                    val s = msg.senderId.trim()
+                    val r = msg.receiverId.trim()
+                    (s.equals(currentUserId, ignoreCase = true) || r.equals(currentUserId, ignoreCase = true)) &&
+                    !s.equals(r, ignoreCase = true)
+                }
+
                 // Filter out deleted messages
-                val filteredMsgs = msgs.filterNot { msg ->
+                val filteredMsgs = userMsgs.filterNot { msg ->
                     val partnerId = if (msg.senderId.trim().equals(currentUserId, ignoreCase = true)) msg.receiverId.trim() else msg.senderId.trim()
                     chatService.isConversationSoftDeleted(context, currentUserId, partnerId, msg.createdAt)
                 }
@@ -299,6 +346,27 @@ object ChatStateHolder {
         _profilesMap.value = current
     }
 
+    private fun startHeartbeat(webSocket: WebSocket) {
+        heartbeatJob?.cancel()
+        heartbeatJob = scope.launch {
+            var ref = 1
+            while (isActive && activeWebSocket === webSocket) {
+                delay(20_000L) // Phoenix protocol heartbeat required every 20-30s
+                try {
+                    val hbMsg = JSONObject().apply {
+                        put("topic", "phoenix")
+                        put("event", "heartbeat")
+                        put("payload", JSONObject())
+                        put("ref", "hb_${ref++}")
+                    }.toString()
+                    webSocket.send(hbMsg)
+                } catch (_: Exception) {
+                    break
+                }
+            }
+        }
+    }
+
     fun connectRealtime(userId: String) {
         if (userId.isBlank()) return
         if (connectedUserId == userId && isSubscribed && activeWebSocket != null) {
@@ -313,13 +381,16 @@ object ChatStateHolder {
         val apiKey = SupabaseConfig.supabaseAnonKey.trim()
         if (baseUrl.isBlank() || apiKey.isBlank()) return
 
+        val userToken = if (appContext != null) UserSessionManager.getValidAccessToken(appContext) else UserSessionManager.getAccessToken()
         val wsHost = baseUrl.replace("https://", "wss://").replace("http://", "ws://")
-        val wsUrl = "$wsHost/realtime/v1/websocket?apikey=$apiKey&vsn=1.0.0"
+        val wsUrl = "$wsHost/realtime/v1/websocket?apikey=$apiKey&vsn=1.0.0${if (userToken.isNotBlank()) "&access_token=$userToken" else ""}"
 
         scope.launch {
             try {
                 // Close existing socket if any before reconnecting
                 try {
+                    heartbeatJob?.cancel()
+                    heartbeatJob = null
                     activeWebSocket?.close(1000, "Reconnecting new socket")
                 } catch (_: Exception) {}
 
@@ -327,6 +398,7 @@ object ChatStateHolder {
                 activeWebSocket = httpClient.newWebSocket(request, object : WebSocketListener() {
                     override fun onOpen(webSocket: WebSocket, response: Response) {
                         Log.d(TAG, "Realtime subscription status: opened successfully, joining realtime channel")
+                        startHeartbeat(webSocket)
                         
                         val joinTopic = "realtime:public:messages"
                         val joinMsg = JSONObject().apply {
@@ -346,13 +418,26 @@ object ChatStateHolder {
                             put("ref", "chat_join")
                         }.toString()
                         webSocket.send(joinMsg)
-                        isSubscribed = true
+                        // Wait for phx_reply status "ok" before setting isSubscribed = true
                     }
 
                     override fun onMessage(webSocket: WebSocket, text: String) {
                         try {
                             val json = JSONObject(text)
                             val event = json.optString("event", "")
+                            val ref = json.optString("ref", "")
+
+                            if (event == "phx_reply" && ref == "chat_join") {
+                                val payload = json.optJSONObject("payload")
+                                val status = payload?.optString("status", "") ?: ""
+                                if (status.equals("ok", ignoreCase = true)) {
+                                    isSubscribed = true
+                                    Log.d(TAG, "Realtime channel joined successfully (phx_reply status ok)")
+                                } else {
+                                    Log.w(TAG, "Realtime channel join failed: status=$status")
+                                }
+                            }
+
                             if (event == "postgres_changes") {
                                 val payload = json.optJSONObject("payload")
                                 val data = payload?.optJSONObject("data")
@@ -386,7 +471,7 @@ object ChatStateHolder {
                                                     createdAt = createdAt,
                                                     isRead = isRead
                                                 )
-                                                handleRealtimeMessage(chatMessage, null)
+                                                handleRealtimeMessage(chatMessage, appContext)
                                             }
                                         }
                                     }
@@ -399,12 +484,16 @@ object ChatStateHolder {
 
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                         Log.w(TAG, "WebSocket failure: ${t.message}, scheduling realtime reconnect...")
+                        heartbeatJob?.cancel()
+                        heartbeatJob = null
                         isSubscribed = false
                         scheduleReconnect()
                     }
 
                     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                         Log.d(TAG, "Subscription stopped / WebSocket closed: $reason, scheduling realtime reconnect...")
+                        heartbeatJob?.cancel()
+                        heartbeatJob = null
                         isSubscribed = false
                         scheduleReconnect()
                     }
@@ -429,6 +518,10 @@ object ChatStateHolder {
 
     fun disconnect() {
         Log.d(TAG, "Subscription stopped / Disconnect called")
+        heartbeatJob?.cancel()
+        heartbeatJob = null
+        continuousPollingJob?.cancel()
+        continuousPollingJob = null
         try {
             activeWebSocket?.close(1000, "Disconnect called")
         } catch (_: Exception) {}

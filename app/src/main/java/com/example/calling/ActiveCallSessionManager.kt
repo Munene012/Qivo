@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.util.Log
 import android.widget.Toast
 import com.example.data.PartyRoomSessionManager
 import com.example.data.SupabaseProfileService
@@ -357,6 +358,31 @@ object ActiveCallSessionManager {
         startTimeoutCountdown(context, isCaller = true, remoteUserName = receiver.name)
     }
 
+    private fun recordCallOutcomeMessage(context: Context, session: ActiveCallSession, outcomeText: String) {
+        if (outcomeText.contains("Cancelled", ignoreCase = true) ||
+            outcomeText.contains("Rejected", ignoreCase = true) ||
+            outcomeText.contains("Timeout", ignoreCase = true) ||
+            outcomeText.contains("Declined", ignoreCase = true)) {
+            return
+        }
+        scope.launch {
+            try {
+                val chatService = com.example.data.SupabaseChatService()
+                chatService.sendMessage(
+                    senderId = session.myUser.id,
+                    senderName = session.myUser.name,
+                    senderAvatar = session.myUser.avatarUrl,
+                    receiverId = session.otherUser.id,
+                    receiverName = session.otherUser.name,
+                    messageText = outcomeText,
+                    context = context
+                )
+            } catch (e: Exception) {
+                Log.e("ActiveCallSessionManager", "Error recording call outcome message: ${e.message}")
+            }
+        }
+    }
+
     private fun startTimeoutCountdown(context: Context, isCaller: Boolean, remoteUserName: String) {
         timeoutJob?.cancel()
         timeoutJob = scope.launch {
@@ -374,6 +400,8 @@ object ActiveCallSessionManager {
                 val reason = if (isCaller) "No answer from $remoteUserName (40s timeout)" else "Missed call (40s timeout)"
                 _currentSession.value = cur.copy(status = ActiveCallStatus.ENDED, endReason = reason)
                 AppToast.show(reason, isLong = true)
+
+                recordCallOutcomeMessage(context, cur, "[Timeout]")
 
                 // Notify remote party
                 CallRealtimeRelayManager.sendSignal(
@@ -436,6 +464,7 @@ object ActiveCallSessionManager {
         InAppCallTonePlayer.stopRinging()
 
         _currentSession.value = session.copy(status = ActiveCallStatus.ENDED, endReason = "Call declined")
+        recordCallOutcomeMessage(context, session, "[Rejected]")
 
         // Send DECLINE signal to caller
         CallRealtimeRelayManager.sendSignal(
@@ -469,6 +498,19 @@ object ActiveCallSessionManager {
         InAppCallTonePlayer.stopRinging()
 
         _currentSession.value = session.copy(status = ActiveCallStatus.ENDED, endReason = "Call ended")
+
+        val wasRinging = (session.status == ActiveCallStatus.OUTGOING_RINGING || session.status == ActiveCallStatus.INCOMING_RINGING)
+        val wasConnected = (session.status == ActiveCallStatus.CONNECTED || session.durationSeconds > 0)
+        val outcome = if (wasRinging) {
+            "[Cancelled]"
+        } else if (wasConnected) {
+            val mins = session.durationSeconds / 60
+            val secs = session.durationSeconds % 60
+            String.format(java.util.Locale.US, "[%d:%02d]", mins, secs)
+        } else {
+            "[Cancelled]"
+        }
+        recordCallOutcomeMessage(context, session, outcome)
 
         // Send END signal to remote party
         CallRealtimeRelayManager.sendSignal(

@@ -272,7 +272,7 @@ fun CallSettingsScreen(
                 Column(modifier = Modifier.padding(16.dp)) {
                     DndRuleBullet(
                         icon = Icons.Default.CheckCircle,
-                        iconTint = Color(0xFF00E676),
+                        iconTint = Color(0xFFFF8D00),
                         title = "Separate Voice & Video Protection",
                         description = "You can block video calls while still staying available for voice calls, or block both for total privacy.",
                         textPrimary = textPrimary,
@@ -405,10 +405,10 @@ private fun DndCallSettingCard(
             // Status Indicator Pill
             Surface(
                 shape = RoundedCornerShape(8.dp),
-                color = if (isEnabled) Color(0xFFFF5252).copy(alpha = 0.12f) else Color(0xFF00E676).copy(alpha = 0.12f),
+                color = if (isEnabled) Color(0xFFFF5252).copy(alpha = 0.12f) else Color(0xFFFF9800).copy(alpha = 0.12f),
                 border = BorderStroke(
                     1.dp,
-                    if (isEnabled) Color(0xFFFF5252).copy(alpha = 0.3f) else Color(0xFF00E676).copy(alpha = 0.3f)
+                    if (isEnabled) Color(0xFFFF5252).copy(alpha = 0.3f) else Color(0xFFFF9800).copy(alpha = 0.3f)
                 )
             ) {
                 Row(
@@ -419,14 +419,14 @@ private fun DndCallSettingCard(
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(if (isEnabled) Color(0xFFFF5252) else Color(0xFF00E676))
+                            .background(if (isEnabled) Color(0xFFFF5252) else Color(0xFFFF8D00))
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = if (isEnabled) "DND ACTIVE • Calls are blocked" else "NORMAL • Ready to receive calls",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (isEnabled) Color(0xFFFF5252) else Color(0xFF00E676)
+                        color = if (isEnabled) Color(0xFFFF5252) else Color(0xFFFF8D00)
                     )
                 }
             }

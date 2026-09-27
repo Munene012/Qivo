@@ -1018,7 +1018,7 @@ fun Custom3DPartyReaction(size: Dp = 38.dp, animated: Boolean = true) {
 
         // Exploding Confetti Particles
         val confettiColors = listOf(
-            Color(0xFFFF1744), Color(0xFFFFEA00), Color(0xFF00E676),
+            Color(0xFFFF1744), Color(0xFFFFEA00), Color(0xFFFF6D00),
             Color(0xFF2979FF), Color(0xFFD500F9), Color(0xFFFF9100)
         )
 

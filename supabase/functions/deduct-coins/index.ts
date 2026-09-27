@@ -6,7 +6,7 @@
 //   supabase functions deploy deduct-coins --no-verify-jwt
 //
 // Every response explicitly states the amount of coins deducted / to be deducted:
-//   - coins_deducted: number of coins deducted (or 0 if exempt)
+//   - coins_deducted: number of coins deducted (0 for female users, admins, coin sellers, agents)
 //   - amount_to_be_deducted: original intended deduction amount
 //   - message: explicit human-readable notification mentioning the exact coin amount
 //   - new_balance: authoritative user coin balance
@@ -21,10 +21,18 @@ const corsHeaders = {
 };
 
 interface DeductRequest {
-  action: "CHAT" | "PHOTO" | "CALL_MINUTE" | "GIFT" | "AVATAR_FRAME" | "PARTY_ROOM" | "MESSAGE_BLAST" | "GENERAL";
+  action: "CHAT" | "PHOTO" | "CALL_MINUTE" | "GIFT" | "AVATAR_FRAME" | "PARTY_ROOM" | "MESSAGE_BLAST" | "GENERAL" | "AWARD_COINS" | "AWARD" | "TRANSFER";
   user_id?: string;
+  sender_id?: string;
+  sender_numeric_id?: number | string;
+  is_admin?: boolean;
+  is_coinseller?: boolean;
+  target_numeric_id?: number | string;
+  target_user_id?: string;
+  sender_gender?: string;
   amount?: number;
   recipient_id?: string;
+  receiver_id?: string;
   recipient_name?: string;
   gift_name?: string;
   call_type?: "VOICE" | "VIDEO";
@@ -35,6 +43,7 @@ interface DeductRequest {
   room_name?: string;
   title?: string;
   description?: string;
+  reason?: string;
 }
 
 serve(async (req: Request) => {
@@ -59,29 +68,20 @@ serve(async (req: Request) => {
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
 
-    // 1. Authenticate caller from Authorization Bearer token
+    // 1. Authenticate caller from Authorization Bearer token (if present)
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: "Authorization header required.",
-          message: "Authentication token missing" 
-        }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const token = authHeader.replace("Bearer ", "").trim();
     let callerUserId = "";
 
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-    if (!authError && user) {
-      callerUserId = user.id;
+    if (authHeader) {
+      const token = authHeader.replace("Bearer ", "").trim();
+      const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+      if (!authError && user) {
+        callerUserId = user.id;
+      }
     }
 
     const payload: DeductRequest = await req.json().catch(() => ({}));
-    const targetUserId = (payload.user_id || callerUserId || "").trim();
+    const targetUserId = (payload.user_id || payload.sender_id || callerUserId || "").trim();
 
     if (!targetUserId) {
       return new Response(
@@ -94,98 +94,198 @@ serve(async (req: Request) => {
       );
     }
 
+    // 2. Fetch sender profile to check authoritative gender and role exemptions
+    const { data: senderProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("coins, gender, is_admin, is_coinseller, is_agent")
+      .eq("id", targetUserId)
+      .maybeSingle();
+
+    const rawSenderGender = (
+      payload.sender_gender ||
+      payload.caller_gender ||
+      senderProfile?.gender ||
+      ""
+    ).trim().toLowerCase();
+
+    // Comprehensive check for female users / non-male users (always free/exempt, 0 coins deducted)
+    const isFemale =
+      rawSenderGender.includes("female") ||
+      rawSenderGender.includes("woman") ||
+      rawSenderGender.includes("girl") ||
+      rawSenderGender.includes("lady") ||
+      rawSenderGender === "f" ||
+      rawSenderGender === "w" ||
+      rawSenderGender === "" ||
+      (rawSenderGender !== "male" && rawSenderGender !== "m" && rawSenderGender !== "man" && rawSenderGender !== "boy");
+
+    const isSenderExempt =
+      isFemale ||
+      senderProfile?.is_admin === true ||
+      senderProfile?.is_coinseller === true ||
+      senderProfile?.is_agent === true;
+
+    // Check receiver exemptions if recipient_id provided
+    const recipientId = (payload.recipient_id || payload.receiver_id || "").trim();
+    let isReceiverExempt = false;
+    let receiverName = payload.recipient_name || "User";
+
+    if (recipientId) {
+      const { data: receiverProfile } = await supabaseAdmin
+        .from("profiles")
+        .select("name, is_admin, is_coinseller, is_agent")
+        .eq("id", recipientId)
+        .maybeSingle();
+
+      if (receiverProfile) {
+        receiverName = receiverProfile.name || receiverName;
+        isReceiverExempt =
+          receiverProfile.is_admin === true ||
+          receiverProfile.is_coinseller === true ||
+          receiverProfile.is_agent === true;
+      }
+    }
+
+    const currentBalance = Number(senderProfile?.coins ?? 0);
     const action = (payload.action || "GENERAL").toUpperCase();
 
     // ========================================================================
-    // ACTION 1: CHAT MESSAGE DEDUCTION
+    // ACTION 1: CHAT MESSAGE DEDUCTION (15 coins for male, 0 for female)
     // ========================================================================
     if (action === "CHAT") {
-      const recipientId = (payload.recipient_id || "").trim();
-      const intendedAmount = Number(payload.amount ?? 20);
+      const intendedAmount = Number(payload.amount ?? 15);
 
-      const { data, error } = await supabaseAdmin.rpc("deduct_chat_coins", {
-        p_sender_id: targetUserId,
-        p_receiver_id: recipientId,
-        p_message_text: payload.description || "Chat message",
-        p_coins_cost: intendedAmount
-      });
+      // EXEMPTION: Female users, Admins, Coin Sellers, and Agents text 100% for free!
+      if (isSenderExempt || isReceiverExempt) {
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            exempt: true,
+            amount_to_be_deducted: intendedAmount,
+            coins_deducted: 0,
+            deducted: 0,
+            new_balance: currentBalance,
+            message: `0 coins deducted (Free message exemption for female users, admins, coin sellers, and agents). Balance: ${currentBalance} coins.`
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
-      if (error) {
+      // Check balance for non-exempt male user
+      if (currentBalance < intendedAmount) {
         return new Response(
           JSON.stringify({ 
             success: false, 
-            error: error.message,
+            error: "INSUFFICIENT_COINS",
             amount_to_be_deducted: intendedAmount,
-            message: `Failed to deduct ${intendedAmount} coins: ${error.message}`
+            coins_deducted: 0,
+            new_balance: currentBalance,
+            message: `Insufficient coins: ${intendedAmount} coins required, but current balance is ${currentBalance} coins.`
           }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const isExempt = data?.exempt === true;
-      const coinsDeducted = isExempt ? 0 : Number(data?.coins_deducted ?? data?.deducted ?? intendedAmount);
-      const newBalance = Number(data?.new_balance ?? 0);
+      // Execute deduction in database
+      const newBal = currentBalance - intendedAmount;
+      await supabaseAdmin
+        .from("profiles")
+        .update({ coins: newBal, updated_at: new Date().toISOString() })
+        .eq("id", targetUserId);
 
-      const responsePayload = {
-        ...data,
-        success: data?.success ?? true,
-        amount_to_be_deducted: intendedAmount,
-        coins_deducted: coinsDeducted,
-        new_balance: newBalance,
-        message: isExempt 
-          ? `0 coins deducted (Free message exemption). Balance: ${newBalance} coins.`
-          : `${coinsDeducted} coins deducted for chat message. Remaining balance: ${newBalance} coins.`
-      };
+      // Record transaction
+      await supabaseAdmin.from("coin_transactions").insert({
+        user_id: targetUserId,
+        amount: -intendedAmount,
+        type: "CHAT_DEDUCT",
+        title: `Message to ${receiverName}`,
+        description: `${intendedAmount} Coins deducted for message to ${receiverName}`,
+        created_at: new Date().toISOString()
+      });
 
       return new Response(
-        JSON.stringify(responsePayload),
+        JSON.stringify({
+          success: true,
+          exempt: false,
+          amount_to_be_deducted: intendedAmount,
+          coins_deducted: intendedAmount,
+          deducted: intendedAmount,
+          new_balance: newBal,
+          message: `${intendedAmount} coins deducted for chat message. Remaining balance: ${newBal} coins.`
+        }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     // ========================================================================
-    // ACTION 2: PHOTO MESSAGE DEDUCTION
+    // ACTION 2: PHOTO MESSAGE DEDUCTION (40 coins for all users except admin, coinseller, and agent)
     // ========================================================================
     if (action === "PHOTO") {
-      const recipientId = (payload.recipient_id || "").trim();
-      const intendedAmount = Number(payload.amount ?? 20);
+      const intendedAmount = Number(payload.amount ?? 40);
 
-      const { data, error } = await supabaseAdmin.rpc("deduct_photo_coins", {
-        p_sender_id: targetUserId,
-        p_receiver_id: recipientId,
-        p_photo_url: payload.description || "Photo message",
-        p_coins_cost: intendedAmount
-      });
+      // EXEMPTION: ONLY Admins, Coin Sellers, and Agents send photos for free
+      const isPhotoExempt =
+        senderProfile?.is_admin === true ||
+        senderProfile?.is_coinseller === true ||
+        senderProfile?.is_agent === true;
 
-      if (error) {
+      if (isPhotoExempt) {
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            exempt: true,
+            amount_to_be_deducted: intendedAmount,
+            coins_deducted: 0,
+            deducted: 0,
+            new_balance: currentBalance,
+            message: `0 coins deducted (Free photo exemption for admins, coin sellers, and agents). Balance: ${currentBalance} coins.`
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Check balance for non-exempt male user
+      if (currentBalance < intendedAmount) {
         return new Response(
           JSON.stringify({ 
             success: false, 
-            error: error.message,
+            error: "INSUFFICIENT_COINS",
             amount_to_be_deducted: intendedAmount,
-            message: `Failed to deduct ${intendedAmount} coins: ${error.message}`
+            coins_deducted: 0,
+            new_balance: currentBalance,
+            message: `Insufficient coins: ${intendedAmount} coins required, but current balance is ${currentBalance} coins.`
           }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const isExempt = data?.exempt === true;
-      const coinsDeducted = isExempt ? 0 : Number(data?.coins_deducted ?? data?.deducted ?? intendedAmount);
-      const newBalance = Number(data?.new_balance ?? 0);
+      // Execute deduction in database
+      const newBal = currentBalance - intendedAmount;
+      await supabaseAdmin
+        .from("profiles")
+        .update({ coins: newBal, updated_at: new Date().toISOString() })
+        .eq("id", targetUserId);
 
-      const responsePayload = {
-        ...data,
-        success: data?.success ?? true,
-        amount_to_be_deducted: intendedAmount,
-        coins_deducted: coinsDeducted,
-        new_balance: newBalance,
-        message: isExempt 
-          ? `0 coins deducted (Exempt). Balance: ${newBalance} coins.`
-          : `${coinsDeducted} coins deducted for photo message. Remaining balance: ${newBalance} coins.`
-      };
+      // Record transaction
+      await supabaseAdmin.from("coin_transactions").insert({
+        user_id: targetUserId,
+        amount: -intendedAmount,
+        type: "PHOTO_DEDUCT",
+        title: `Photo to ${receiverName}`,
+        description: `${intendedAmount} Coins deducted for photo sent to ${receiverName}`,
+        created_at: new Date().toISOString()
+      });
 
       return new Response(
-        JSON.stringify(responsePayload),
+        JSON.stringify({
+          success: true,
+          exempt: false,
+          amount_to_be_deducted: intendedAmount,
+          coins_deducted: intendedAmount,
+          deducted: intendedAmount,
+          new_balance: newBal,
+          message: `${intendedAmount} coins deducted for photo. Remaining balance: ${newBal} coins.`
+        }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -194,17 +294,30 @@ serve(async (req: Request) => {
     // ACTION 3: CALL MINUTE DEDUCTION (Voice = 80, Video = 160)
     // ========================================================================
     if (action === "CALL_MINUTE") {
-      const calleeId = (payload.recipient_id || "").trim();
       const callType = (payload.call_type || "VOICE").toUpperCase();
-      const callerGender = payload.caller_gender || "Male";
-      const calleeGender = payload.callee_gender || "Female";
       const expectedRate = (callType === "VIDEO") ? 160 : 80;
+
+      // Female users call for free
+      if (isSenderExempt || isReceiverExempt) {
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            exempt: true,
+            amount_to_be_deducted: expectedRate,
+            coins_deducted: 0,
+            rate: 0,
+            new_balance: currentBalance,
+            message: `0 coins deducted (Free call exemption). Balance: ${currentBalance} coins.`
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
       const { data, error } = await supabaseAdmin.rpc("deduct_call_minute_coins", {
         p_caller_id: targetUserId,
-        p_caller_gender: callerGender,
-        p_callee_id: calleeId,
-        p_callee_gender: calleeGender,
+        p_caller_gender: rawSenderGender || "Male",
+        p_callee_id: recipientId,
+        p_callee_gender: payload.callee_gender || "Female",
         p_call_type: callType
       });
 
@@ -214,7 +327,7 @@ serve(async (req: Request) => {
             success: false, 
             error: error.message,
             amount_to_be_deducted: expectedRate,
-            message: `Failed to deduct ${expectedRate} coins for call: ${error.message}`
+            message: `Failed to deduct coins for call: ${error.message}`
           }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
@@ -224,20 +337,18 @@ serve(async (req: Request) => {
       const coinsDeducted = isExempt ? 0 : Number(data?.rate ?? expectedRate);
       const callerBalance = Number(data?.caller_balance ?? 0);
 
-      const responsePayload = {
-        ...data,
-        success: data?.success ?? true,
-        amount_to_be_deducted: expectedRate,
-        coins_deducted: coinsDeducted,
-        rate: coinsDeducted,
-        new_balance: callerBalance,
-        message: isExempt 
-          ? `0 coins deducted (Call is free). Balance: ${callerBalance} coins.`
-          : `${coinsDeducted} coins deducted for 1 minute ${callType.toLowerCase()} call. Remaining balance: ${callerBalance} coins.`
-      };
-
       return new Response(
-        JSON.stringify(responsePayload),
+        JSON.stringify({
+          ...data,
+          success: data?.success ?? true,
+          amount_to_be_deducted: expectedRate,
+          coins_deducted: coinsDeducted,
+          rate: coinsDeducted,
+          new_balance: callerBalance,
+          message: isExempt 
+            ? `0 coins deducted (Call is free). Balance: ${callerBalance} coins.`
+            : `${coinsDeducted} coins deducted for 1 minute ${callType.toLowerCase()} call. Remaining balance: ${callerBalance} coins.`
+        }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -246,7 +357,6 @@ serve(async (req: Request) => {
     // ACTION 4: GIFT DEDUCTION
     // ========================================================================
     if (action === "GIFT") {
-      const recipientId = (payload.recipient_id || "").trim();
       const giftName = payload.gift_name || "Gift";
       const coinsCost = Number(payload.amount || 0);
 
@@ -267,7 +377,7 @@ serve(async (req: Request) => {
         p_gift_name: giftName,
         p_coins: coinsCost,
         p_receiver_id: recipientId,
-        p_receiver_name: payload.recipient_name || "User"
+        p_receiver_name: receiverName
       });
 
       if (error) {
@@ -283,17 +393,15 @@ serve(async (req: Request) => {
       }
 
       const newBalance = Number(data?.new_balance ?? 0);
-      const responsePayload = {
-        ...data,
-        success: data?.success ?? true,
-        amount_to_be_deducted: coinsCost,
-        coins_deducted: coinsCost,
-        new_balance: newBalance,
-        message: `${coinsCost} coins deducted for sending ${giftName}. Remaining balance: ${newBalance} coins.`
-      };
-
       return new Response(
-        JSON.stringify(responsePayload),
+        JSON.stringify({
+          ...data,
+          success: data?.success ?? true,
+          amount_to_be_deducted: coinsCost,
+          coins_deducted: coinsCost,
+          new_balance: newBalance,
+          message: `${coinsCost} coins deducted for sending ${giftName}. Remaining balance: ${newBalance} coins.`
+        }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -323,17 +431,15 @@ serve(async (req: Request) => {
       }
 
       const newBalance = Number(data?.new_balance ?? 0);
-      const responsePayload = {
-        ...data,
-        success: data?.success ?? true,
-        amount_to_be_deducted: frameCost,
-        coins_deducted: frameCost,
-        new_balance: newBalance,
-        message: `${frameCost} coins deducted for frame ${frameName}. Remaining balance: ${newBalance} coins.`
-      };
-
       return new Response(
-        JSON.stringify(responsePayload),
+        JSON.stringify({
+          ...data,
+          success: data?.success ?? true,
+          amount_to_be_deducted: frameCost,
+          coins_deducted: frameCost,
+          new_balance: newBalance,
+          message: `${frameCost} coins deducted for frame ${frameName}. Remaining balance: ${newBalance} coins.`
+        }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -364,23 +470,195 @@ serve(async (req: Request) => {
       }
 
       const newBalance = Number(data?.new_balance ?? 0);
-      const responsePayload = {
-        ...data,
-        success: data?.success ?? true,
-        amount_to_be_deducted: roomFee,
-        coins_deducted: roomFee,
-        new_balance: newBalance,
-        message: `${roomFee} coins deducted for creating party room "${roomName}". Remaining balance: ${newBalance} coins.`
-      };
-
       return new Response(
-        JSON.stringify(responsePayload),
+        JSON.stringify({
+          ...data,
+          success: data?.success ?? true,
+          amount_to_be_deducted: roomFee,
+          coins_deducted: roomFee,
+          new_balance: newBalance,
+          message: `${roomFee} coins deducted for creating party room "${roomName}". Remaining balance: ${newBalance} coins.`
+        }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     // ========================================================================
-    // ACTION 7: GENERAL DEDUCTION / ADJUSTMENT
+    // ACTION 7: AWARD COINS / P2P TRANSFER (Admin unlimited, Coin Seller balance deducted)
+    // ========================================================================
+    if (action === "AWARD_COINS" || action === "AWARD" || action === "TRANSFER") {
+      const awardAmount = Math.floor(Number(payload.amount || 0));
+      const targetNumericId = Number(payload.target_numeric_id || 0);
+      const targetUserId = (payload.target_user_id || payload.recipient_id || "").trim();
+      const senderNumericId = Number(payload.sender_numeric_id || 0);
+      const reason = (payload.reason || "").trim();
+
+      if (awardAmount <= 0) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: "INVALID_AMOUNT",
+            message: "Award amount must be greater than 0." 
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (targetNumericId <= 0 && !targetUserId) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: "MISSING_TARGET",
+            message: "Recipient Numeric ID is required." 
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Locate target recipient profile
+      let targetQuery = supabaseAdmin.from("profiles").select("id, name, coins, numeric_id");
+      if (targetNumericId > 0) {
+        targetQuery = targetQuery.eq("numeric_id", targetNumericId);
+      } else {
+        targetQuery = targetQuery.eq("id", targetUserId);
+      }
+      const { data: targetProfile, error: targetError } = await targetQuery.maybeSingle();
+
+      if (targetError || !targetProfile) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: "TARGET_NOT_FOUND",
+            message: `User with ID ${targetNumericId > 0 ? targetNumericId : targetUserId} not found.` 
+          }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Determine admin and coinseller authority
+      const isAdmin = payload.is_admin === true || senderProfile?.is_admin === true;
+      const isCoinSeller = payload.is_coinseller === true || senderProfile?.is_coinseller === true;
+
+      if (!isAdmin && !isCoinSeller) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: "UNAUTHORIZED_ROLE",
+            message: "Only administrators and authorized coin sellers can award or transfer coins." 
+          }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      let sellerNewCoins = -1;
+
+      // Non-admin Coin Seller: DEDUCT from sender's balance
+      if (!isAdmin) {
+        if (!senderProfile) {
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: "SENDER_NOT_FOUND",
+              message: "Coin seller profile could not be located." 
+            }),
+            { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const currentSellerCoins = Number(senderProfile.coins ?? 0);
+        if (currentSellerCoins < awardAmount) {
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: "INSUFFICIENT_BALANCE",
+              message: `Insufficient balance! You have ${currentSellerCoins.toLocaleString()} coins available.` 
+            }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        sellerNewCoins = currentSellerCoins - awardAmount;
+
+        const { error: deductErr } = await supabaseAdmin
+          .from("profiles")
+          .update({ coins: sellerNewCoins, updated_at: new Date().toISOString() })
+          .eq("id", senderProfile.id);
+
+        if (deductErr) {
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: "DEDUCTION_FAILED",
+              message: `Failed to deduct coins from seller: ${deductErr.message}` 
+            }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        await supabaseAdmin.from("coin_transactions").insert({
+          user_id: senderProfile.id,
+          amount: -awardAmount,
+          type: "TRANSFER",
+          title: "Coins Transferred",
+          description: `Transferred ${awardAmount.toLocaleString()} coins to ${targetProfile.name || 'User'} (ID: ${targetProfile.numeric_id || targetNumericId})`,
+          created_at: new Date().toISOString()
+        });
+      } else {
+        // Admin: UNLIMITED coins to award
+        if (senderProfile?.id) {
+          await supabaseAdmin.from("coin_transactions").insert({
+            user_id: senderProfile.id,
+            amount: 0,
+            type: "ADMIN_AWARD",
+            title: "Admin Coin Award",
+            description: `Admin awarded ${awardAmount.toLocaleString()} coins to ${targetProfile.name || 'User'} (ID: ${targetProfile.numeric_id || targetNumericId})`,
+            created_at: new Date().toISOString()
+          });
+        }
+      }
+
+      // Credit target recipient
+      const currentTargetCoins = Number(targetProfile.coins ?? 0);
+      const newTargetCoins = currentTargetCoins + awardAmount;
+
+      const { error: creditErr } = await supabaseAdmin
+        .from("profiles")
+        .update({ coins: newTargetCoins, updated_at: new Date().toISOString() })
+        .eq("id", targetProfile.id);
+
+      if (creditErr) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: "CREDIT_FAILED",
+            message: `Failed to credit coins to recipient: ${creditErr.message}` 
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      await supabaseAdmin.from("coin_transactions").insert({
+        user_id: targetProfile.id,
+        amount: awardAmount,
+        type: isAdmin ? "AWARD" : "TRANSFER",
+        title: isAdmin ? "Admin Coin Award" : "P2P Coin Transfer",
+        description: reason || (isAdmin ? "Awarded by Administrator" : `Received from Seller ID ${senderProfile?.numeric_id || senderNumericId}`),
+        created_at: new Date().toISOString()
+      });
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: `Successfully awarded ${awardAmount.toLocaleString()} coins to ${targetProfile.name || 'User'}! New balance: ${newTargetCoins.toLocaleString()} coins.`,
+          seller_coins: isAdmin ? Number(senderProfile?.coins ?? 0) : sellerNewCoins,
+          target_coins: newTargetCoins
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ========================================================================
+    // ACTION 8: GENERAL DEDUCTION / ADJUSTMENT
     // ========================================================================
     const amountToDeduct = Math.abs(Number(payload.amount || 0));
     if (amountToDeduct <= 0) {
@@ -416,17 +694,15 @@ serve(async (req: Request) => {
     }
 
     const newBalance = Number(data?.new_balance ?? 0);
-    const responsePayload = {
-      ...data,
-      success: data?.success ?? true,
-      amount_to_be_deducted: amountToDeduct,
-      coins_deducted: amountToDeduct,
-      new_balance: newBalance,
-      message: `${amountToDeduct} coins deducted successfully. Remaining balance: ${newBalance} coins.`
-    };
-
     return new Response(
-      JSON.stringify(responsePayload),
+      JSON.stringify({
+        ...data,
+        success: data?.success ?? true,
+        amount_to_be_deducted: amountToDeduct,
+        coins_deducted: amountToDeduct,
+        new_balance: newBalance,
+        message: `${amountToDeduct} coins deducted successfully. Remaining balance: ${newBalance} coins.`
+      }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 

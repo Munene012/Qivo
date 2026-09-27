@@ -432,11 +432,11 @@ fun AgencyCenterScreen(
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Surface(
                                             shape = RoundedCornerShape(4.dp),
-                                            color = Color(0xFF4CAF50).copy(alpha = 0.2f)
+                                            color = Color(0xFFFF9100).copy(alpha = 0.2f)
                                         ) {
                                             Text(
                                                 text = "ACTIVE",
-                                                color = Color(0xFF4CAF50),
+                                                color = Color(0xFFFF9100),
                                                 fontSize = 9.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -642,11 +642,11 @@ fun AgencyCenterScreen(
                                                 }
                                                 Surface(
                                                     shape = RoundedCornerShape(6.dp),
-                                                    color = if (app.status == "APPROVED") Color(0xFF4CAF50).copy(alpha = 0.2f) else Color(0xFFFF5252).copy(alpha = 0.2f)
+                                                    color = if (app.status == "APPROVED") Color(0xFFFF6500).copy(alpha = 0.2f) else Color(0xFFFF5252).copy(alpha = 0.2f)
                                                 ) {
                                                     Text(
                                                         text = app.status,
-                                                        color = if (app.status == "APPROVED") Color(0xFF4CAF50) else Color(0xFFFF5252),
+                                                        color = if (app.status == "APPROVED") Color(0xFFFF6500) else Color(0xFFFF5252),
                                                         fontSize = 11.sp,
                                                         fontWeight = FontWeight.Bold,
                                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
@@ -862,15 +862,15 @@ fun AgencyCenterScreen(
 
                                             Surface(
                                                 shape = RoundedCornerShape(10.dp),
-                                                color = Color(0xFF4CAF50).copy(alpha = 0.15f)
+                                                color = Color(0xFFFF6500).copy(alpha = 0.15f)
                                             ) {
                                                 Row(
                                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(16.dp))
+                                                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFFFF6500), modifier = Modifier.size(16.dp))
                                                     Spacer(modifier = Modifier.width(6.dp))
-                                                    Text("Official Agency Member", color = Color(0xFF4CAF50), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                    Text("Official Agency Member", color = Color(0xFFFF6500), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                                 }
                                             }
                                         }
@@ -1325,11 +1325,11 @@ private fun AgencyApplicationCard(
                 Surface(
                     onClick = onApprove,
                     shape = CircleShape,
-                    color = Color(0xFF4CAF50).copy(alpha = 0.2f),
+                    color = Color(0xFFFF6500).copy(alpha = 0.2f),
                     modifier = Modifier.size(36.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Check, contentDescription = "Approve", tint = Color(0xFF4CAF50), modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Check, contentDescription = "Approve", tint = Color(0xFFFF6500), modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -1541,11 +1541,11 @@ fun AgencyGroupChatView(
                                     } else {
                                         Surface(
                                             shape = RoundedCornerShape(3.dp),
-                                            color = Color(0xFF4CAF50).copy(alpha = 0.2f)
+                                            color = Color(0xFFFF6500).copy(alpha = 0.2f)
                                         ) {
                                             Text(
                                                 text = "MEMBER",
-                                                color = Color(0xFF4CAF50),
+                                                color = Color(0xFFFF6500),
                                                 fontSize = 8.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)

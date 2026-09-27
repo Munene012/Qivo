@@ -20,8 +20,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class QivoApplication : Application(), ImageLoaderFactory {
+    companion object {
+        lateinit var instance: QivoApplication
+            private set
+    }
+
     override fun onCreate() {
         super.onCreate()
+        instance = this
         try {
             val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
             Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->

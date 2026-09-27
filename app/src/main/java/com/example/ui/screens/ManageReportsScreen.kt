@@ -226,7 +226,7 @@ fun ManageReportsScreen(
                             Icon(
                                 imageVector = Icons.Default.Check,
                                 contentDescription = null,
-                                tint = Color(0xFF00C853),
+                                tint = Color(0xFFFF6500),
                                 modifier = Modifier.size(40.dp)
                             )
                             Spacer(modifier = Modifier.height(10.dp))
@@ -257,7 +257,7 @@ fun ManageReportsScreen(
                             ) {
                                 Surface(
                                     color = when (rep.status) {
-                                        "RESOLVED" -> Color(0xFF00C853).copy(alpha = 0.15f)
+                                        "RESOLVED" -> Color(0xFFFF6500).copy(alpha = 0.15f)
                                         "DISMISSED" -> Color(0xFF64748B).copy(alpha = 0.15f)
                                         else -> Color(0xFFE11D48).copy(alpha = 0.15f)
                                     },
@@ -268,7 +268,7 @@ fun ManageReportsScreen(
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Black,
                                         color = when (rep.status) {
-                                            "RESOLVED" -> Color(0xFF00C853)
+                                            "RESOLVED" -> Color(0xFFFF6500)
                                             "DISMISSED" -> Color(0xFF94A3B8)
                                             else -> Color(0xFFE11D48)
                                         },

@@ -165,7 +165,7 @@ fun VoiceCall3DIcon(
         // Upper ear-piece capsule
         drawRoundRect(
             brush = Brush.radialGradient(
-                colors = listOf(Color(0xFFB9F6CA), Color(0xFF00E676), Color(0xFF00A340)),
+                colors = listOf(Color(0xFFFFECB3), Color(0xFFFF8D00), Color(0xFFE65100)),
                 center = Offset(w * 0.65f, h * 0.22f),
                 radius = w * 0.22f
             ),
@@ -177,7 +177,7 @@ fun VoiceCall3DIcon(
         // Lower mic-piece capsule
         drawRoundRect(
             brush = Brush.radialGradient(
-                colors = listOf(Color(0xFFB9F6CA), Color(0xFF00E676), Color(0xFF008733)),
+                colors = listOf(Color(0xFFFFECB3), Color(0xFFFF8D00), Color(0xFFBF360C)),
                 center = Offset(w * 0.25f, h * 0.70f),
                 radius = w * 0.22f
             ),
@@ -194,7 +194,7 @@ fun VoiceCall3DIcon(
         drawPath(
             path = handlePath,
             brush = Brush.linearGradient(
-                listOf(Color(0xFF00E676), Color(0xFF00C853), Color(0xFF007E33)),
+                listOf(Color(0xFFFF8D00), Color(0xFFFF6500), Color(0xFFBF360C)),
                 start = Offset(w * 0.65f, h * 0.28f),
                 end = Offset(w * 0.26f, h * 0.72f)
             ),
@@ -220,12 +220,12 @@ fun VoiceCall3DIcon(
 
         // Ear piece sound ports
         drawCircle(
-            color = Color(0xFF00501E).copy(alpha = 0.45f),
+            color = Color(0xFF5A1A04).copy(alpha = 0.45f),
             radius = w * 0.04f,
             center = Offset(w * 0.70f, h * 0.24f)
         )
         drawCircle(
-            color = Color(0xFF00501E).copy(alpha = 0.45f),
+            color = Color(0xFF5A1A04).copy(alpha = 0.45f),
             radius = w * 0.04f,
             center = Offset(w * 0.26f, h * 0.76f)
         )
@@ -359,14 +359,14 @@ fun GiftBox3DIcon(
             cornerRadius = CornerRadius(w * 0.10f, w * 0.10f)
         )
 
-        // 2. Box base container (Emerald & Jade Gradient)
+        // 2. Box base container (Sunset Amber & Gold Gradient)
         drawRoundRect(
             brush = Brush.verticalGradient(
                 listOf(
-                    Color(0xFF00E676),
-                    Color(0xFF00C853),
-                    Color(0xFF007E33),
-                    Color(0xFF004D20)
+                    Color(0xFFFF8D00),
+                    Color(0xFFFF6500),
+                    Color(0xFFE65100),
+                    Color(0xFFBF360C)
                 )
             ),
             topLeft = Offset(w * 0.18f, h * 0.40f),
@@ -387,9 +387,9 @@ fun GiftBox3DIcon(
         drawRoundRect(
             brush = Brush.verticalGradient(
                 listOf(
-                    Color(0xFF69F0AE),
-                    Color(0xFF00C853),
-                    Color(0xFF007E33)
+                    Color(0xFFFFB300),
+                    Color(0xFFFF8D00),
+                    Color(0xFFFF6500)
                 )
             ),
             topLeft = Offset(w * 0.12f, h * 0.26f),
@@ -612,7 +612,7 @@ fun Conversation3DSendButton(
             .shadow(
                 elevation = if (isEnabled) 5.dp else 1.dp,
                 shape = CircleShape,
-                spotColor = if (isEnabled) Color(0xFF00C853).copy(alpha = 0.5f) else Color.Transparent
+                spotColor = if (isEnabled) Color(0xFFFF6500).copy(alpha = 0.5f) else Color.Transparent
             )
             .testTag("chat_send_button")
     ) {
@@ -623,9 +623,9 @@ fun Conversation3DSendButton(
                     if (isEnabled) {
                         Brush.verticalGradient(
                             listOf(
-                                Color(0xFF00E676), // Electric Mint Emerald
-                                Color(0xFF00C853), // Vivid Emerald Green
-                                Color(0xFF007E33)  // Deep Jade
+                                Color(0xFFFF8D00), // Luminous Amber Gold
+                                Color(0xFFFF6500), // Vibrant Sunset Orange
+                                Color(0xFFD84315)  // Deep Burnt Amber
                             )
                         )
                     } else {

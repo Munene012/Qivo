@@ -214,8 +214,8 @@ fun AccountSecurityScreen(
 
                     Surface(
                         shape = RoundedCornerShape(20.dp),
-                        color = if (isDark) Color(0x3300C853) else Color(0x1A00C853),
-                        border = BorderStroke(1.dp, Color(0xFF00C853).copy(alpha = 0.6f))
+                        color = if (isDark) Color(0x33FF9800) else Color(0x1AFF9800),
+                        border = BorderStroke(1.dp, Color(0xFFFF9800).copy(alpha = 0.6f))
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
@@ -224,7 +224,7 @@ fun AccountSecurityScreen(
                             Icon(
                                 imageVector = Icons.Default.Shield,
                                 contentDescription = null,
-                                tint = Color(0xFF00C853),
+                                tint = Color(0xFFFF9800),
                                 modifier = Modifier.size(15.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
@@ -232,7 +232,7 @@ fun AccountSecurityScreen(
                                 text = "Account Protected & Active 🛡️",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isDark) Color(0xFF69F0AE) else Color(0xFF007E33)
+                                color = if (isDark) Color(0xFFFFB74D) else Color(0xFFE65100)
                             )
                         }
                     }
@@ -350,10 +350,10 @@ fun AccountSecurityScreen(
                                         modifier = Modifier
                                             .size(36.dp)
                                             .clip(CircleShape)
-                                        .background(Color(0x2200C853)),
+                                        .background(Color(0x22FF9800)),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF00C853), modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFFFF9800), modifier = Modifier.size(18.dp))
                                     }
 
                                     Spacer(modifier = Modifier.width(12.dp))

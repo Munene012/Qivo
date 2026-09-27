@@ -79,14 +79,19 @@ class ChatListViewModel(application: Application) : AndroidViewModel(application
     private var isInitialized = false
 
     init {
+        val cid = ChatStateHolder.connectedUserId
+        if (cid.isNotBlank()) {
+            currentUserId = cid
+        }
         // Collect messages & profiles from ChatStateHolder continuously
         viewModelScope.launch {
             combine(ChatStateHolder.messagesList, ChatStateHolder.profilesMap) { msgs, profs ->
                 msgs to profs
             }.collect { (msgs, profs) ->
                 _profilesMap.value = profs
-                if (currentUserId.isNotBlank()) {
-                    val built = buildConversations(msgs, profs, currentUserId)
+                val uid = currentUserId.ifBlank { ChatStateHolder.connectedUserId }
+                if (uid.isNotBlank()) {
+                    val built = buildConversations(msgs, profs, uid)
                     updateConversationsIfChanged(built)
                 }
             }
@@ -103,8 +108,15 @@ class ChatListViewModel(application: Application) : AndroidViewModel(application
         }
 
         if (currentUserId == userId && isInitialized) {
-            // Already initialized for this user.
-            // If conversations already exist, NEVER show initial loading screen!
+            // Already initialized for this user, refresh instant state from ChatStateHolder
+            val existingHolderMsgs = ChatStateHolder.messagesList.value
+            val existingProfs = ChatStateHolder.profilesMap.value
+            if (existingHolderMsgs.isNotEmpty()) {
+                val instant = buildConversations(existingHolderMsgs, existingProfs, userId)
+                if (instant.isNotEmpty()) {
+                    updateConversationsIfChanged(instant)
+                }
+            }
             onScreenResumed()
             return
         }
@@ -112,16 +124,27 @@ class ChatListViewModel(application: Application) : AndroidViewModel(application
         currentUserId = userId
         isInitialized = true
 
+        // Immediately check if ChatStateHolder already has messages collected in background
+        val existingHolderMsgs = ChatStateHolder.messagesList.value
+        val existingProfs = ChatStateHolder.profilesMap.value
+        if (existingHolderMsgs.isNotEmpty()) {
+            val instant = buildConversations(existingHolderMsgs, existingProfs, userId)
+            if (instant.isNotEmpty()) {
+                updateConversationsIfChanged(instant)
+                _initialLoading.value = false
+            }
+        }
+
         // Step 1: Load from local cache immediately so UI shows instantly if cache exists
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 ChatStateHolder.initialize(appContext, userId)
 
                 val inMem = SupabaseChatService.getInMemoryMessages(userId)
-                val cachedMsgs = if (inMem.isNotEmpty()) {
-                    inMem
-                } else {
-                    AppDataCacheManager.getCachedChatMessagesSync(appContext, userId)
+                val cachedMsgs = when {
+                    existingHolderMsgs.isNotEmpty() -> existingHolderMsgs
+                    inMem.isNotEmpty() -> inMem
+                    else -> AppDataCacheManager.getCachedChatMessagesSync(appContext, userId)
                 }
 
                 val cachedProfs = AppDataCacheManager.getCachedProfilesSync(appContext, "all")
@@ -133,13 +156,12 @@ class ChatListViewModel(application: Application) : AndroidViewModel(application
                 if (cachedMsgs.isNotEmpty()) {
                     val initialList = buildConversations(cachedMsgs, profsMap, userId)
                     if (initialList.isNotEmpty()) {
-                        _conversations.value = initialList
-                        _totalUnreadCount.value = initialList.sumOf { it.unreadCount }
+                        updateConversationsIfChanged(initialList)
                         _initialLoading.value = false
-                    } else {
+                    } else if (_conversations.value.isEmpty()) {
                         _initialLoading.value = true
                     }
-                } else {
+                } else if (_conversations.value.isEmpty()) {
                     _initialLoading.value = true
                 }
             } catch (e: Exception) {
@@ -321,11 +343,25 @@ class ChatListViewModel(application: Application) : AndroidViewModel(application
         profiles: Map<String, UserProfile>,
         userId: String
     ): List<ConversationItem> {
+        val cleanUserId = userId.trim()
+        if (cleanUserId.isBlank()) return emptyList()
+
         val grouped = mutableMapOf<String, MutableList<ChatMessage>>()
         for (msg in messages) {
-            val isSender = msg.senderId.trim().equals(userId, ignoreCase = true)
-            val partnerId = if (isSender) msg.receiverId.trim() else msg.senderId.trim()
-            if (partnerId.isEmpty()) continue
+            val sId = msg.senderId.trim()
+            val rId = msg.receiverId.trim()
+            val isSender = sId.equals(cleanUserId, ignoreCase = true)
+            val isReceiver = rId.equals(cleanUserId, ignoreCase = true)
+
+            // CRITICAL: Chat MUST belong to the current logged in user
+            if (!isSender && !isReceiver) continue
+
+            val partnerId = if (isSender) rId else sId
+            // Partner cannot be blank or oneself
+            if (partnerId.isEmpty() || partnerId.equals(cleanUserId, ignoreCase = true)) continue
+
+            // Filter out soft-deleted messages
+            if (chatService.isMessageSoftDeleted(appContext, cleanUserId, msg)) continue
 
             if (!grouped.containsKey(partnerId)) {
                 grouped[partnerId] = mutableListOf()
@@ -334,10 +370,10 @@ class ChatListViewModel(application: Application) : AndroidViewModel(application
         }
 
         // Also add any users that we have a saved draft with, even if no messages yet
-        val draftPartners = AppDataCacheManager.getAllDraftPartners(appContext, userId)
+        val draftPartners = AppDataCacheManager.getAllDraftPartners(appContext, cleanUserId)
         for (partnerId in draftPartners) {
             val cleanId = partnerId.trim()
-            if (cleanId.isNotEmpty() && !grouped.containsKey(cleanId)) {
+            if (cleanId.isNotEmpty() && !cleanId.equals(cleanUserId, ignoreCase = true) && !grouped.containsKey(cleanId)) {
                 grouped[cleanId] = mutableListOf()
             }
         }
@@ -349,7 +385,7 @@ class ChatListViewModel(application: Application) : AndroidViewModel(application
             val latest = msgs.maxByOrNull { chatService.parseTimestampToMillis(it.createdAt) }
 
             // Strictly filter out soft-deleted conversations if they only have messages
-            if (latest != null && chatService.isConversationSoftDeleted(appContext, userId, partnerId, latest.createdAt)) {
+            if (latest != null && chatService.isMessageSoftDeleted(appContext, cleanUserId, latest)) {
                 if (draft.isEmpty()) return@mapNotNull null
             }
 

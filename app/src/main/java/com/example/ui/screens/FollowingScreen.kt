@@ -451,7 +451,7 @@ private fun FollowingItemCard(
                             .background(colors.cardBg)
                             .padding(2.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF4CAF50))
+                            .background(Color(0xFF00E676))
                     )
                 }
             }
@@ -475,7 +475,7 @@ private fun FollowingItemCard(
                     val isFemale = user.gender.equals("Female", true)
                     Surface(
                         shape = RoundedCornerShape(6.dp),
-                        color = if (isFemale) Color(0xFFE2C485) else Color(0xFFD4C8B8)
+                        color = if (isFemale) Color(0xFFF48FB1) else Color(0xFF90CAF9)
                     ) {
                         Text(
                             text = if (isFemale) "♀" else "♂",

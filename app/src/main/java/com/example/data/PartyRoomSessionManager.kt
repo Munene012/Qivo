@@ -39,12 +39,12 @@ object PartyRoomSessionManager {
     private val _bubbleOffset = MutableStateFlow(Offset(20f, 300f))
     val bubbleOffset = _bubbleOffset.asStateFlow()
 
-    var voiceEngine: TencentPartyVoiceEngine? = null
+    var voiceEngine: ZegoPartyVoiceEngine? = null
         private set
 
-    fun initializeEngine(context: Context): TencentPartyVoiceEngine {
+    fun initializeEngine(context: Context): ZegoPartyVoiceEngine {
         if (voiceEngine == null) {
-            voiceEngine = TencentPartyVoiceEngine(context.applicationContext).apply {
+            voiceEngine = ZegoPartyVoiceEngine(context.applicationContext).apply {
                 onSpeakingVolumeChanged = { _, volume ->
                     _speakingVolume.value = volume
                     _isAnyoneSpeaking.value = volume > 0.05f

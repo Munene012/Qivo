@@ -702,33 +702,34 @@ fun Coin3DIcon(
 @Composable
 fun Chat3DBadgeButton(
     modifier: Modifier = Modifier,
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(14.dp),
     onClick: () -> Unit
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
-        color = Color(0xFFFF7043),
-        shadowElevation = 4.dp,
-        modifier = modifier.height(32.dp)
+        shape = shape,
+        color = Color(0xFFFF8D00),
+        shadowElevation = 3.dp,
+        modifier = modifier.height(30.dp)
     ) {
         Box(
             modifier = Modifier
                 .background(
                     Brush.horizontalGradient(
                         colors = listOf(
-                            Color(0xFFFF8A65), // Soft Warm Coral
-                            Color(0xFFFF5722)  // Rich Sunset Coral
+                            Color(0xFFFF8D00), // Sunset Amber Gold
+                            Color(0xFFFF6500)  // Sunset Orange
                         )
                     ),
-                    shape = RoundedCornerShape(16.dp)
+                    shape = shape
                 )
                 .border(
                     width = 1.dp,
                     color = Color.White.copy(alpha = 0.4f),
-                    shape = RoundedCornerShape(16.dp)
+                    shape = shape
                 )
-                .clip(RoundedCornerShape(16.dp))
-                .padding(horizontal = 10.dp, vertical = 5.dp),
+                .clip(shape)
+                .padding(horizontal = 9.dp, vertical = 4.dp),
             contentAlignment = Alignment.Center
         ) {
             Row(

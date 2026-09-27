@@ -485,19 +485,19 @@ fun MeScreen(
                                 if (isDark) {
                                     Brush.verticalGradient(
                                         listOf(
-                                            Color(0xFF09120B),
-                                            Color(0xFF0E1A11),
-                                            Color(0xFF132417),
-                                            Color(0xFF09120B)
+                                            Color(0xFF2E1500),
+                                            Color(0xFF3E1E02),
+                                            Color(0xFF4A2503),
+                                            Color(0xFF2E1500)
                                         )
                                     )
                                 } else {
                                     Brush.verticalGradient(
                                         listOf(
-                                            Color(0xFF009639), // Deep Emerald
-                                            Color(0xFF00B04A), // Jewel Jade
-                                            Color(0xFF00C853), // Vivid Emerald
-                                            Color(0xFF26E06D)  // Mint Emerald
+                                            Color(0xFFBF360C), // Deep Sunset Amber
+                                            Color(0xFFE65100), // Rich Orange
+                                            Color(0xFFFF6500), // Qivo Orange
+                                            Color(0xFFFF8D00)  // Golden Orange
                                         )
                                     )
                                 }
@@ -517,7 +517,7 @@ fun MeScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .statusBarsPadding()
-                        .padding(horizontal = 18.dp)
+                        .padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 8.dp)
                 ) {
                     // 1. Top Header Profile Area
                     Row(
@@ -553,7 +553,7 @@ fun MeScreen(
                             // Badges Row: Gender/Age + Country + Verification
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 val isFemale = liveGender.equals("Female", ignoreCase = true) || liveGender.equals("F", ignoreCase = true)
-                                val genderBgColor = if (isFemale) Color(0xFFE2C485) else Color(0xFFD4C8B8)
+                                val genderBgColor = if (isFemale) Color(0xFFF48FB1) else Color(0xFF90CAF9)
 
                                 // Gender & Age Badge
                                 Surface(
@@ -585,7 +585,7 @@ fun MeScreen(
                                 // Country Badge
                                 Surface(
                                     shape = RoundedCornerShape(6.dp),
-                                    color = Color(0xFFC6FF00) // Lime Green
+                                    color = Color(0xFFFFD54F) // Lime Green
                                 ) {
                                     Text(
                                         text = if (liveCountry.isNotBlank()) liveCountry else "United States",
@@ -631,7 +631,7 @@ fun MeScreen(
                                 // Verification Status Badge
                                 Surface(
                                     shape = RoundedCornerShape(6.dp),
-                                    color = if (isVerified) Color(0xFFE8F5E9) else (if (isDark) Color(0xFF332010) else Color(0xFFFFF3E0)),
+                                    color = if (isDark) Color(0xFF332010) else Color(0xFFFFF3E0),
                                     modifier = Modifier.clickable { onOpenVerify() }
                                 ) {
                                     Row(
@@ -641,7 +641,7 @@ fun MeScreen(
                                         Icon(
                                             imageVector = Icons.Default.Verified,
                                             contentDescription = "Verification Status",
-                                            tint = if (isVerified) Color(0xFF4CAF50) else Color(0xFFFF9800),
+                                            tint = if (isVerified) Color(0xFFFF9800) else Color(0xFFFF9800),
                                             modifier = Modifier.size(11.dp)
                                         )
                                         Spacer(modifier = Modifier.width(3.dp))
@@ -649,7 +649,7 @@ fun MeScreen(
                                             text = if (isVerified) "Verified" else "Unverified",
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = if (isVerified) Color(0xFF2E7D32) else Color(0xFFFF9800)
+                                            color = if (isVerified) Color(0xFFFF8D00) else Color(0xFFFF9800)
                                         )
                                     }
                                 }
@@ -658,7 +658,7 @@ fun MeScreen(
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Surface(
                                         shape = RoundedCornerShape(6.dp),
-                                        color = Color(0xFF00C853)
+                                        color = Color(0xFFFF6500)
                                     ) {
                                         Text(
                                             text = "SELLER",
@@ -720,7 +720,7 @@ fun MeScreen(
                         // Clicking avatar opens Profile Preview
                         Box(
                             modifier = Modifier
-                                .size(84.dp)
+                                .size(64.dp)
                                 .clickable {
                                     if (onOpenUserDetail != null) {
                                         val currentProf = fullProfileState?.copy(
@@ -901,42 +901,49 @@ fun MeScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Coin3DIcon(size = 22.dp)
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = "${numberFormat.format(liveCoins)}",
-                                            fontSize = 15.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = if (isDark) Color(0xFFFFD54F) else Color(0xFFE65100)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(
-                                                Brush.horizontalGradient(
-                                                    listOf(Color(0xFFFF9800), Color(0xFFFF6D00))
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    if (liveCoins <= 0) {
+                                        // When bal is 0: show the name Recharge only, no 0!
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(
+                                                    Brush.horizontalGradient(
+                                                        listOf(Color(0xFFFF9800), Color(0xFFFF6D00))
+                                                    )
                                                 )
+                                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                                        ) {
+                                            Text(
+                                                text = "Recharge",
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White
                                             )
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    ) {
-                                        Text(
-                                            text = "Recharge",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Black,
-                                            color = Color.White
-                                        )
-                                        Spacer(modifier = Modifier.width(3.dp))
-                                        Icon(
-                                            imageVector = Icons.Default.ChevronRight,
-                                            contentDescription = "Recharge",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(13.dp)
-                                        )
+                                            Spacer(modifier = Modifier.width(3.dp))
+                                            Icon(
+                                                imageVector = Icons.Default.ChevronRight,
+                                                contentDescription = null,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
+                                    } else {
+                                        // 1 and above: show the coins only, NO name Recharge!
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Coin3DIcon(size = 24.dp)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = numberFormat.format(liveCoins),
+                                                fontSize = 17.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isDark) Color(0xFFFFD54F) else Color(0xFFE65100)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -969,33 +976,53 @@ fun MeScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Income",
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = if (isDark) Color(0xFF80D8FF) else Color(0xFF006064)
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(
-                                                if (isDark) Color(0xFF00E5FF).copy(alpha = 0.2f)
-                                                else Color(0xFF00ACC1).copy(alpha = 0.2f)
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    if (liveDiamonds <= 0) {
+                                        // When bal is 0: show the name Income only, no 0!
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(
+                                                    if (isDark) Color(0xFF00E5FF).copy(alpha = 0.25f)
+                                                    else Color(0xFF00ACC1).copy(alpha = 0.2f)
+                                                )
+                                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                                        ) {
+                                            Text(
+                                                text = "Income",
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isDark) Color(0xFF80D8FF) else Color(0xFF006064)
                                             )
-                                            .padding(horizontal = 6.dp, vertical = 3.dp)
-                                    ) {
-                                        Text(
-                                            text = "${numberFormat.format(liveDiamonds)} 💎",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isDark) Color(0xFFE0F7FA) else Color(0xFF006064)
-                                        )
+                                            Spacer(modifier = Modifier.width(3.dp))
+                                            Icon(
+                                                imageVector = Icons.Default.ChevronRight,
+                                                contentDescription = null,
+                                                tint = if (isDark) Color(0xFF80D8FF) else Color(0xFF006064),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
+                                    } else {
+                                        // 1 and above: show the diamonds/income only, NO name Income!
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Diamond3DIcon(size = 24.dp, animated = true)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = numberFormat.format(liveDiamonds),
+                                                fontSize = 17.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isDark) Color(0xFF80D8FF) else Color(0xFF006064)
+                                            )
+                                        }
                                     }
                                 }
-                                Diamond3DIcon(size = 36.dp, animated = true)
+                                if (liveDiamonds <= 0) {
+                                    Diamond3DIcon(size = 36.dp, animated = true)
+                                }
                             }
                         }
                     }
@@ -1038,7 +1065,7 @@ fun MeScreen(
                                         .size(34.dp)
                                         .clip(CircleShape)
                                         .background(
-                                            if (isAdmin) Color(0xFFFFEDE0) else Color(0xFFE8F5E9)
+                                            Color(0xFFFFEDE0)
                                         ),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -1087,7 +1114,7 @@ fun MeScreen(
 
                                 if (isCoinSeller) {
                                     Surface(
-                                        color = Color(0xFF10B981),
+                                        color = Color(0xFFFF6500),
                                         shape = RoundedCornerShape(8.dp)
                                     ) {
                                         Text(
@@ -1149,7 +1176,7 @@ fun MeScreen(
                             ) {
                                 GridTile(
                                     title = "Analytics",
-                                    iconBg = if (isDark) Color(0xFF122C24) else Color(0xFFE8F5E9),
+                                    iconBg = if (isDark) Color(0xFF331600) else Color(0xFFFFF3E0),
                                     textColor = colors.textPrimary,
                                     iconContent = { AdminAnalytics3DIcon(size = 36.dp) },
                                     onClick = onOpenAdminAnalytics
@@ -1163,7 +1190,7 @@ fun MeScreen(
                             ) {
                                 GridTile(
                                     title = "Transfer Coins",
-                                    iconBg = if (isDark) Color(0xFF16331C) else Color(0xFFE8F5E9),
+                                    iconBg = if (isDark) Color(0xFF331600) else Color(0xFFFFF3E0),
                                     textColor = colors.textPrimary,
                                     iconContent = { CoinSeller3DIcon(size = 36.dp) },
                                     onClick = onOpenAwardCoins
@@ -1276,7 +1303,7 @@ fun MeScreen(
             ) {
                 GridTile(
                     title = "Tasks",
-                    iconBg = if (isDark) Color(0xFF16331C) else Color(0xFFE8F5E9),
+                    iconBg = if (isDark) Color(0xFF331600) else Color(0xFFFFF3E0),
                     textColor = colors.textPrimary,
                     iconContent = { TasksCenter3DIcon(size = 34.dp) }
                 ) {
@@ -1376,7 +1403,7 @@ fun MeScreen(
                                 Text(
                                     text = if (isVerified) "Account Verified (Gold Checkmark)" else "Get officially verified on Qivo",
                                     fontSize = 12.sp,
-                                    color = if (isVerified) Color(0xFF00E676) else colors.textSecondary
+                                    color = if (isVerified) Color(0xFFFF8D00) else colors.textSecondary
                                 )
                             }
                         }
@@ -1405,7 +1432,7 @@ fun MeScreen(
                                 modifier = Modifier
                                     .size(38.dp)
                                     .clip(CircleShape)
-                                    .background(if (isDark) Color(0xFF16331C) else Color(0xFFE8F5E9)),
+                                    .background(if (isDark) Color(0xFF331600) else Color(0xFFFFF3E0)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Support3DIcon(size = 26.dp)
@@ -1491,7 +1518,7 @@ fun MeScreen(
                                     modifier = Modifier
                                         .size(38.dp)
                                         .clip(CircleShape)
-                                        .background(if (isDark) Color(0xFF16331C) else Color(0xFFE8F5E9)),
+                                        .background(if (isDark) Color(0xFF331600) else Color(0xFFFFF3E0)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     CoinSeller3DIcon(size = 28.dp)
@@ -1579,25 +1606,25 @@ fun MeScreen(
                 .fillMaxWidth()
                 .shadow(
                     elevation = 6.dp,
-                    spotColor = Color(0xFF00C853).copy(alpha = 0.35f)
+                    spotColor = Color(0xFFFF6500).copy(alpha = 0.35f)
                 )
                 .background(
                     if (isDark) {
                         Brush.horizontalGradient(
                             listOf(
-                                Color(0xFF09120B),
-                                Color(0xFF0E1A11),
-                                Color(0xFF132417),
-                                Color(0xFF09120B)
+                                Color(0xFF2E1500),
+                                Color(0xFF3E1E02),
+                                Color(0xFF4A2503),
+                                Color(0xFF2E1500)
                             )
                         )
                     } else {
                         Brush.horizontalGradient(
                             listOf(
-                                Color(0xFF009639), // Deep Emerald
-                                Color(0xFF00B04A), // Jewel Jade
-                                Color(0xFF00C853), // Vivid Emerald
-                                Color(0xFF26E06D)  // Mint Emerald
+                                Color(0xFFBF360C), // Deep Sunset Amber
+                                Color(0xFFE65100), // Rich Orange
+                                Color(0xFFFF6500), // Qivo Orange
+                                Color(0xFFFF8D00)  // Golden Orange
                             )
                         )
                     }

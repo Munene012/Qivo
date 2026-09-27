@@ -287,7 +287,7 @@ fun FaceVerificationCameraScreen(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(24.dp),
-                        border = BorderStroke(2.dp, Color(0xFF00E676)),
+                        border = BorderStroke(2.dp, Color(0xFFFF8D00)),
                         color = Color.Black,
                         modifier = Modifier
                             .fillMaxSize()
@@ -318,7 +318,7 @@ fun FaceVerificationCameraScreen(
                             Icon(
                                 imageVector = Icons.Default.CheckCircle,
                                 contentDescription = null,
-                                tint = Color(0xFF00E676),
+                                tint = Color(0xFFFF8D00),
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
@@ -388,7 +388,7 @@ fun FaceVerificationCameraScreen(
                                     }
                                 },
                                 shape = RoundedCornerShape(14.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C853)),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF6500)),
                                 modifier = Modifier
                                     .weight(1.2f)
                                     .height(52.dp)
@@ -646,7 +646,7 @@ private fun FacePositionOverlay(modifier: Modifier = Modifier) {
 
         // Draw oval guide border
         drawOval(
-            color = Color(0xFF00E676),
+            color = Color(0xFFFF8D00),
             topLeft = Offset(left, top),
             size = Size(ovalWidth, ovalHeight),
             style = Stroke(width = 3.dp.toPx())

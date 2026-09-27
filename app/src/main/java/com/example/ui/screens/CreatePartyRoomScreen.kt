@@ -578,7 +578,7 @@ fun CreatePartyRoomScreen(
                     } else {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = Color(0xFF2E7D32)
+                            color = Color(0xFFFF8D00)
                         ) {
                             Text(
                                 text = "Ready",
@@ -669,9 +669,10 @@ fun CreatePartyRoomScreen(
                         )
 
                         isCreating = false
-                        if (result.room != null && result.errorMessage == null && result.room.id.isNotBlank()) {
+                        if (result.room != null && result.room.id.isNotBlank()) {
                             Log.d("CreatePartyRoomScreen", "[CreateFlow] Party Room creation SUCCESS! Database Room UUID: ${result.room.id}")
                             userCoins = (userCoins - 5000L).coerceAtLeast(0L)
+                            UserSessionManager.saveCoins(context, userCoins)
                             AppAnalyticsService.logPartyRoomCreated(
                                 roomId = result.room.id,
                                 title = result.room.name,

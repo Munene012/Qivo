@@ -196,14 +196,14 @@ fun AwardCoinsScreen(
                     }
 
                     Surface(
-                        color = if (isAdmin) QivoOrange.copy(alpha = 0.2f) else Color(0xFF00C853).copy(alpha = 0.15f),
+                        color = if (isAdmin) QivoOrange.copy(alpha = 0.2f) else Color(0xFFFF9800).copy(alpha = 0.15f),
                         shape = RoundedCornerShape(10.dp)
                     ) {
                         Text(
                             text = if (isAdmin) "ADMIN" else "SELLER",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = if (isAdmin) QivoOrange else Color(0xFF00C853),
+                            color = if (isAdmin) QivoOrange else Color(0xFFFF9800),
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                         )
                     }
@@ -289,7 +289,7 @@ fun AwardCoinsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-                    border = BorderStroke(1.5.dp, Color(0xFF00C853))
+                    border = BorderStroke(1.5.dp, Color(0xFFFF9800))
                 ) {
                     Row(
                         modifier = Modifier
@@ -347,7 +347,7 @@ fun AwardCoinsScreen(
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = "Selected",
-                            tint = Color(0xFF00C853),
+                            tint = Color(0xFFFF9800),
                             modifier = Modifier.size(24.dp)
                         )
                     }

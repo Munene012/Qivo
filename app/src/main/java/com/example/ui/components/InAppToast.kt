@@ -57,16 +57,13 @@ object AppToast {
     private val _toastFlow = MutableStateFlow<InAppToastData?>(null)
     val toastFlow: StateFlow<InAppToastData?> = _toastFlow.asStateFlow()
 
-    private var activeJob: Job? = null
-    private val scope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
-
     @Volatile
     private var lastMessage: String = ""
     @Volatile
     private var lastTimestamp: Long = 0L
 
     /**
-     * Shows an in-app toast message. Dismisses automatically and only lives inside the app.
+     * Shows a standard Android system Toast.
      */
     fun show(message: String?, isLong: Boolean = false) {
         val text = message?.trim() ?: return
@@ -79,40 +76,45 @@ object AppToast {
         lastMessage = text
         lastTimestamp = now
 
-        scope.launch {
-            activeJob?.cancel()
-            val toastData = InAppToastData(
-                id = now,
-                message = text,
-                isLong = isLong
-            )
-            _toastFlow.value = toastData
-
-            activeJob = launch {
-                val displayDuration = if (isLong) 3500L else 2200L
-                delay(displayDuration)
-                if (_toastFlow.value?.id == toastData.id) {
-                    _toastFlow.value = null
+        try {
+            val ctx = try { com.example.QivoApplication.instance } catch (_: Exception) { null }
+            if (ctx != null) {
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    android.widget.Toast.makeText(ctx, text, if (isLong) android.widget.Toast.LENGTH_LONG else android.widget.Toast.LENGTH_SHORT).show()
                 }
             }
-        }
+        } catch (_: Exception) {}
     }
 
     /**
      * Compatibility helper overload accepting a Context.
      */
     fun show(context: Context?, message: String?, isLong: Boolean = false) {
-        show(message, isLong)
+        val text = message?.trim() ?: return
+        if (text.isBlank()) return
+
+        val now = System.currentTimeMillis()
+        if (text == lastMessage && (now - lastTimestamp) < 1200L) {
+            return
+        }
+        lastMessage = text
+        lastTimestamp = now
+
+        try {
+            val actualContext = context ?: try { com.example.QivoApplication.instance } catch (_: Exception) { null }
+            if (actualContext != null) {
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    android.widget.Toast.makeText(actualContext, text, if (isLong) android.widget.Toast.LENGTH_LONG else android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     /**
-     * Dismisses any active in-app toast immediately.
+     * Dismisses any active toast state.
      */
     fun dismiss() {
-        scope.launch {
-            activeJob?.cancel()
-            _toastFlow.value = null
-        }
+        _toastFlow.value = null
     }
 }
 

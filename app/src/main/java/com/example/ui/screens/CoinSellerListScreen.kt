@@ -243,13 +243,13 @@ fun CoinSellerListScreen(
                                 if (selectedCountry != null) {
                                     Surface(
                                         shape = RoundedCornerShape(10.dp),
-                                        color = if (isDark) Color(0xFF16331C) else Color(0xFFE8F5E9)
+                                        color = if (isDark) Color(0xFF331600) else Color(0xFFFFF3E0)
                                     ) {
                                         Text(
                                             text = formatPrice(selectedPackage, selectedCountry),
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.ExtraBold,
-                                            color = Color(0xFF00C853),
+                                            color = Color(0xFFFF6500),
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                         )
                                     }
@@ -303,7 +303,7 @@ fun CoinSellerListScreen(
                             Icon(
                                 imageVector = Icons.Default.Security,
                                 contentDescription = "Security",
-                                tint = Color(0xFF10B981),
+                                tint = Color(0xFFFF8D00),
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(10.dp))
@@ -441,7 +441,7 @@ fun CoinSellerItemCard(
                             .background(Color.White)
                             .padding(2.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF00C853))
+                            .background(Color(0xFFFF9100))
                     )
                 }
 
@@ -460,7 +460,7 @@ fun CoinSellerItemCard(
                         Icon(
                             imageVector = Icons.Default.Verified,
                             contentDescription = "Verified",
-                            tint = Color(0xFF00C853),
+                            tint = Color(0xFFFF9800),
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -477,7 +477,7 @@ fun CoinSellerItemCard(
 
                     Surface(
                         shape = RoundedCornerShape(6.dp),
-                        color = if (isDark) Color(0xFF16331C) else Color(0xFFE8F5E9)
+                        color = if (isDark) Color(0xFF331600) else Color(0xFFFFF3E0)
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -487,7 +487,7 @@ fun CoinSellerItemCard(
                                 text = "Official Coin Seller",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF00C853)
+                                color = Color(0xFFFF6500)
                             )
                         }
                     }

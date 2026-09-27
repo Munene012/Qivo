@@ -2,6 +2,7 @@ package com.example.data
 import com.example.ui.components.AppToast
 
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,7 +28,8 @@ data class ChatMessage(
     val receiverName: String,
     val message: String,
     val createdAt: String,
-    val isRead: Boolean = false
+    val isRead: Boolean = false,
+    val deletedBy: List<String> = emptyList()
 )
 
 class SupabaseChatService {
@@ -67,10 +69,17 @@ class SupabaseChatService {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
     private val profileService = SupabaseProfileService()
 
+    data class SendMessageResult(
+        val isSuccess: Boolean,
+        val messageId: Long? = null,
+        val createdAt: String? = null
+    )
+
     /**
-     * Send a real chat message to Supabase "messages" table
+     * Send a real chat message via Supabase REST API and return detailed result.
+     * Guaranteed single network request - never duplicates sends!
      */
-    suspend fun sendMessage(
+    suspend fun sendMessageWithResult(
         senderId: String,
         senderName: String,
         senderAvatar: String,
@@ -78,31 +87,19 @@ class SupabaseChatService {
         receiverName: String,
         messageText: String,
         context: Context? = null
-    ): Boolean {
+    ): SendMessageResult {
         // Enforce online sending restriction
         if (context != null && !NetworkUtils.isOnline(context)) {
             kotlinx.coroutines.withContext(Dispatchers.Main) {
                 AppToast.show("Cannot send message. You are currently offline.", isLong = true)
             }
-            return false
+            return SendMessageResult(isSuccess = false)
         }
 
-        // Enforce bidirectional blocking security
         if (senderId.isNotBlank() && receiverId.isNotBlank()) {
             val isBlocked = profileService.isUserBlocked(senderId, receiverId, context) ||
                     profileService.checkIfBlockedBidirectionalRemote(senderId, receiverId, context)
-            if (isBlocked) {
-                context?.let { ctx ->
-                    kotlinx.coroutines.withContext(Dispatchers.Main) {
-                        AppToast.show("You have been blocked.")
-                    }
-                }
-                return false
-            }
-        }
-
-        if (context != null && senderId.isNotBlank() && receiverId.isNotBlank()) {
-            clearSoftDelete(context, senderId, receiverId)
+            if (isBlocked) return SendMessageResult(isSuccess = false)
         }
 
         val optimisticMsg = ChatMessage(
@@ -125,7 +122,7 @@ class SupabaseChatService {
                 val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
                 val apiKey = SupabaseConfig.supabaseAnonKey.trim()
 
-                if (baseUrl.isEmpty() || apiKey.isEmpty()) return@withContext false
+                if (baseUrl.isEmpty() || apiKey.isEmpty()) return@withContext SendMessageResult(isSuccess = false)
 
                 val endpoint = "$baseUrl/rest/v1/messages"
                 val jsonBody = JSONObject().apply {
@@ -151,140 +148,36 @@ class SupabaseChatService {
 
                 var createdMsgId: Long? = null
                 var createdTimeStr: String? = null
-                val isSent = client.newCall(request).execute().use { response ->
-                    val respBody = response.body?.string() ?: ""
-                    if ((response.isSuccessful || response.code in 200..204) && respBody.startsWith("[")) {
+                var isSent = false
+
+                client.newCall(request).execute().use { response ->
+                    val respBody = response.body?.string()?.trim() ?: ""
+                    isSent = response.isSuccessful || response.code in 200..204
+                    if (isSent && respBody.isNotEmpty()) {
                         try {
-                            val arr = org.json.JSONArray(respBody)
-                            if (arr.length() > 0) {
-                                val first = arr.getJSONObject(0)
-                                createdMsgId = first.optLong("id", 0L)
-                                createdTimeStr = first.optString("created_at", "")
+                            if (respBody.startsWith("[")) {
+                                val arr = org.json.JSONArray(respBody)
+                                if (arr.length() > 0) {
+                                    val first = arr.getJSONObject(0)
+                                    val extractedId = first.optLong("id", 0L)
+                                    if (extractedId > 0L) createdMsgId = extractedId
+                                    val extractedTime = first.optString("created_at", "")
+                                    if (extractedTime.isNotBlank()) createdTimeStr = extractedTime
+                                }
+                            } else if (respBody.startsWith("{")) {
+                                val obj = org.json.JSONObject(respBody)
+                                val extractedId = obj.optLong("id", 0L)
+                                if (extractedId > 0L) createdMsgId = extractedId
+                                val extractedTime = obj.optString("created_at", "")
+                                if (extractedTime.isNotBlank()) createdTimeStr = extractedTime
                             }
                         } catch (_: Exception) {}
                     }
-                    response.isSuccessful || response.code == 200 || response.code == 201 || response.code == 204
                 }
 
                 if (isSent) {
                     val finalMsg = optimisticMsg.copy(
                         id = createdMsgId ?: 0L,
-                        createdAt = createdTimeStr ?: optimisticMsg.createdAt
-                    )
-                    ChatStateHolder.handleRealtimeMessage(finalMsg, context)
-                }
-
-                if (isSent && context != null) {
-                    try {
-                        SupabaseFcmService.sendChatPushNotification(
-                            context = context,
-                            senderId = senderId,
-                            senderName = senderName,
-                            senderAvatar = senderAvatar,
-                            receiverId = receiverId,
-                            messageText = messageText
-                        )
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }
-                isSent
-            } catch (e: Exception) {
-                e.printStackTrace()
-                false
-            }
-        }
-    }
-
-    /**
-     * Send a real chat message and return created message ID
-     */
-    suspend fun sendMessageWithId(
-        senderId: String,
-        senderName: String,
-        senderAvatar: String,
-        receiverId: String,
-        receiverName: String,
-        messageText: String,
-        context: Context? = null
-    ): Long? {
-        // Enforce online sending restriction
-        if (context != null && !NetworkUtils.isOnline(context)) {
-            kotlinx.coroutines.withContext(Dispatchers.Main) {
-                AppToast.show("Cannot send message. You are currently offline.", isLong = true)
-            }
-            return null
-        }
-
-        if (senderId.isNotBlank() && receiverId.isNotBlank()) {
-            val isBlocked = profileService.isUserBlocked(senderId, receiverId, context) ||
-                    profileService.checkIfBlockedBidirectionalRemote(senderId, receiverId, context)
-            if (isBlocked) return null
-        }
-
-        if (context != null && senderId.isNotBlank() && receiverId.isNotBlank()) {
-            clearSoftDelete(context, senderId, receiverId)
-        }
-
-        val optimisticMsg = ChatMessage(
-            id = 0L,
-            senderId = senderId,
-            senderName = senderName,
-            senderAvatar = senderAvatar,
-            receiverId = receiverId,
-            receiverName = receiverName,
-            message = messageText,
-            createdAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'", java.util.Locale.US).apply {
-                timeZone = java.util.TimeZone.getTimeZone("UTC")
-            }.format(java.util.Date()),
-            isRead = true
-        )
-        ChatStateHolder.addOptimisticMessage(optimisticMsg)
-
-        return withContext(Dispatchers.IO) {
-            try {
-                val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
-                val apiKey = SupabaseConfig.supabaseAnonKey.trim()
-                if (baseUrl.isEmpty() || apiKey.isEmpty()) return@withContext null
-
-                val endpoint = "$baseUrl/rest/v1/messages"
-                val jsonBody = JSONObject().apply {
-                    put("sender_id", senderId)
-                    put("sender_name", senderName)
-                    put("sender_avatar", senderAvatar)
-                    put("receiver_id", receiverId)
-                    put("receiver_name", receiverName)
-                    put("message", messageText)
-                    put("is_read", false)
-                }.toString()
-
-                val authHeader = UserSessionManager.getAuthHeader(context)
-                val request = Request.Builder()
-                    .url(endpoint)
-                    .addHeader("apikey", apiKey)
-                    .addHeader("Authorization", authHeader)
-                    .addHeader("Content-Type", "application/json")
-                    .addHeader("Prefer", "return=representation")
-                    .post(jsonBody.toRequestBody(jsonMediaType))
-                    .build()
-
-                var createdMsgId: Long? = null
-                var createdTimeStr: String? = null
-                client.newCall(request).execute().use { response ->
-                    val respBody = response.body?.string() ?: ""
-                    if (response.isSuccessful && respBody.startsWith("[")) {
-                        val arr = org.json.JSONArray(respBody)
-                        if (arr.length() > 0) {
-                            val first = arr.getJSONObject(0)
-                            createdMsgId = first.optLong("id", 0L)
-                            createdTimeStr = first.optString("created_at", "")
-                        }
-                    }
-                }
-
-                if (createdMsgId != null && createdMsgId!! > 0L) {
-                    val finalMsg = optimisticMsg.copy(
-                        id = createdMsgId!!,
                         createdAt = createdTimeStr ?: optimisticMsg.createdAt
                     )
                     ChatStateHolder.handleRealtimeMessage(finalMsg, context)
@@ -303,14 +196,50 @@ class SupabaseChatService {
                             e.printStackTrace()
                         }
                     }
-                    return@withContext createdMsgId
                 }
-                null
-            } catch (_: Exception) {
-                null
+                SendMessageResult(isSuccess = isSent, messageId = createdMsgId, createdAt = createdTimeStr)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                SendMessageResult(isSuccess = false)
             }
         }
     }
+
+    suspend fun sendMessage(
+        senderId: String,
+        senderName: String,
+        senderAvatar: String,
+        receiverId: String,
+        receiverName: String,
+        messageText: String,
+        context: Context? = null
+    ): Boolean = sendMessageWithResult(
+        senderId = senderId,
+        senderName = senderName,
+        senderAvatar = senderAvatar,
+        receiverId = receiverId,
+        receiverName = receiverName,
+        messageText = messageText,
+        context = context
+    ).isSuccess
+
+    suspend fun sendMessageWithId(
+        senderId: String,
+        senderName: String,
+        senderAvatar: String,
+        receiverId: String,
+        receiverName: String,
+        messageText: String,
+        context: Context? = null
+    ): Long? = sendMessageWithResult(
+        senderId = senderId,
+        senderName = senderName,
+        senderAvatar = senderAvatar,
+        receiverId = receiverId,
+        receiverName = receiverName,
+        messageText = messageText,
+        context = context
+    ).messageId
 
     /**
      * Request Fast Reply reward from server (Edge Function -> RPC process_fast_reply_reward)
@@ -474,30 +403,85 @@ class SupabaseChatService {
 
     /**
      * Soft delete a conversation for the current user.
-     * Stores the cutoff timestamp locally
+     * Stores the cutoff timestamp locally and remotely
      * so prior messages are hidden for this user, but preserved for the other user.
      * When a new message, gift, or photo is sent or received after this cutoff,
      * the conversation automatically reappears.
      */
     suspend fun softDeleteConversation(context: Context, myUserId: String, partnerId: String): Boolean {
         if (myUserId.isBlank() || partnerId.isBlank()) return false
+        val cleanMyId = myUserId.trim()
+        val cleanPartnerId = partnerId.trim()
         val now = System.currentTimeMillis()
-        val prefs = context.getSharedPreferences("qivo_deleted_chats", Context.MODE_PRIVATE)
-        prefs.edit().putLong("${myUserId.trim()}_${partnerId.trim()}", now).apply()
 
-        // Immediately remove soft-deleted messages from in-memory and disk caches
-        val currentInMem = _cachedUserMessages[myUserId.trim()]
+        // 1. Store cutoff locally in SharedPreferences immediately with both keys (case-insensitive)
+        val prefs = context.getSharedPreferences("qivo_deleted_chats", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putLong("${cleanMyId.lowercase()}_${cleanPartnerId.lowercase()}", now)
+            .putLong("${cleanMyId}_${cleanPartnerId}", now)
+            .apply()
+
+        // 2. Immediately remove soft-deleted messages from in-memory and disk caches
+        val currentInMem = _cachedUserMessages[cleanMyId]
         if (!currentInMem.isNullOrEmpty()) {
             val filtered = currentInMem.filterNot { msg ->
-                (msg.senderId.trim().equals(myUserId.trim(), ignoreCase = true) && msg.receiverId.trim().equals(partnerId.trim(), ignoreCase = true)) ||
-                (msg.receiverId.trim().equals(myUserId.trim(), ignoreCase = true) && msg.senderId.trim().equals(partnerId.trim(), ignoreCase = true))
+                val isPair = (msg.senderId.trim().equals(cleanMyId, ignoreCase = true) && msg.receiverId.trim().equals(cleanPartnerId, ignoreCase = true)) ||
+                             (msg.receiverId.trim().equals(cleanMyId, ignoreCase = true) && msg.senderId.trim().equals(cleanPartnerId, ignoreCase = true))
+                isPair && (parseTimestampToMillis(msg.createdAt) == 0L || parseTimestampToMillis(msg.createdAt) <= (now + 5000L))
             }
-            _cachedUserMessages[myUserId.trim()] = filtered
+            _cachedUserMessages[cleanMyId] = filtered
             try {
-                AppDataCacheManager.saveChatMessagesCache(context, myUserId.trim(), filtered)
+                AppDataCacheManager.saveChatMessagesCache(context, cleanMyId, filtered)
             } catch (_: Exception) {}
         }
-        return true
+
+        // 3. Remove conversation from ChatStateHolder
+        ChatStateHolder.removeConversationLocally(cleanPartnerId)
+
+        // 4. Remote call to Supabase RPC to persist soft delete permanently
+        return withContext(Dispatchers.IO) {
+            try {
+                val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+                val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+                if (baseUrl.isNotEmpty() && apiKey.isNotEmpty()) {
+                    val authHeader = UserSessionManager.getAuthHeader(context).ifBlank { "Bearer $apiKey" }
+                    val rpcUrl = "$baseUrl/rest/v1/rpc/soft_delete_conversation"
+                    val body = JSONObject().apply {
+                        put("p_user_id", cleanMyId)
+                        put("p_partner_id", cleanPartnerId)
+                    }.toString()
+
+                    val req = Request.Builder()
+                        .url(rpcUrl)
+                        .addHeader("apikey", apiKey)
+                        .addHeader("Authorization", authHeader)
+                        .addHeader("Content-Type", "application/json")
+                        .post(body.toRequestBody(jsonMediaType))
+                        .build()
+
+                    client.newCall(req).execute().use { res ->
+                        res.isSuccessful
+                    }
+                } else true
+            } catch (e: Exception) {
+                Log.w("SupabaseChatService", "Remote soft_delete_conversation error: ${e.message}")
+                true
+            }
+        }
+    }
+
+    /**
+     * Retrieves the deletion cutoff timestamp for the user-partner pair,
+     * checking both lowercase-normalized and original keys.
+     */
+    fun getDeletedCutoff(context: Context?, userId: String, partnerId: String): Long {
+        if (context == null || userId.isBlank() || partnerId.isBlank()) return 0L
+        val prefs = context.getSharedPreferences("qivo_deleted_chats", Context.MODE_PRIVATE)
+        val u = userId.trim()
+        val p = partnerId.trim()
+        val valLower = prefs.getLong("${u.lowercase()}_${p.lowercase()}", 0L)
+        if (valLower > 0L) return valLower
+        return prefs.getLong("${u}_${p}", 0L)
     }
 
     /**
@@ -511,8 +495,7 @@ class SupabaseChatService {
         latestMessageCreatedAt: String? = null
     ): Boolean {
         if (context == null || myUserId.isBlank() || partnerId.isBlank()) return false
-        val prefs = context.getSharedPreferences("qivo_deleted_chats", Context.MODE_PRIVATE)
-        val cutoff = prefs.getLong("${myUserId.trim()}_${partnerId.trim()}", 0L)
+        val cutoff = getDeletedCutoff(context, myUserId, partnerId)
         if (cutoff <= 0L) return false
         if (latestMessageCreatedAt.isNullOrBlank()) return true
         val msgTime = parseTimestampToMillis(latestMessageCreatedAt)
@@ -521,12 +504,65 @@ class SupabaseChatService {
     }
 
     /**
-     * Clears soft deletion for this conversation so it reappears.
+     * Checks if a single message is soft-deleted for the given user.
+     * True if marked in deleted_by array OR sent at/before conversation deletion cutoff.
      */
-    fun clearSoftDelete(context: Context, myUserId: String, partnerId: String) {
-        if (myUserId.isBlank() || partnerId.isBlank()) return
-        val prefs = context.getSharedPreferences("qivo_deleted_chats", Context.MODE_PRIVATE)
-        prefs.edit().remove("${myUserId.trim()}_${partnerId.trim()}").apply()
+    fun isMessageSoftDeleted(
+        context: Context?,
+        currentUserId: String,
+        msg: ChatMessage
+    ): Boolean {
+        val u = currentUserId.trim()
+        if (u.isBlank()) return false
+        if (msg.deletedBy.any { it.equals(u, ignoreCase = true) }) return true
+        val partnerId = if (msg.senderId.trim().equals(u, ignoreCase = true)) msg.receiverId.trim() else msg.senderId.trim()
+        return isConversationSoftDeleted(context, u, partnerId, msg.createdAt)
+    }
+
+    /**
+     * Synchronizes soft-deleted conversations from Supabase into local SharedPreferences.
+     */
+    suspend fun syncDeletedConversations(context: Context?, userId: String) {
+        if (context == null || userId.isBlank()) return
+        withContext(Dispatchers.IO) {
+            try {
+                val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+                val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+                if (baseUrl.isEmpty() || apiKey.isEmpty()) return@withContext
+                val authHeader = UserSessionManager.getAuthHeader(context).ifBlank { "Bearer $apiKey" }
+                val endpoint = "$baseUrl/rest/v1/deleted_conversations?user_id=eq.$userId&select=partner_id,cutoff_timestamp"
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", authHeader)
+                    .get()
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    val body = response.body?.string() ?: ""
+                    if (response.isSuccessful && body.startsWith("[")) {
+                        val arr = JSONArray(body)
+                        val prefs = context.getSharedPreferences("qivo_deleted_chats", Context.MODE_PRIVATE)
+                        val editor = prefs.edit()
+                        val uClean = userId.trim()
+                        for (i in 0 until arr.length()) {
+                            val item = arr.getJSONObject(i)
+                            val pId = item.optString("partner_id", "").trim()
+                            val cutoffStr = item.optString("cutoff_timestamp", "")
+                            val cutoffMs = parseTimestampToMillis(cutoffStr)
+                            if (pId.isNotBlank() && cutoffMs > 0L) {
+                                val existing = prefs.getLong("${uClean.lowercase()}_${pId.lowercase()}", 0L)
+                                if (cutoffMs > existing) {
+                                    editor.putLong("${uClean.lowercase()}_${pId.lowercase()}", cutoffMs)
+                                    editor.putLong("${uClean}_${pId}", cutoffMs)
+                                }
+                            }
+                        }
+                        editor.apply()
+                    }
+                }
+            } catch (_: Exception) {}
+        }
     }
 
     /**
@@ -547,7 +583,7 @@ class SupabaseChatService {
                 if (baseUrl.isEmpty() || apiKey.isEmpty()) return@withContext emptyList()
 
                 val endpoint = "$baseUrl/rest/v1/messages?receiver_id=eq.$uId&order=created_at.desc&limit=$limit"
-                val authHeader = UserSessionManager.getAuthHeader(context)
+                val authHeader = UserSessionManager.getAuthHeader(context).ifBlank { "Bearer $apiKey" }
 
                 val request = Request.Builder()
                     .url(endpoint)
@@ -555,8 +591,6 @@ class SupabaseChatService {
                     .addHeader("Authorization", authHeader)
                     .get()
                     .build()
-
-                val deletedPrefs = context?.getSharedPreferences("qivo_deleted_chats", Context.MODE_PRIVATE)
 
                 client.newCall(request).execute().use { response ->
                     val respBody = response.body?.string() ?: ""
@@ -569,7 +603,24 @@ class SupabaseChatService {
                             val rId = obj.optString("receiver_id", "").trim()
                             val createdAtStr = obj.optString("created_at", "")
 
-                            val cutoff = deletedPrefs?.getLong("${uId}_${sId}", 0L) ?: 0L
+                            // Strictly verify incoming message is directed to uId
+                            if (!rId.equals(uId, ignoreCase = true) || sId.equals(uId, ignoreCase = true)) {
+                                continue
+                            }
+
+                            val deletedByArr = obj.optJSONArray("deleted_by")
+                            val deletedByList = mutableListOf<String>()
+                            if (deletedByArr != null) {
+                                for (d in 0 until deletedByArr.length()) {
+                                    val itemVal = deletedByArr.optString(d, "").trim()
+                                    if (itemVal.isNotBlank()) deletedByList.add(itemVal)
+                                }
+                            }
+                            if (deletedByList.any { it.equals(uId, ignoreCase = true) }) {
+                                continue
+                            }
+
+                            val cutoff = getDeletedCutoff(context, uId, sId)
                             if (cutoff > 0L) {
                                 val ts = parseTimestampToMillis(createdAtStr)
                                 if (ts == 0L || ts <= (cutoff + 5000L)) continue
@@ -617,7 +668,7 @@ class SupabaseChatService {
                 if (baseUrl.isEmpty() || apiKey.isEmpty()) return@withContext emptyList()
 
                 val endpoint = "$baseUrl/rest/v1/messages?or=(sender_id.eq.$userId,receiver_id.eq.$userId)&order=created_at.desc&limit=$limit&offset=$offset"
-                val authHeader = UserSessionManager.getAuthHeader(context)
+                val authHeader = UserSessionManager.getAuthHeader(context).ifBlank { "Bearer $apiKey" }
 
                 val request = Request.Builder()
                     .url(endpoint)
@@ -626,7 +677,12 @@ class SupabaseChatService {
                     .get()
                     .build()
 
-                val deletedPrefs = context?.getSharedPreferences("qivo_deleted_chats", Context.MODE_PRIVATE)
+                // On initial fetch, synchronize deleted conversations from Supabase
+                if (offset == 0 && context != null) {
+                    try {
+                        syncDeletedConversations(context, userId)
+                    } catch (_: Exception) {}
+                }
 
                 client.newCall(request).execute().use { response ->
                     val responseBodyString = response.body?.string() ?: ""
@@ -639,14 +695,34 @@ class SupabaseChatService {
                             val rId = obj.optString("receiver_id", "").trim()
                             val createdAtStr = obj.optString("created_at", "")
 
-                            val partnerId = if (sId.equals(userId, ignoreCase = true)) rId else sId
+                            // CRITICAL: Chat MUST involve userId either as sender or receiver
+                            val isSender = sId.equals(userId, ignoreCase = true)
+                            val isReceiver = rId.equals(userId, ignoreCase = true)
+                            if (!isSender && !isReceiver) continue
+
+                            val partnerId = if (isSender) rId else sId
+                            if (partnerId.isBlank() || partnerId.equals(userId, ignoreCase = true)) continue
 
                             // Suppress messages from/to blocked users
                             if (profileService.isUserBlocked(userId, partnerId, context)) {
                                 continue
                             }
 
-                            val cutoffTimestamp = deletedPrefs?.getLong("${userId}_${partnerId}", 0L) ?: 0L
+                            val deletedByArr = obj.optJSONArray("deleted_by")
+                            val deletedByList = mutableListOf<String>()
+                            if (deletedByArr != null) {
+                                for (d in 0 until deletedByArr.length()) {
+                                    val itemVal = deletedByArr.optString(d, "").trim()
+                                    if (itemVal.isNotBlank()) deletedByList.add(itemVal)
+                                }
+                            }
+
+                            // If marked deleted for this user on Supabase, NEVER show it
+                            if (deletedByList.any { it.equals(userId, ignoreCase = true) }) {
+                                continue
+                            }
+
+                            val cutoffTimestamp = getDeletedCutoff(context, userId, partnerId)
 
                             if (cutoffTimestamp > 0L) {
                                 val msgTimestamp = parseTimestampToMillis(createdAtStr)
@@ -666,7 +742,8 @@ class SupabaseChatService {
                                     receiverName = obj.optString("receiver_name", "User"),
                                     message = obj.optString("message", ""),
                                     createdAt = createdAtStr,
-                                    isRead = obj.optBoolean("is_read", false)
+                                    isRead = obj.optBoolean("is_read", false),
+                                    deletedBy = deletedByList
                                 )
                             )
                         }
@@ -735,13 +812,19 @@ class SupabaseChatService {
             val u2 = userId2.trim()
             if (u1.isEmpty() || u2.isEmpty()) return@withContext emptyList()
 
+            // Synchronize deleted conversations cutoff on initial load
+            if (offset == 0 && context != null) {
+                try {
+                    syncDeletedConversations(context, u1)
+                } catch (_: Exception) {}
+            }
+
             try {
                 val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
                 val apiKey = SupabaseConfig.supabaseAnonKey.trim()
 
                 if (baseUrl.isNotEmpty() && apiKey.isNotEmpty()) {
-                    val authHeader = UserSessionManager.getAuthHeader(context)
-                    val deletedPrefs = context?.getSharedPreferences("qivo_deleted_chats", Context.MODE_PRIVATE)
+                    val authHeader = UserSessionManager.getAuthHeader(context).ifBlank { "Bearer $apiKey" }
 
                     // Primary query: targeted PostgREST filter for conversations between u1 and u2
                     val primaryUrl = "$baseUrl/rest/v1/messages?or=(and(sender_id.eq.$u1,receiver_id.eq.$u2),and(sender_id.eq.$u2,receiver_id.eq.$u1))&order=created_at.desc&limit=$limit&offset=$offset"
@@ -778,10 +861,24 @@ class SupabaseChatService {
                                         val partnerId = if (sId.equals(u1, ignoreCase = true)) rId else sId
                                         if (profileService.isUserBlocked(u1, partnerId, context)) continue
 
-                                        val cutoff = deletedPrefs?.getLong("${u1}_${partnerId}", 0L) ?: 0L
+                                        val deletedByArr = obj.optJSONArray("deleted_by")
+                                        val deletedByList = mutableListOf<String>()
+                                        if (deletedByArr != null) {
+                                            for (d in 0 until deletedByArr.length()) {
+                                                val itemVal = deletedByArr.optString(d, "").trim()
+                                                if (itemVal.isNotBlank()) deletedByList.add(itemVal)
+                                            }
+                                        }
+
+                                        // If marked deleted for u1 on Supabase, NEVER show it
+                                        if (deletedByList.any { it.equals(u1, ignoreCase = true) }) {
+                                            continue
+                                        }
+
+                                        val cutoff = getDeletedCutoff(context, u1, partnerId)
                                         if (cutoff > 0L) {
                                             val ts = parseTimestampToMillis(createdAtStr)
-                                            if (ts in 1..cutoff) continue
+                                            if (ts == 0L || ts <= (cutoff + 5000L)) continue
                                         }
 
                                         results.add(
@@ -794,7 +891,8 @@ class SupabaseChatService {
                                                 receiverName = obj.optString("receiver_name", "User"),
                                                 message = obj.optString("message", ""),
                                                 createdAt = createdAtStr,
-                                                isRead = obj.optBoolean("is_read", false)
+                                                isRead = obj.optBoolean("is_read", false),
+                                                deletedBy = deletedByList
                                             )
                                         )
                                     }
@@ -820,8 +918,17 @@ class SupabaseChatService {
                 if (context != null) AppDataCacheManager.getCachedChatMessagesSync(context, u1) else emptyList()
             }
             val conversationMsgs = cachedAll.filter { msg ->
-                (msg.senderId.trim().equals(u1, ignoreCase = true) && msg.receiverId.trim().equals(u2, ignoreCase = true)) ||
-                (msg.receiverId.trim().equals(u1, ignoreCase = true) && msg.senderId.trim().equals(u2, ignoreCase = true))
+                val isPair = (msg.senderId.trim().equals(u1, ignoreCase = true) && msg.receiverId.trim().equals(u2, ignoreCase = true)) ||
+                             (msg.receiverId.trim().equals(u1, ignoreCase = true) && msg.senderId.trim().equals(u2, ignoreCase = true))
+                if (!isPair) return@filter false
+                if (msg.deletedBy.any { it.equals(u1, ignoreCase = true) }) return@filter false
+                val partnerId = if (msg.senderId.trim().equals(u1, ignoreCase = true)) msg.receiverId.trim() else msg.senderId.trim()
+                val cutoff = getDeletedCutoff(context, u1, partnerId)
+                if (cutoff > 0L) {
+                    val ts = parseTimestampToMillis(msg.createdAt)
+                    if (ts == 0L || ts <= (cutoff + 5000L)) return@filter false
+                }
+                true
             }
             conversationMsgs.drop(offset).take(limit)
         }

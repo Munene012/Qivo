@@ -45,6 +45,7 @@ import com.example.calling.ActiveCallSessionManager
 import com.example.calling.ActiveCallStatus
 import com.example.calling.CallRole
 import com.example.data.AvatarHelper
+import com.example.data.ZegoCloudVoiceEngine
 import com.example.ui.components.CameraPreviewView
 import com.example.ui.components.FloatingCallBubble
 import com.example.ui.theme.QivoOrange
@@ -88,6 +89,19 @@ fun GlobalCallOverlay(
     val isConnected = session.status == ActiveCallStatus.CONNECTED
     val isEnded = session.status == ActiveCallStatus.ENDED
 
+    // Initialize ZegoCloud for connected voice and video calls
+    DisposableEffect(session.callId, isConnected) {
+        if (isConnected) {
+            ZegoCloudVoiceEngine.initEngine(context)
+            ZegoCloudVoiceEngine.joinRoom(session.callId, currentUserId, "User", session.callType == CallType.VIDEO)
+        }
+        onDispose {
+            if (isConnected) {
+                ZegoCloudVoiceEngine.leaveRoom()
+            }
+        }
+    }
+
     // Intercept back button: minimize if connected, or end/decline
     BackHandler {
         if (isConnected) {
@@ -126,6 +140,11 @@ fun GlobalCallOverlay(
         val needed = mutableListOf<String>()
         if (!hasAudioPermission) needed.add(Manifest.permission.RECORD_AUDIO)
         if (session.callType == CallType.VIDEO && !hasCameraPermission) needed.add(Manifest.permission.CAMERA)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                needed.add(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+        }
         if (needed.isNotEmpty()) {
             permissionsLauncher.launch(needed.toTypedArray())
         }
@@ -315,7 +334,7 @@ fun GlobalCallOverlay(
                         .size(120.dp)
                         .border(
                             width = 3.dp,
-                            brush = if (isConnected) Brush.linearGradient(listOf(Color(0xFF00E676), Color(0xFF69F0AE)))
+                            brush = if (isConnected) Brush.linearGradient(listOf(Color(0xFFFF8D00), Color(0xFFFFD54F)))
                             else if (isIncoming) Brush.linearGradient(listOf(Color(0xFFFF9100), Color(0xFFFF3D00)))
                             else Brush.linearGradient(listOf(QivoOrange, QivoYellow)),
                             shape = CircleShape
@@ -402,7 +421,7 @@ fun GlobalCallOverlay(
                 isConnected -> {
                     Text(
                         text = formatDuration(session.durationSeconds),
-                        color = Color(0xFF00E676),
+                        color = Color(0xFFFF8D00),
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -537,7 +556,7 @@ fun GlobalCallOverlay(
                                 ActiveCallSessionManager.acceptCall(context)
                             },
                             shape = CircleShape,
-                            color = Color(0xFF00C853),
+                            color = Color(0xFFFF6500),
                             shadowElevation = 12.dp,
                             modifier = Modifier
                                 .size(68.dp)

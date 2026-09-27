@@ -104,6 +104,8 @@ import kotlinx.coroutines.launch
 
 object HomeScreenDataStore {
     var lastUserId: String = ""
+    var hasCheckedWelcomeBonus: Boolean = false
+    var hasRefreshedOnAppOpen: Boolean = false
     val cachedProfilesByGender: MutableMap<String, List<UserProfile>> = mutableMapOf()
     val hasMoreByGender: MutableMap<String, Boolean> = mutableMapOf()
     var savedFirstVisibleItemIndex: Int = 0
@@ -118,6 +120,7 @@ object HomeScreenDataStore {
     fun clearCache() {
         cachedProfilesByGender.clear()
         hasMoreByGender.clear()
+        hasCheckedWelcomeBonus = false
         resetScrollToTop()
     }
 }
@@ -191,10 +194,10 @@ fun HomeScreen(
     val initialCachedProfiles = remember(targetOppositeGender) {
         val inMemory = HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender]
         if (!inMemory.isNullOrEmpty()) {
-            inMemory
+            inMemory.sortedWith(com.example.data.UserProfileSorting.recommendComparator)
         } else {
             val cached = AppDataCacheManager.getCachedProfilesSync(context, category = "home_$targetOppositeGender")
-            val batch = cached.take(pageSize)
+            val batch = cached.sortedWith(com.example.data.UserProfileSorting.recommendComparator).take(pageSize)
             if (batch.isNotEmpty()) {
                 HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = batch
             }
@@ -221,17 +224,18 @@ fun HomeScreen(
                 // 1. Immediately display cached profiles for instant offline/online UI (take initial 15)
                 val cached = AppDataCacheManager.getCachedProfiles(context, category = "home_$targetOppositeGender")
                 if (cached.isNotEmpty() && realProfiles.isEmpty()) {
-                    val initialBatch = cached.take(pageSize)
+                    val initialBatch = cached.sortedWith(com.example.data.UserProfileSorting.recommendComparator).take(pageSize)
                     realProfiles = initialBatch
                     HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = initialBatch
                     isLoadingProfiles = false
                 }
 
-                // 2. If online, fetch fresh realtime profiles from Supabase and cache them
-                if (NetworkUtils.isOnline(context)) {
+                // 2. Only fetch from network if it is an explicit manual pull-to-refresh or if we currently have 0 profiles
+                if (NetworkUtils.isOnline(context) && (isPullRefresh || realProfiles.isEmpty())) {
                     val initial = profileService.fetchProfilesPaged(offset = 0, limit = pageSize, targetGender = targetOppositeGender)
                     if (initial.isNotEmpty()) {
-                        val first15 = initial.take(pageSize)
+                        val sorted = initial.sortedWith(com.example.data.UserProfileSorting.recommendComparator)
+                        val first15 = sorted.take(pageSize)
                         realProfiles = first15
                         HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = first15
                         hasMoreProfiles = initial.size >= pageSize
@@ -247,7 +251,7 @@ fun HomeScreen(
                 } else {
                     // Offline fallback: if no cached data was found yet
                     if (realProfiles.isEmpty() && cached.isNotEmpty()) {
-                        val initialBatch = cached.take(pageSize)
+                        val initialBatch = cached.sortedWith(com.example.data.UserProfileSorting.recommendComparator).take(pageSize)
                         realProfiles = initialBatch
                         HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = initialBatch
                     }
@@ -280,7 +284,7 @@ fun HomeScreen(
                             val existingIds = realProfiles.map { it.id }.toSet()
                             val distinctNew = nextBatch.filter { it.id !in existingIds }
                             if (distinctNew.isNotEmpty()) {
-                                val combined = realProfiles + distinctNew
+                                val combined = (realProfiles + distinctNew).sortedWith(com.example.data.UserProfileSorting.recommendComparator)
                                 realProfiles = combined
                                 HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = combined
                                 AppDataCacheManager.saveProfilesCache(context, combined, category = "home_$targetOppositeGender")
@@ -312,7 +316,7 @@ fun HomeScreen(
                 scope.launch {
                     val cached = AppDataCacheManager.getCachedProfiles(context, category = "home_$targetOppositeGender")
                     if (cached.isNotEmpty()) {
-                        val initialBatch = cached.take(pageSize)
+                        val initialBatch = cached.sortedWith(com.example.data.UserProfileSorting.recommendComparator).take(pageSize)
                         realProfiles = initialBatch
                         HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = initialBatch
                     }
@@ -321,7 +325,8 @@ fun HomeScreen(
                 try {
                     val fresh = profileService.fetchProfilesPaged(offset = 0, limit = pageSize, targetGender = targetOppositeGender)
                     if (fresh.isNotEmpty()) {
-                        val first15 = fresh.take(pageSize)
+                        val sorted = fresh.sortedWith(com.example.data.UserProfileSorting.recommendComparator)
+                        val first15 = sorted.take(pageSize)
                         realProfiles = first15
                         hasMoreProfiles = fresh.size >= pageSize
                         HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = first15
@@ -344,9 +349,10 @@ fun HomeScreen(
     val currentUserId = effectiveUserId
     val currentUserEmail = effectiveEmail
 
-    // Automatically claim Welcome Bonus (500 coins) immediately after landing in Home
+    // Claim Welcome Bonus once per session immediately after landing in Home
     LaunchedEffect(currentUserId) {
-        if (currentUserId.isNotBlank()) {
+        if (currentUserId.isNotBlank() && !HomeScreenDataStore.hasCheckedWelcomeBonus) {
+            HomeScreenDataStore.hasCheckedWelcomeBonus = true
             val token = UserSessionManager.getValidAccessToken(context)
             try {
                 val (claimedBonus, bonusAmount) = profileService.claimDeviceWelcomeBonus(
@@ -361,17 +367,28 @@ fun HomeScreen(
         }
     }
 
-    // Automatically clear cache and fetch fresh profiles on login/switch/registration
+    // Automatically clear cache and fetch fresh profiles only on login/switch account; never auto-refresh when switching between screens
     LaunchedEffect(currentUserId) {
         if (currentUserId.isNotBlank()) {
-            if (HomeScreenDataStore.lastUserId != currentUserId) {
+            if (HomeScreenDataStore.lastUserId.isNotBlank() && HomeScreenDataStore.lastUserId != currentUserId) {
                 HomeScreenDataStore.lastUserId = currentUserId
                 HomeScreenDataStore.clearCache()
                 realProfiles = emptyList()
                 loadProfiles(true)
-            } else if (realProfiles.isEmpty()) {
-                loadProfiles(false)
+            } else {
+                HomeScreenDataStore.lastUserId = currentUserId
+                if (realProfiles.isEmpty()) {
+                    loadProfiles(false)
+                }
             }
+        }
+    }
+
+    // Automatically refresh profiles on fresh app open to bring in users online at that time
+    LaunchedEffect(Unit) {
+        if (!HomeScreenDataStore.hasRefreshedOnAppOpen) {
+            HomeScreenDataStore.hasRefreshedOnAppOpen = true
+            loadProfiles(true)
         }
     }
 
@@ -425,7 +442,7 @@ fun HomeScreen(
         }
     }
 
-    // Handle click / re-selection on Home tab: if not at top -> scroll to top first; if at top -> refresh
+    // Handle click / re-selection on Home tab: if not at top -> scroll to top; only refresh manually (user pull-to-refresh)
     LaunchedEffect(refreshTrigger) {
         if (refreshTrigger > 0L) {
             val isAtTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset <= 10
@@ -433,8 +450,6 @@ fun HomeScreen(
                 HomeScreenDataStore.savedFirstVisibleItemIndex = 0
                 HomeScreenDataStore.savedFirstVisibleItemScrollOffset = 0
                 listState.animateScrollToItem(0)
-            } else {
-                pullRefreshState.triggerRefresh(scope)
             }
         }
     }
@@ -471,16 +486,13 @@ fun HomeScreen(
             otherProfiles
         }
 
-        val filtered = if (selectedTab == "Nearby") {
-            val nearbyList = genderMatched.filter { user ->
-                user.country.trim().equals(effectiveCountry, ignoreCase = true)
-            }
-            if (nearbyList.isNotEmpty()) nearbyList else genderMatched
+        val sortedList = if (selectedTab == "Nearby") {
+            genderMatched.sortedWith(com.example.data.UserProfileSorting.getNearbyComparator(effectiveCountry))
         } else {
-            genderMatched
+            genderMatched.sortedWith(com.example.data.UserProfileSorting.recommendComparator)
         }
 
-        filtered
+        sortedList
     }
 
     val chunkedProfiles = remember(displayedProfiles) {
@@ -552,9 +564,9 @@ fun HomeScreen(
                     .height(statusBarTopInset)
                     .background(
                         if (isDark) {
-                            Color(0xFF09120B)
+                            Color(0xFF1E172B)
                         } else {
-                            Color(0xFF009639)
+                            Color(0xFFFF6500)
                         }
                     )
             )
@@ -572,7 +584,7 @@ fun HomeScreen(
                     Box(
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        // Top signature emerald green aesthetic banner extending 3/4 way behind the buttons
+                        // Top signature luxury sunset amber banner extending 3/4 way behind the buttons
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -582,17 +594,17 @@ fun HomeScreen(
                                     if (isDark) {
                                         Brush.verticalGradient(
                                             listOf(
-                                                Color(0xFF09120B),
-                                                Color(0xFF050A06)
+                                                Color(0xFF1E172B),
+                                                Color(0xFF0C0A12)
                                             )
                                         )
                                     } else {
                                         Brush.verticalGradient(
                                             listOf(
-                                                Color(0xFF009639), // Deep Emerald
-                                                Color(0xFF00B04A), // Jewel Jade
-                                                Color(0xFF00C853), // Vivid Emerald
-                                                Color(0xFF26E06D)  // Mint Emerald
+                                                Color(0xFFFF6500), // Sunset Orange
+                                                Color(0xFFFF8D00), // Amber Gold
+                                                Color(0xFFFFB300), // Warm Gold
+                                                Color(0xFFF9F9FB)  // Pearl Canvas
                                             )
                                         )
                                     }
@@ -612,7 +624,7 @@ fun HomeScreen(
                                     .padding(horizontal = 14.dp),
                                 horizontalArrangement = Arrangement.spacedBy(cardSpacing)
                             ) {
-                                // Card 1: Message Blast (Luxury Sunset Amber / Coral Glass Card)
+                                // Card 1: Message Blast (Vibrant Sunset Coral / Amber Orange)
                                 Card(
                                     modifier = Modifier
                                         .weight(1f)
@@ -620,7 +632,7 @@ fun HomeScreen(
                                         .clickable { onOpenMessageBlast() },
                                     shape = RoundedCornerShape(14.dp),
                                     colors = CardDefaults.cardColors(
-                                        containerColor = if (isDark) Color(0xFF2C241B) else Color(0xFFFAF7F2)
+                                        containerColor = if (isDark) Color(0xFF2C160F) else Color(0xFFFFF2EB)
                                     ),
                                     elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 4.dp else 2.5.dp)
                                 ) {
@@ -629,8 +641,8 @@ fun HomeScreen(
                                             .fillMaxSize()
                                             .background(
                                                 Brush.verticalGradient(
-                                                    colors = if (isDark) listOf(Color(0xFF3B3022), Color(0xFF201A12))
-                                                    else listOf(Color(0xFFFCFAF7), Color(0xFFF2ECE1))
+                                                    colors = if (isDark) listOf(Color(0xFF3D1F15), Color(0xFF24110B))
+                                                    else listOf(Color(0xFFFFECE2), Color(0xFFFFD9CC))
                                                 )
                                             )
                                             .padding(7.dp)
@@ -638,7 +650,7 @@ fun HomeScreen(
                                         Column(modifier = Modifier.align(Alignment.TopStart).padding(start = 2.dp, top = 2.dp)) {
                                             Text(
                                                 text = "Message\nBlast",
-                                                color = if (isDark) Color(0xFFDFD0BA) else Color(0xFF9E7B40),
+                                                color = if (isDark) Color(0xFFFFAB91) else Color(0xFFE64A19),
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 lineHeight = 15.sp
@@ -653,7 +665,7 @@ fun HomeScreen(
                                     }
                                 }
 
-                                // Card 2: Game Center (Luxury Champagne Gold Glass Card)
+                                // Card 2: Game Center (Luxury Champagne Gold / Sunburst Amber)
                                 Card(
                                     modifier = Modifier
                                         .weight(1f)
@@ -665,7 +677,7 @@ fun HomeScreen(
                                         },
                                     shape = RoundedCornerShape(14.dp),
                                     colors = CardDefaults.cardColors(
-                                        containerColor = if (isDark) Color(0xFF2F2716) else Color(0xFFFDFBF7)
+                                        containerColor = if (isDark) Color(0xFF282008) else Color(0xFFFFF9E6)
                                     ),
                                     elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 4.dp else 2.5.dp)
                                 ) {
@@ -674,8 +686,8 @@ fun HomeScreen(
                                             .fillMaxSize()
                                             .background(
                                                 Brush.verticalGradient(
-                                                    colors = if (isDark) listOf(Color(0xFF45391E), Color(0xFF221A0C))
-                                                    else listOf(Color(0xFFFFFDF8), Color(0xFFF5EFE0))
+                                                    colors = if (isDark) listOf(Color(0xFF3E310C), Color(0xFF201904))
+                                                    else listOf(Color(0xFFFFF8E1), Color(0xFFFFE8A3))
                                                 )
                                             )
                                             .padding(7.dp)
@@ -683,7 +695,7 @@ fun HomeScreen(
                                         Column(modifier = Modifier.align(Alignment.TopStart).padding(start = 2.dp, top = 2.dp)) {
                                             Text(
                                                 text = "Game\nCenter",
-                                                color = if (isDark) Color(0xFFE8D7B5) else Color(0xFFB38E3F),
+                                                color = if (isDark) Color(0xFFFFE082) else Color(0xFFB78103),
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 lineHeight = 15.sp
@@ -698,7 +710,7 @@ fun HomeScreen(
                                     }
                                 }
 
-                                // Card 3: Tasks Center (Refined Warm Titanium Neutral Glass Card)
+                                // Card 3: Tasks Center (Royal Amethyst Violet / Lavender)
                                 Card(
                                     modifier = Modifier
                                         .weight(1f)
@@ -706,7 +718,7 @@ fun HomeScreen(
                                         .clickable { onOpenTaskCenter() },
                                     shape = RoundedCornerShape(14.dp),
                                     colors = CardDefaults.cardColors(
-                                        containerColor = if (isDark) Color(0xFF262524) else Color(0xFFF8F8F7)
+                                        containerColor = if (isDark) Color(0xFF201335) else Color(0xFFF6EEFF)
                                     ),
                                     elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 4.dp else 2.5.dp)
                                 ) {
@@ -715,8 +727,8 @@ fun HomeScreen(
                                             .fillMaxSize()
                                             .background(
                                                 Brush.verticalGradient(
-                                                    colors = if (isDark) listOf(Color(0xFF383633), Color(0xFF1E1D1C))
-                                                    else listOf(Color(0xFFFAF9F8), Color(0xFFEDECE9))
+                                                    colors = if (isDark) listOf(Color(0xFF321D50), Color(0xFF1B0E2D))
+                                                    else listOf(Color(0xFFF3E8FF), Color(0xFFE5D0FF))
                                                 )
                                             )
                                             .padding(7.dp)
@@ -724,7 +736,7 @@ fun HomeScreen(
                                         Column(modifier = Modifier.align(Alignment.TopStart).padding(start = 2.dp, top = 2.dp)) {
                                             Text(
                                                 text = "Tasks\nCenter",
-                                                color = if (isDark) Color(0xFFD4D1CA) else Color(0xFF7E776C),
+                                                color = if (isDark) Color(0xFFD8B4FE) else Color(0xFF7C3AED),
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 lineHeight = 15.sp
@@ -1089,7 +1101,7 @@ fun HomeScreen(
                                 }
                             },
                             shape = CircleShape,
-                            color = Color(0xFF00C853),
+                            color = Color(0xFFFF6500),
                             enabled = !isSendingMessage
                         ) {
                             Box(
@@ -1097,9 +1109,9 @@ fun HomeScreen(
                                     .background(
                                         Brush.horizontalGradient(
                                             listOf(
-                                                Color(0xFF009639), // Deep Emerald
-                                                Color(0xFF00C853), // Vivid Emerald
-                                                Color(0xFF26E06D)  // Mint Emerald
+                                                Color(0xFFBF360C), // Deep Amber
+                                                Color(0xFFFF6500), // Qivo Orange
+                                                Color(0xFFFF8D00)  // Golden Orange
                                             )
                                         )
                                     )
@@ -1168,23 +1180,14 @@ private fun RealProfileCard(
             )
 
 
-            // Top Left Online Green Dot (Only when user is online)
-            if (user.isOnline) {
-                Box(
-                    modifier = Modifier
-                        .padding(top = 10.dp, start = 10.dp)
-                        .size(11.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF76FF03))
-                        .align(Alignment.TopStart)
-                )
-            }
 
-            // Top Right Custom Compact 3D CHAT Badge Button at the corner of the profile card
+
+            // Top Right Custom Compact 3D CHAT Badge Button touching the end line of profile card on top right
             Chat3DBadgeButton(
                 onClick = onChatClick,
+                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier
-                    .padding(top = 8.dp, end = 8.dp)
+                    .padding(top = 0.dp, end = 0.dp)
                     .align(Alignment.TopEnd)
                     .testTag("btn_chat_profile_card_${user.numericId}")
             )
@@ -1229,7 +1232,7 @@ private fun RealProfileCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         val isFemale = user.gender.equals("Female", ignoreCase = true) || user.gender.equals("F", ignoreCase = true)
-                        val genderBgColor = if (isFemale) Color(0xFFE2C485) else Color(0xFFD4C8B8)
+                        val genderBgColor = if (isFemale) Color(0xFFF48FB1) else Color(0xFF90CAF9)
 
                         Surface(
                             shape = RoundedCornerShape(6.dp),

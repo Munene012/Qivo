@@ -127,7 +127,7 @@ fun FloatingCallBubble(
             val center = Offset(size.width / 2, size.height / 2)
             val baseRadius = (size.width / 2) * 0.72f
             val pulseColor = when {
-                isConnected -> Color(0xFF00E676)
+                isConnected -> Color(0xFFFF8D00)
                 isIncoming -> Color(0xFFFF9100)
                 else -> Color(0xFFFFD600)
             }
@@ -151,7 +151,7 @@ fun FloatingCallBubble(
                 .border(
                     width = 2.5.dp,
                     brush = if (isConnected) {
-                        Brush.sweepGradient(listOf(Color(0xFF00E676), Color(0xFF76FF03), Color(0xFF00E676)))
+                        Brush.sweepGradient(listOf(Color(0xFFFF8D00), Color(0xFFFFD54F), Color(0xFFFF8D00)))
                     } else if (isIncoming) {
                         Brush.sweepGradient(listOf(Color(0xFFFF9100), Color(0xFFFF3D00), Color(0xFFFFD600), Color(0xFFFF9100)))
                     } else {
@@ -213,7 +213,7 @@ fun FloatingCallBubble(
                         .padding(4.dp)
                         .size(16.dp)
                         .clip(CircleShape)
-                        .background(if (isConnected) Color(0xFF00E676) else Color(0xFFFF9100)),
+                        .background(if (isConnected) Color(0xFFFF8D00) else Color(0xFFFF9100)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -239,7 +239,7 @@ fun FloatingCallBubble(
                         } else {
                             "${session.timeoutRemainingSeconds}s"
                         },
-                        color = if (isConnected) Color(0xFF00E676) else Color(0xFFFFD54F),
+                        color = if (isConnected) Color(0xFFFFD54F) else Color(0xFFFF8D00),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold
                     )

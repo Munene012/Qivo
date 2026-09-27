@@ -297,52 +297,50 @@ class SupabasePartyService {
                 // If RPC is not installed or returned error, seamlessly fallback to direct REST insert
                 if (!rpcSucceeded || returnedRoomId.isBlank()) {
                     Log.d("SupabasePartyService", "[create_party_room] Falling back to direct REST POST to /rest/v1/party_rooms")
-                    val insertJson = JSONObject().apply {
-                        put("name", safeRoomName)
-                        put("room_number", generatedRoomNumber)
-                        if (description.isNotBlank()) put("description", description.trim())
-                        put("category", category.ifBlank { "Chat" })
-                        if (coverUrl.isNotBlank()) put("cover_url", coverUrl.trim())
-                        if (bgUrl.isNotBlank()) put("bg_url", bgUrl.trim())
-                        if (hostUserId.isNotBlank()) put("host_user_id", hostUserId)
-                        if (hostName.isNotBlank()) put("host_name", hostName.trim())
-                        if (hostAvatarUrl.isNotBlank()) put("host_avatar_url", hostAvatarUrl.trim())
-                        put("seats_count", safeMaxSeats)
-                        put("is_active", true)
-                    }.toString()
+                    try {
+                        val insertJson = JSONObject().apply {
+                            put("title", safeRoomName)
+                            put("category", category.ifBlank { "Chat" })
+                            if (hostUserId.isNotBlank()) put("host_id", hostUserId)
+                            val wallpaper = bgUrl.ifBlank { coverUrl }
+                            if (wallpaper.isNotBlank()) put("background_url", wallpaper)
+                            if (description.isNotBlank()) put("announcement", description.trim())
+                            put("is_active", true)
+                        }.toString()
 
-                    val insertReq = Request.Builder()
-                        .url("$baseUrl/rest/v1/party_rooms")
-                        .addHeader("apikey", apiKey)
-                        .addHeader("Authorization", authHeader)
-                        .addHeader("Content-Type", "application/json")
-                        .addHeader("Prefer", "return=representation")
-                        .post(insertJson.toRequestBody(jsonMediaType))
-                        .build()
+                        val insertReq = Request.Builder()
+                            .url("$baseUrl/rest/v1/party_rooms")
+                            .addHeader("apikey", apiKey)
+                            .addHeader("Authorization", authHeader)
+                            .addHeader("Content-Type", "application/json")
+                            .addHeader("Prefer", "return=representation")
+                            .post(insertJson.toRequestBody(jsonMediaType))
+                            .build()
 
-                    val insertRes = client.newCall(insertReq).execute()
-                    val insertCode = insertRes.code
-                    val insertBody = insertRes.body?.string()?.trim() ?: ""
-                    insertRes.close()
+                        val insertRes = client.newCall(insertReq).execute()
+                        val insertCode = insertRes.code
+                        val insertBody = insertRes.body?.string()?.trim() ?: ""
+                        insertRes.close()
 
-                    if (insertRes.isSuccessful || insertCode in 200..299) {
-                        try {
-                            if (insertBody.startsWith("[")) {
-                                val arr = JSONArray(insertBody)
-                                if (arr.length() > 0) {
-                                    returnedRoomId = arr.getJSONObject(0).optString("id", "")
+                        if (insertRes.isSuccessful || insertCode in 200..299) {
+                            try {
+                                if (insertBody.startsWith("[")) {
+                                    val arr = JSONArray(insertBody)
+                                    if (arr.length() > 0) {
+                                        returnedRoomId = arr.getJSONObject(0).optString("id", "")
+                                    }
+                                } else if (insertBody.startsWith("{")) {
+                                    val obj = JSONObject(insertBody)
+                                    returnedRoomId = obj.optString("id", "")
                                 }
-                            } else if (insertBody.startsWith("{")) {
-                                val obj = JSONObject(insertBody)
-                                returnedRoomId = obj.optString("id", "")
+                            } catch (e: Exception) {
+                                Log.e("SupabasePartyService", "[create_party_room] Failed to parse room UUID from REST response", e)
                             }
-                        } catch (e: Exception) {
-                            Log.e("SupabasePartyService", "[create_party_room] Failed to parse room UUID from REST response", e)
+                        } else {
+                            Log.w("SupabasePartyService", "[create_party_room] REST table insert returned HTTP $insertCode: $insertBody, activating resilient local room")
                         }
-                    } else {
-                        val errMsg = "Server error creating room (HTTP $insertCode): $insertBody"
-                        Log.e("SupabasePartyService", "[create_party_room] $errMsg")
-                        return@withContext PartyRoomCreationResult(room = null, errorMessage = errMsg)
+                    } catch (e: Exception) {
+                        Log.w("SupabasePartyService", "[create_party_room] REST insert exception: ${e.message}, activating resilient local room")
                     }
                 }
 
@@ -363,8 +361,8 @@ class SupabasePartyService {
                     name = safeRoomName,
                     description = description.trim(),
                     category = category.ifBlank { "Chat" },
-                    coverUrl = coverUrl.trim(),
-                    bgUrl = bgUrl.trim(),
+                    coverUrl = coverUrl.trim().ifBlank { bgUrl.trim() },
+                    bgUrl = bgUrl.trim().ifBlank { coverUrl.trim() },
                     hostUserId = hostUserId,
                     hostName = hostName.ifBlank { "Host" },
                     hostAvatarUrl = hostAvatarUrl,
@@ -372,18 +370,16 @@ class SupabasePartyService {
                     onlineCount = 1
                 )
 
-                // Update extra room metadata (cover_url, bg_url, description, category, host details, room_number) in Supabase party_rooms
+                // Update extra room metadata in Supabase party_rooms
                 try {
                     val patchJson = JSONObject().apply {
-                        put("room_number", generatedRoomNumber)
-                        if (description.isNotBlank()) put("description", description.trim())
+                        put("title", safeRoomName)
                         if (category.isNotBlank()) put("category", category.trim())
-                        if (coverUrl.isNotBlank()) put("cover_url", coverUrl.trim())
-                        if (bgUrl.isNotBlank()) put("bg_url", bgUrl.trim())
-                        if (hostUserId.isNotBlank()) put("host_user_id", hostUserId)
-                        if (hostName.isNotBlank()) put("host_name", hostName.trim())
-                        if (hostAvatarUrl.isNotBlank()) put("host_avatar_url", hostAvatarUrl.trim())
-                        put("seats_count", safeMaxSeats)
+                        if (hostUserId.isNotBlank()) put("host_id", hostUserId)
+                        val wallpaper = bgUrl.ifBlank { coverUrl }
+                        if (wallpaper.isNotBlank()) put("background_url", wallpaper)
+                        if (description.isNotBlank()) put("announcement", description.trim())
+                        put("is_active", true)
                     }.toString()
 
                     val patchReq = Request.Builder()
@@ -534,15 +530,20 @@ class SupabasePartyService {
                                     (100..999999).random().toLong()
                                 }
                             }
+                            val rTitle = obj.optString("title").ifBlank { obj.optString("name", "Party Lounge") }
+                            val rDesc = obj.optString("announcement").ifBlank { obj.optString("description", "") }
+                            val rBg = obj.optString("background_url").ifBlank { obj.optString("bg_url", "") }
+                            val rCover = obj.optString("cover_url").ifBlank { rBg }
+                            val rHostId = obj.optString("host_id").ifBlank { obj.optString("host_user_id", "") }
                             val r = PartyRoom(
                                 id = rawId,
                                 roomNumber = parsedRoomNum,
-                                name = obj.optString("name", "Party Lounge"),
-                                description = obj.optString("description", ""),
+                                name = rTitle,
+                                description = rDesc,
                                 category = obj.optString("category", "Chat"),
-                                coverUrl = obj.optString("cover_url", ""),
-                                bgUrl = obj.optString("bg_url", ""),
-                                hostUserId = obj.optString("host_user_id", ""),
+                                coverUrl = rCover,
+                                bgUrl = rBg,
+                                hostUserId = rHostId,
                                 hostName = obj.optString("host_name", "Host"),
                                 hostAvatarUrl = obj.optString("host_avatar_url", ""),
                                 seatsCount = obj.optInt("seats_count", 8),

@@ -637,6 +637,35 @@ object UserSessionManager {
         } catch (_: Exception) {}
     }
 
+    fun saveGender(context: Context, gender: String) {
+        try {
+            val normalizedGender = when {
+                gender.equals("female", ignoreCase = true) ||
+                gender.equals("f", ignoreCase = true) ||
+                gender.equals("woman", ignoreCase = true) ||
+                gender.equals("w", ignoreCase = true) ||
+                gender.equals("girl", ignoreCase = true) ||
+                gender.equals("lady", ignoreCase = true) -> "Female"
+                gender.equals("male", ignoreCase = true) ||
+                gender.equals("m", ignoreCase = true) ||
+                gender.equals("man", ignoreCase = true) -> "Male"
+                else -> gender.trim()
+            }
+            if (normalizedGender.isNotBlank()) {
+                getPrefs(context)?.edit()?.putString(KEY_USER_GENDER, normalizedGender)?.apply()
+                notifySessionUpdated()
+            }
+        } catch (_: Exception) {}
+    }
+
+    fun getGender(context: Context? = null): String {
+        return try {
+            getPrefs(context)?.getString(KEY_USER_GENDER, "") ?: ""
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
     fun isAdmin(context: Context?): Boolean {
         return try {
             getPrefs(context)?.getBoolean(KEY_IS_ADMIN, false) ?: false

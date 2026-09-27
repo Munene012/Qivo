@@ -319,7 +319,7 @@ fun UserDetailScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(bottom = 100.dp)
+                .padding(bottom = 160.dp)
         ) {
             // 1. Large Hero Profile Picture View with Horizontal Swipe Gallery (Height: 390dp)
             Box(
@@ -395,78 +395,6 @@ fun UserDetailScreen(
                     }
                 }
 
-                // Bottom Gradient Scrim & User Name displayed on the profile picture
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.BottomStart)
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
-                            )
-                        )
-                        .padding(horizontal = 20.dp, vertical = 18.dp)
-                ) {
-                    Column {
-                        // User Name in bottom-left on profile picture
-                        Text(
-                            text = liveUser.name.ifBlank { "QIVO User" },
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Quick Badges on the image
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            // Gender + Age Chip
-                            val genderBgColor = if (isFemale) Color(0xFFE2C485) else Color(0xFFD4C8B8)
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = genderBgColor
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = if (isFemale) Icons.Default.Female else Icons.Default.Male,
-                                        contentDescription = "Gender",
-                                        tint = Color.Black,
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text(
-                                        text = userAge,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.Black
-                                    )
-                                }
-                            }
-
-                            // Country / Global Chip
-                            if (liveUser.country.isNotBlank()) {
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = Color(0xFFB3FF00)
-                                ) {
-                                    Text(
-                                        text = liveUser.country,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.Black,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
             }
 
             // 2. Lower Part (Spacious Scrollable Details Section)
@@ -475,6 +403,59 @@ fun UserDetailScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 18.dp, vertical = 16.dp)
             ) {
+                // Name, Age and Country on top of ID
+                Text(
+                    text = liveUser.name.ifBlank { "QIVO User" },
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.textPrimary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val genderBgColor = if (isFemale) Color(0xFFF48FB1) else Color(0xFF90CAF9)
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = genderBgColor
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (isFemale) Icons.Default.Female else Icons.Default.Male,
+                                contentDescription = "Gender",
+                                tint = Color.Black,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = userAge,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black
+                            )
+                        }
+                    }
+                    if (liveUser.country.isNotBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFFB3FF00)
+                        ) {
+                            Text(
+                                text = liveUser.country,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(14.dp))
+
                 // Badges / Tags Row: Info Chips on Left, Follow Button on the RIGHT
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -534,14 +515,14 @@ fun UserDetailScreen(
                                         modifier = Modifier
                                             .size(7.dp)
                                             .clip(CircleShape)
-                                            .background(Color(0xFF4CAF50))
+                                            .background(Color(0xFF00E676))
                                     )
                                     Spacer(modifier = Modifier.width(5.dp))
                                     Text(
                                         text = "Online",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (isDark) Color(0xFF81C784) else Color(0xFF2E7D32)
+                                        color = Color(0xFF00E676)
                                     )
                                 }
                             }
@@ -551,7 +532,7 @@ fun UserDetailScreen(
                         if (liveUser.isCoinSeller) {
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
-                                color = Color(0xFF00C853)
+                                color = Color(0xFFFF8D00)
                             ) {
                                 Text(
                                     text = "💰 Coin Seller",
@@ -1130,7 +1111,7 @@ fun UserDetailScreen(
                                 .fillMaxSize()
                                 .background(
                                     if (isBlocked) Brush.linearGradient(listOf(Color.Gray, Color.DarkGray))
-                                    else Brush.linearGradient(listOf(Color(0xFF66BB6A), Color(0xFF2E7D32))),
+                                    else Brush.linearGradient(listOf(Color(0xFFFF8D00), Color(0xFFBF360C))),
                                     shape = CircleShape
                                 ),
                             contentAlignment = Alignment.Center
@@ -1275,32 +1256,6 @@ fun UserDetailScreen(
                                 )
                             }
                         }
-                    } else if (!isCurrentUser) {
-                        Surface(
-                            onClick = {
-                                if (isBlockedByMe) {
-                                    AppToast.show("You blocked this user.")
-                                } else if (isBlocked || isBlockedByThem) {
-                                    AppToast.show("You have been blocked.")
-                                } else {
-                                    onStartChat(liveUser)
-                                }
-                            },
-                            shape = CircleShape,
-                            color = if (scrollProgress > 0.55f) Color.Transparent else Color.Black.copy(alpha = 0.45f),
-                            modifier = Modifier
-                                .size(42.dp)
-                                .testTag("btn_user_detail_chat_top")
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.Chat,
-                                    contentDescription = "Chat",
-                                    tint = if (scrollProgress > 0.55f) colors.textPrimary else Color.White,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
                     }
 
                     // 3 Dots Options Button (Always fixed and accessible on the right)
@@ -1378,11 +1333,11 @@ fun UserDetailScreen(
                                                 Icon(
                                                     imageVector = Icons.Default.LockOpen,
                                                     contentDescription = null,
-                                                    tint = Color(0xFF00C853),
+                                                    tint = Color(0xFFFF8D00),
                                                     modifier = Modifier.size(20.dp)
                                                 )
                                                 Spacer(modifier = Modifier.width(10.dp))
-                                                Text("Unblock User", color = Color(0xFF00C853), fontWeight = FontWeight.Bold)
+                                                Text("Unblock User", color = Color(0xFFFF8D00), fontWeight = FontWeight.Bold)
                                             }
                                         },
                                         onClick = {
@@ -1813,13 +1768,13 @@ private fun getBackgroundDetails(user: UserProfile): List<ProfileDetailItem> {
         } catch (e: Exception) {
             "23"
         }
-        items.add(ProfileDetailItem(Icons.Default.Cake, listOf(Color(0xFF00C853), Color(0xFF007E33)), "Age", "$ageVal years"))
+        items.add(ProfileDetailItem(Icons.Default.Cake, listOf(Color(0xFFFF8D00), Color(0xFFBF360C)), "Age", "$ageVal years"))
     }
     if (isFieldSet(user.gender)) {
         items.add(
             ProfileDetailItem(
                 if (user.gender.equals("Female", true)) Icons.Default.Female else Icons.Default.Male,
-                if (user.gender.equals("Female", true)) listOf(Color(0xFF00C853), Color(0xFF007E33)) else listOf(Color(0xFF009639), Color(0xFF004D20)),
+                if (user.gender.equals("Female", true)) listOf(Color(0xFFFF4081), Color(0xFFC2185B)) else listOf(Color(0xFFFF8D00), Color(0xFFBF360C)),
                 "Gender",
                 user.gender
             )

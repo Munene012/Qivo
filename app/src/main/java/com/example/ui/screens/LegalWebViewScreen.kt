@@ -70,6 +70,7 @@ import java.net.URLEncoder
 @Composable
 fun LegalWebViewScreen(
     initialType: LegalDocumentType = LegalDocumentType.TERMS_OF_SERVICE,
+    showTabs: Boolean = true,
     onClose: () -> Unit
 ) {
     var selectedTab by remember {
@@ -83,11 +84,15 @@ fun LegalWebViewScreen(
         onClose()
     }
 
-    val currentHtml = remember(selectedTab) {
-        if (selectedTab == 0) getTermsOfServiceHtml() else getPrivacyPolicyHtml()
+    val currentHtml = remember(selectedTab, initialType, showTabs) {
+        if (!showTabs) {
+            if (initialType == LegalDocumentType.TERMS_OF_SERVICE) getTermsOfServiceHtml() else getPrivacyPolicyHtml()
+        } else {
+            if (selectedTab == 0) getTermsOfServiceHtml() else getPrivacyPolicyHtml()
+        }
     }
 
-    LaunchedEffect(selectedTab, webViewInstance) {
+    LaunchedEffect(selectedTab, initialType, showTabs, webViewInstance) {
         webViewInstance?.let { wv ->
             wv.loadDataWithBaseURL("https://qivo.live", currentHtml, "text/html", "UTF-8", null)
         }
@@ -124,8 +129,13 @@ fun LegalWebViewScreen(
                         }
                         Spacer(modifier = Modifier.width(4.dp))
                         Column {
+                            val headerTitle = if (showTabs) {
+                                if (selectedTab == 0) "Terms of Service" else "Privacy Policy"
+                            } else {
+                                if (initialType == LegalDocumentType.TERMS_OF_SERVICE) "Terms of Service" else "Privacy Policy"
+                            }
                             Text(
-                                text = if (selectedTab == 0) "Terms of Service" else "Privacy Policy",
+                                text = headerTitle,
                                 fontSize = 17.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF0F172A)
@@ -167,64 +177,66 @@ fun LegalWebViewScreen(
                     }
                 }
 
-                // Interactive Document Tabs
-                TabRow(
-                    selectedTabIndex = selectedTab,
-                    containerColor = Color.White,
-                    contentColor = QivoOrange,
-                    indicator = { tabPositions ->
-                        TabRowDefaults.SecondaryIndicator(
-                            Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                            color = QivoOrange,
-                            height = 3.dp
+                // Interactive Document Tabs (Only shown if showTabs is true)
+                if (showTabs) {
+                    TabRow(
+                        selectedTabIndex = selectedTab,
+                        containerColor = Color.White,
+                        contentColor = QivoOrange,
+                        indicator = { tabPositions ->
+                            TabRowDefaults.SecondaryIndicator(
+                                Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                                color = QivoOrange,
+                                height = 3.dp
+                            )
+                        },
+                        divider = {
+                            HorizontalDivider(color = Color(0xFFE2E8F0))
+                        }
+                    ) {
+                        Tab(
+                            selected = selectedTab == 0,
+                            onClick = { selectedTab = 0 },
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Gavel,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = if (selectedTab == 0) QivoOrange else Color(0xFF64748B)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Terms of Service",
+                                        fontSize = 14.sp,
+                                        fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (selectedTab == 0) QivoOrange else Color(0xFF64748B)
+                                    )
+                                }
+                            }
                         )
-                    },
-                    divider = {
-                        HorizontalDivider(color = Color(0xFFE2E8F0))
+                        Tab(
+                            selected = selectedTab == 1,
+                            onClick = { selectedTab = 1 },
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = if (selectedTab == 1) QivoOrange else Color(0xFF64748B)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Privacy Policy",
+                                        fontSize = 14.sp,
+                                        fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (selectedTab == 1) QivoOrange else Color(0xFF64748B)
+                                    )
+                                }
+                            }
+                        )
                     }
-                ) {
-                    Tab(
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Gavel,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = if (selectedTab == 0) QivoOrange else Color(0xFF64748B)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Terms of Service",
-                                    fontSize = 14.sp,
-                                    fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (selectedTab == 0) QivoOrange else Color(0xFF64748B)
-                                )
-                            }
-                        }
-                    )
-                    Tab(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Lock,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = if (selectedTab == 1) QivoOrange else Color(0xFF64748B)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Privacy Policy",
-                                    fontSize = 14.sp,
-                                    fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (selectedTab == 1) QivoOrange else Color(0xFF64748B)
-                                )
-                            }
-                        }
-                    )
                 }
 
                 if (isPageLoading && pageProgress < 100) {
