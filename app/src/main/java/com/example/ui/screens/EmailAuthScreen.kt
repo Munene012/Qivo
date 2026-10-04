@@ -1,10 +1,11 @@
 package com.example.ui.screens
 
-import android.widget.Toast
+import com.example.ui.components.LegalDocumentType
+
+import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,7 +27,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Visibility
@@ -36,11 +37,11 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,8 +52,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -60,50 +59,41 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.AuthResult
-import com.example.data.AvatarFrameManager
 import com.example.data.SupabaseAuthService
 import com.example.data.SupabaseProfileService
-import com.example.data.UserSessionManager
 import com.example.ui.components.AppToast
-import com.example.ui.components.LegalDocumentType
-import com.example.ui.theme.QivoDarkCharcoal
 import com.example.ui.theme.QivoOrange
-import com.example.ui.theme.QivoTextMuted
 import kotlinx.coroutines.launch
 
 @Composable
 fun EmailAuthScreen(
     onNavigateBack: () -> Unit,
-    onAuthSuccess: (email: String, userId: String) -> Unit,
-    onNavigateToCreateAccount: (email: String, userId: String, initialName: String) -> Unit
+    onNavigateToOtp: (email: String) -> Unit,
+    onNavigateToPassword: (email: String) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val authService = remember { SupabaseAuthService() }
+    val profileService = remember { SupabaseProfileService() }
     val focusManager = LocalFocusManager.current
     val scrollState = rememberScrollState()
 
     var emailInput by remember { mutableStateOf("") }
-    var passwordInput by remember { mutableStateOf("") }
-    var passwordVisible by remember { mutableStateOf(false) }
-
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var infoMessage by remember { mutableStateOf<String?>(null) }
 
     // Full-screen legal WebView state
     var selectedLegalDoc by remember { mutableStateOf<LegalDocumentType?>(null) }
 
-    if (selectedLegalDoc != null) {
+    val activeDoc = selectedLegalDoc
+    if (activeDoc != null) {
         LegalWebViewScreen(
-            initialType = selectedLegalDoc!!,
+            initialType = activeDoc,
             showTabs = false,
             onClose = { selectedLegalDoc = null }
         )
@@ -114,142 +104,50 @@ fun EmailAuthScreen(
         onNavigateBack()
     }
 
-    fun performSignIn() {
-        if (emailInput.isBlank() || passwordInput.isBlank()) {
-            errorMessage = "Please enter both your email address and password."
+    fun handleContinue() {
+        val trimmedEmail = emailInput.trim()
+        if (trimmedEmail.isBlank() || !android.util.Patterns.EMAIL_ADDRESS.matcher(trimmedEmail).matches()) {
+            errorMessage = "Please enter a valid email address."
             return
         }
         isLoading = true
         errorMessage = null
-        infoMessage = null
+        focusManager.clearFocus()
 
         scope.launch {
-            when (val result = authService.signIn(emailInput, passwordInput, context)) {
-                is AuthResult.Success -> {
-                    // Automatically grant welcome frame if first time
-                    AvatarFrameManager.grantNewUserWelcomeFrame(context, result.userId)
-
-                    val profile = SupabaseProfileService().fetchProfile(result.userId, result.email, result.accessToken)
-                    val existingSession = UserSessionManager.getSession(context)
-                    val emailPrefix = if (result.email.contains("@")) result.email.substringBefore("@") else ""
-                    val resolvedName = when {
-                        !profile?.name.isNullOrBlank() && profile?.name != "QIVO User" -> profile!!.name
-                        !profile?.name.isNullOrBlank() -> profile!!.name
-                        !existingSession?.name.isNullOrBlank() && existingSession?.name != "QIVO User" -> existingSession.name
-                        emailPrefix.isNotBlank() -> emailPrefix
-                        else -> "User"
-                    }
-                    val userCoins = profile?.coins ?: existingSession?.coins ?: 0L
-                    val resolvedGender = when {
-                        !profile?.gender.isNullOrBlank() && (profile!!.gender.startsWith("f", ignoreCase = true) || profile.gender.startsWith("w", ignoreCase = true)) -> "Female"
-                        !profile?.gender.isNullOrBlank() && profile.gender.startsWith("m", ignoreCase = true) -> "Male"
-                        !profile?.gender.isNullOrBlank() -> profile.gender
-                        !existingSession?.gender.isNullOrBlank() && (existingSession.gender.startsWith("f", ignoreCase = true) || existingSession.gender.startsWith("w", ignoreCase = true)) -> "Female"
-                        !existingSession?.gender.isNullOrBlank() && existingSession.gender.startsWith("m", ignoreCase = true) -> "Male"
-                        !existingSession?.gender.isNullOrBlank() -> existingSession.gender
-                        else -> "Male"
-                    }
-                    UserSessionManager.saveSession(
-                        context = context,
-                        email = result.email,
-                        userId = result.userId,
-                        name = resolvedName,
-                        gender = resolvedGender,
-                        country = profile?.country ?: existingSession?.country ?: "United States",
-                        avatarUrl = profile?.avatarUrl ?: existingSession?.avatarUrl ?: "",
-                        numericId = if ((profile?.numericId ?: 0L) > 0L) profile!!.numericId else existingSession?.numericId ?: 0L,
-                        coins = userCoins,
-                        accessToken = result.accessToken,
-                        refreshToken = result.refreshToken,
-                        expiresInSeconds = result.expiresIn,
-                        isAdmin = profile?.isAdmin ?: existingSession?.isAdmin,
-                        isCoinSeller = profile?.isCoinSeller ?: existingSession?.isCoinSeller,
-                        isAgent = profile?.isAgent ?: existingSession?.isAgent,
-                        isVerified = existingSession?.isVerified
-                    )
-                    UserSessionManager.saveCoins(context, userCoins)
-                    if (profile != null && profile.lastCheckinDate.isNotEmpty()) {
-                        UserSessionManager.saveDailyCheckIn(
-                            context = context,
-                            userId = result.userId,
-                            dateStr = profile.lastCheckinDate,
-                            dayNumber = profile.lastCheckinDay,
-                            email = result.email
-                        )
-                    }
+            try {
+                // Check if account already exists on server
+                val existingProfile = profileService.findProfileByIdentifier(trimmedEmail)
+                if (existingProfile != null) {
+                    // Account exists -> take user to password entry screen
                     isLoading = false
-                    AppToast.show("Welcome back! 🎉")
-                    onAuthSuccess(result.email, result.userId)
-                }
-                is AuthResult.Error -> {
-                    isLoading = false
-                    val raw = result.message
-                    if (raw.contains("host", ignoreCase = true) ||
-                        raw.contains("resolve", ignoreCase = true) ||
-                        raw.contains("connection", ignoreCase = true) ||
-                        raw.contains("network", ignoreCase = true) ||
-                        raw.contains("timeout", ignoreCase = true) ||
-                        raw.contains("failed", ignoreCase = true)
-                    ) {
-                        errorMessage = "Network error, please check your internet connection."
-                    } else {
-                        errorMessage = raw
+                    onNavigateToPassword(trimmedEmail)
+                } else {
+                    // Account does not exist -> send OTP for signup verification
+                    when (val result = authService.signInWithOtp(trimmedEmail)) {
+                        is AuthResult.Success -> {
+                            isLoading = false
+                            AppToast.show("Verification code sent! 📬")
+                            onNavigateToOtp(trimmedEmail)
+                        }
+                        is AuthResult.Error -> {
+                            isLoading = false
+                            val raw = result.message
+                            if (raw.contains("host", ignoreCase = true) ||
+                                raw.contains("resolve", ignoreCase = true) ||
+                                raw.contains("connection", ignoreCase = true) ||
+                                raw.contains("network", ignoreCase = true)
+                            ) {
+                                errorMessage = "Network error, please check your connection."
+                            } else {
+                                errorMessage = raw
+                            }
+                        }
                     }
                 }
-            }
-        }
-    }
-
-    fun performSignUp() {
-        if (emailInput.isBlank() || passwordInput.isBlank()) {
-            errorMessage = "Please enter both your email address and password."
-            return
-        }
-        if (passwordInput.length < 6) {
-            errorMessage = "Password must be at least 6 characters long."
-            return
-        }
-        isLoading = true
-        errorMessage = null
-        infoMessage = null
-
-        scope.launch {
-            when (val result = authService.signUp(emailInput, passwordInput, context)) {
-                is AuthResult.Success -> {
-                    if (!result.accessToken.isNullOrBlank()) {
-                        UserSessionManager.saveTokens(
-                            context = context,
-                            accessToken = result.accessToken,
-                            refreshToken = result.refreshToken ?: "",
-                            expiresInSeconds = result.expiresIn
-                        )
-                    }
-
-                    // Automatically grant and equip official 7-Day New User Welcome Frame with "NEW" tag!
-                    AvatarFrameManager.grantNewUserWelcomeFrame(context, result.userId)
-
-                    isLoading = false
-                    AppToast.show("Account created! Let's set up your profile.")
-                    val initialName = if (result.email.contains("@")) result.email.substringBefore("@") else ""
-                    onNavigateToCreateAccount(result.email, result.userId, initialName)
-                }
-                is AuthResult.Error -> {
-                    isLoading = false
-                    val raw = result.message
-                    if (raw.contains("already registered", ignoreCase = true)) {
-                        errorMessage = "This email is already registered. Please tap Log In or use another email."
-                    } else if (raw.contains("host", ignoreCase = true) ||
-                        raw.contains("resolve", ignoreCase = true) ||
-                        raw.contains("connection", ignoreCase = true) ||
-                        raw.contains("network", ignoreCase = true) ||
-                        raw.contains("timeout", ignoreCase = true) ||
-                        raw.contains("failed", ignoreCase = true)
-                    ) {
-                        errorMessage = "Network error, please check your internet connection."
-                    } else {
-                        errorMessage = raw
-                    }
-                }
+            } catch (e: Exception) {
+                isLoading = false
+                errorMessage = "Error checking account: ${e.localizedMessage}"
             }
         }
     }
@@ -274,40 +172,45 @@ fun EmailAuthScreen(
 
                 // Top Navigation Bar
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Surface(
+                    IconButton(
                         onClick = onNavigateBack,
-                        shape = CircleShape,
-                        color = Color(0xFFF1F5F9),
-                        modifier = Modifier.size(40.dp)
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFF1F5F9))
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                tint = Color(0xFF0F172A),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color(0xFF0F172A)
+                        )
                     }
-
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    Text(
-                        text = "Continue with Email",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF0F172A)
-                    )
                 }
 
-                Spacer(modifier = Modifier.height(36.dp))
+                Spacer(modifier = Modifier.height(32.dp))
 
-                // Email Address Input Block
+                Text(
+                    text = "What's your email?",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0F172A)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "We'll check if you have an account or set one up securely.",
+                    fontSize = 15.sp,
+                    color = Color(0xFF64748B),
+                    lineHeight = 22.sp
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // Email Input Field
                 Text(
                     text = "Email Address",
                     fontSize = 14.sp,
@@ -315,7 +218,6 @@ fun EmailAuthScreen(
                     color = Color(0xFF334155),
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
-
                 OutlinedTextField(
                     value = emailInput,
                     onValueChange = {
@@ -324,14 +226,14 @@ fun EmailAuthScreen(
                     },
                     placeholder = {
                         Text(
-                            text = "e.g. name@domain.com",
+                            text = "yourname@example.com",
                             color = Color(0xFF94A3B8),
                             fontSize = 15.sp
                         )
                     },
                     leadingIcon = {
                         Icon(
-                            imageVector = Icons.Default.Email,
+                            imageVector = Icons.Default.AlternateEmail,
                             contentDescription = "Email Icon",
                             tint = if (emailInput.isNotBlank()) QivoOrange else Color(0xFF94A3B8),
                             modifier = Modifier.size(20.dp)
@@ -340,10 +242,13 @@ fun EmailAuthScreen(
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Email,
-                        imeAction = ImeAction.Next
+                        imeAction = ImeAction.Done
                     ),
                     keyboardActions = KeyboardActions(
-                        onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                        onDone = {
+                            focusManager.clearFocus()
+                            handleContinue()
+                        }
                     ),
                     shape = RoundedCornerShape(16.dp),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -360,76 +265,7 @@ fun EmailAuthScreen(
                         .testTag("email_input_field")
                 )
 
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Password Input Block
-                Text(
-                    text = "Password",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF334155),
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-
-                OutlinedTextField(
-                    value = passwordInput,
-                    onValueChange = {
-                        passwordInput = it
-                        errorMessage = null
-                    },
-                    placeholder = {
-                        Text(
-                            text = "At least 6 characters",
-                            color = Color(0xFF94A3B8),
-                            fontSize = 15.sp
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Lock,
-                            contentDescription = "Password Icon",
-                            tint = if (passwordInput.isNotBlank()) QivoOrange else Color(0xFF94A3B8),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Password,
-                        imeAction = ImeAction.Done
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onDone = {
-                            focusManager.clearFocus()
-                            performSignIn()
-                        }
-                    ),
-                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                            Icon(
-                                imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                contentDescription = "Toggle password visibility",
-                                tint = Color(0xFF64748B),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color(0xFFF8FAFC),
-                        unfocusedContainerColor = Color(0xFFF8FAFC),
-                        focusedBorderColor = QivoOrange,
-                        unfocusedBorderColor = Color(0xFFE2E8F0),
-                        focusedTextColor = Color(0xFF0F172A),
-                        unfocusedTextColor = Color(0xFF0F172A)
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(58.dp)
-                        .testTag("password_input_field")
-                )
-
-                // Feedback / Error Banner
+                // Error Banner
                 if (errorMessage != null) {
                     Spacer(modifier = Modifier.height(16.dp))
                     Box(
@@ -458,36 +294,17 @@ fun EmailAuthScreen(
                     }
                 }
 
-                if (infoMessage != null) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFFF0FDF4))
-                            .border(1.dp, Color(0xFF86EFAC), RoundedCornerShape(12.dp))
-                            .padding(14.dp)
-                    ) {
-                        Text(
-                            text = infoMessage ?: "",
-                            color = Color(0xFF15803D),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
+                Spacer(modifier = Modifier.height(24.dp))
 
-                Spacer(modifier = Modifier.height(36.dp))
-
-                // Log In Button (Primary Orange Pill)
+                // Primary Action Button
                 Button(
-                    onClick = { performSignIn() },
-                    enabled = !isLoading,
+                    onClick = { handleContinue() },
+                    enabled = !isLoading && emailInput.isNotBlank(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(54.dp)
                         .shadow(elevation = 2.dp, shape = CircleShape)
-                        .testTag("login_action_button"),
+                        .testTag("email_continue_button"),
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = QivoOrange,
@@ -502,86 +319,49 @@ fun EmailAuthScreen(
                         )
                     } else {
                         Text(
-                            text = "Log In",
+                            text = "Continue",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Sign Up Button (Secondary Dark Charcoal Pill)
-                Button(
-                    onClick = { performSignUp() },
-                    enabled = !isLoading,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(54.dp)
-                        .testTag("signup_action_button"),
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF0F172A),
-                        contentColor = Color.White
-                    )
-                ) {
-                    Text(
-                        text = "Sign Up",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // Clean, Interactive Terms of Service & Privacy Policy Footer at bottom
+            // Legal Footer at bottom
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 16.dp),
+                    .padding(vertical = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "By continuing, you confirm you are 18+ and agree to our",
+                    text = "By continuing, you agree to our",
                     fontSize = 12.sp,
-                    color = Color(0xFF64748B),
-                    textAlign = TextAlign.Center
+                    color = Color(0xFF94A3B8)
                 )
-                Spacer(modifier = Modifier.height(6.dp))
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Terms of Service",
-                        fontSize = 12.5.sp,
-                        color = QivoOrange,
-                        fontWeight = FontWeight.Bold,
-                        textDecoration = TextDecoration.Underline,
-                        modifier = Modifier
-                            .clickable {
-                                selectedLegalDoc = LegalDocumentType.TERMS_OF_SERVICE
-                            }
-                            .padding(4.dp)
-                    )
-                    Text(
-                        text = " and ",
-                        fontSize = 12.sp,
-                        color = Color(0xFF64748B)
-                    )
-                    Text(
-                        text = "Privacy Policy",
-                        fontSize = 12.5.sp,
-                        color = QivoOrange,
-                        fontWeight = FontWeight.Bold,
-                        textDecoration = TextDecoration.Underline,
-                        modifier = Modifier
-                            .clickable {
-                                selectedLegalDoc = LegalDocumentType.PRIVACY_POLICY
-                            }
-                            .padding(4.dp)
-                    )
+                    TextButton(onClick = { selectedLegalDoc = LegalDocumentType.TERMS_OF_SERVICE }) {
+                        Text(
+                            text = "Terms of Service",
+                            fontSize = 12.sp,
+                            color = QivoOrange,
+                            textDecoration = TextDecoration.Underline,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Text(text = "and", fontSize = 12.sp, color = Color(0xFF94A3B8))
+                    TextButton(onClick = { selectedLegalDoc = LegalDocumentType.PRIVACY_POLICY }) {
+                        Text(
+                            text = "Privacy Policy",
+                            fontSize = 12.sp,
+                            color = QivoOrange,
+                            textDecoration = TextDecoration.Underline,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
         }

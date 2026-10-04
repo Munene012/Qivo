@@ -702,15 +702,15 @@ fun Coin3DIcon(
 @Composable
 fun Chat3DBadgeButton(
     modifier: Modifier = Modifier,
-    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(14.dp),
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(16.dp),
     onClick: () -> Unit
 ) {
     Surface(
         onClick = onClick,
         shape = shape,
         color = Color(0xFFFF8D00),
-        shadowElevation = 3.dp,
-        modifier = modifier.height(30.dp)
+        shadowElevation = 4.dp,
+        modifier = modifier.height(36.dp)
     ) {
         Box(
             modifier = Modifier
@@ -718,18 +718,18 @@ fun Chat3DBadgeButton(
                     Brush.horizontalGradient(
                         colors = listOf(
                             Color(0xFFFF8D00), // Sunset Amber Gold
-                            Color(0xFFFF6500)  // Sunset Orange
+                            Color(0xFFFF5200)  // Vivid Sunset Orange
                         )
                     ),
                     shape = shape
                 )
                 .border(
                     width = 1.dp,
-                    color = Color.White.copy(alpha = 0.4f),
+                    color = Color.White.copy(alpha = 0.5f),
                     shape = shape
                 )
                 .clip(shape)
-                .padding(horizontal = 9.dp, vertical = 4.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp),
             contentAlignment = Alignment.Center
         ) {
             Row(
@@ -737,17 +737,17 @@ fun Chat3DBadgeButton(
                 horizontalArrangement = Arrangement.Center
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Chat,
-                    contentDescription = "Chat",
+                    imageVector = androidx.compose.material.icons.Icons.Default.Chat,
+                    contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(14.dp)
+                    modifier = Modifier.size(15.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = "Chat",
                     color = Color.White,
                     fontWeight = FontWeight.ExtraBold,
-                    fontSize = 12.sp,
+                    fontSize = 13.5.sp,
                     letterSpacing = 0.3.sp
                 )
             }

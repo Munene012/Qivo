@@ -83,7 +83,7 @@ fun launchDirectCall(
 
                 // 3. Strictly check server coins before making the call
                 if (isCallerMale && serverCoins < rate) {
-                    AppToast.show("Insufficient coins. $rate coins required to start a ${callType.name.lowercase()} call.", isLong = true)
+                    AppToast.show("Insufficient coins (Balance: $serverCoins). $rate coins required for a ${callType.name.lowercase()} call.", isLong = true)
                     onInsufficientCoins()
                     return@withContext
                 }

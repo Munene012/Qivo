@@ -1,4 +1,5 @@
 package com.example.ui.screens
+import com.example.data.AuthResult
 
 import android.app.Activity
 import androidx.activity.compose.BackHandler
@@ -29,9 +30,15 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Male
+import androidx.compose.material.icons.filled.Female
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,6 +52,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import com.example.data.SupabaseAuthService
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,6 +69,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -66,6 +77,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import com.example.data.UserSessionManager
+import com.example.ui.components.AppToast
 import com.example.ui.components.LegalDocumentType
 import com.example.ui.components.TermsAndPrivacyDialog
 import com.example.ui.screens.CustomerSupportScreen
@@ -83,6 +96,9 @@ fun WelcomeScreen(
     onNavigateToCustomerSupport: (() -> Unit)? = null
 ) {
     var activeLegalDoc by remember { mutableStateOf<LegalDocumentType?>(null) }
+    val context = LocalContext.current
+
+    val scope = rememberCoroutineScope()
     var showCustomerSupportScreen by remember { mutableStateOf(false) }
     var isAgreedToTerms by remember { mutableStateOf(true) }
 
@@ -104,6 +120,7 @@ fun WelcomeScreen(
         )
         return
     }
+
 
     // Set Status Bar Icons to Dark for the pale warm sunset background
     val view = LocalView.current
@@ -396,7 +413,7 @@ fun WelcomeScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // B. EMAIL BUTTON (Sleek 52dp height, Pristine White Pill with Qivo Accent)
+            // B. EMAIL BUTTON (Now a Main elevated button matching Google button design)
             Surface(
                 onClick = {
                     if (!isAgreedToTerms) isAgreedToTerms = true
@@ -411,9 +428,9 @@ fun WelcomeScreen(
                         ambientColor = Color(0x22000000),
                         spotColor = Color(0x33FFA726)
                     )
-                    .testTag("email_login_button"),
+                    .testTag("email_login_main_button"),
                 shape = RoundedCornerShape(26.dp),
-                color = Color.White
+                color = QivoOrange
             ) {
                 Row(
                     modifier = Modifier
@@ -424,7 +441,7 @@ fun WelcomeScreen(
                     Icon(
                         imageVector = Icons.Default.Email,
                         contentDescription = "Email",
-                        tint = QivoOrange,
+                        tint = Color.White,
                         modifier = Modifier.size(22.dp)
                     )
                     Text(
@@ -432,7 +449,7 @@ fun WelcomeScreen(
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = AppFontFamily,
-                        color = Color(0xFF1E293B),
+                        color = Color.White,
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.Center
                     )
@@ -440,9 +457,11 @@ fun WelcomeScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // C. TERMS & PRIVACY CHECKBOX AGREEMENT
+
+            
+                        // C. TERMS & PRIVACY CHECKBOX AGREEMENT
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -571,3 +590,5 @@ private fun GoogleOfficialLogo(modifier: Modifier = Modifier) {
         modifier = modifier
     )
 }
+
+

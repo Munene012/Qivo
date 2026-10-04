@@ -83,6 +83,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.AvatarHelper
 import com.example.data.AvatarFrameItem
 import com.example.data.AvatarFrameManager
 import com.example.data.SupabaseProfileService
@@ -141,33 +142,10 @@ fun BagScreen(
         }
     }
 
-    val framesToDisplay = remember(validOwnedFrames, activeFrameId) {
-        val ownedMap = validOwnedFrames.associateBy { it.frameId.lowercase() }
-        val orderedCatalog = listOf(
-            "solar_monarch",
-            "imperial_leo",
-            "crimson_drake",
-            "new_user",
-            "sky_aviator",
-            "seraphim_grace",
-            "mystic_oculus",
-            "volt_tempest",
-            "emerald_matrix",
-            "astral_diadem",
-            "enchanted_flora"
-        )
+    val framesToDisplay = remember(validOwnedFrames) {
         val allFramesMap = AvatarFrameManager.ALL_FRAMES.associateBy { it.id.lowercase() }
-        orderedCatalog.mapNotNull { id ->
-            allFramesMap[id]?.let { frame ->
-                val owned = ownedMap[id] ?: UserOwnedFrame(
-                    id = frame.id,
-                    userId = userId,
-                    frameId = frame.id,
-                    purchasedAt = "",
-                    expiresAt = if (frame.id == "new_user") "2026-10-02T00:00:00.000Z" else "2054-01-01T00:00:00.000Z",
-                    isActive = activeFrameId.equals(frame.id, ignoreCase = true),
-                    pricePaid = 0L
-                )
+        validOwnedFrames.mapNotNull { owned ->
+            allFramesMap[owned.frameId.lowercase()]?.let { frame ->
                 Pair(frame, owned)
             }
         }
@@ -206,8 +184,8 @@ fun BagScreen(
         topBar = {
             // Header: Back button | Bag (centered) | Expired (with clock icon)
             Surface(
-                color = Color.White,
-                shadowElevation = 1.dp,
+                color = Color(0xFF381A05),
+                shadowElevation = 0.dp,
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding()
@@ -230,7 +208,7 @@ fun BagScreen(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Back",
-                                tint = Color(0xFF1F2937),
+                                tint = Color.White,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
@@ -240,7 +218,7 @@ fun BagScreen(
                             text = "Bag",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF111827)
+                            color = Color.White
                         )
 
                         // Top-Right: "🕒 Expired" Button
@@ -256,7 +234,7 @@ fun BagScreen(
                             Icon(
                                 imageVector = Icons.Default.AccessTime,
                                 contentDescription = "Expired",
-                                tint = Color(0xFF4B5563),
+                                tint = Color.White.copy(alpha = 0.7f),
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
@@ -264,7 +242,7 @@ fun BagScreen(
                                 text = "Expired",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Normal,
-                                color = Color(0xFF374151)
+                                color = Color.White.copy(alpha = 0.7f)
                             )
                         }
                     }
@@ -319,7 +297,7 @@ fun BagScreen(
                 }
             }
         },
-        containerColor = Color(0xFFF9FAFB),
+        containerColor = Color(0xFF381A05),
         modifier = modifier.fillMaxSize()
     ) { paddingValues ->
         Box(
@@ -339,15 +317,15 @@ fun BagScreen(
                         }
                     } else {
                         LazyVerticalGrid(
-                            columns = GridCells.Fixed(3),
+                            columns = GridCells.Fixed(2),
                             contentPadding = PaddingValues(16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
                             // 0. Offline Alert Banner (when device is offline)
                             if (!isOnline) {
-                                item(span = { GridItemSpan(3) }) {
+                                item(span = { GridItemSpan(2) }) {
                                     Surface(
                                         color = Color(0xFFFEF2F2),
                                         shape = RoundedCornerShape(12.dp),
@@ -378,7 +356,7 @@ fun BagScreen(
                             }
 
                             // Available Section Header (clean, without huge redundant preview at top)
-                            item(span = { GridItemSpan(3) }) {
+                            item(span = { GridItemSpan(2) }) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -454,6 +432,9 @@ fun BagScreen(
                                         frame = frame,
                                         owned = owned,
                                         isWearing = isWearing,
+                                        avatarUrl = session?.avatarUrl ?: "",
+                                        userId = session?.userId ?: "",
+                                        gender = session?.gender ?: "Male",
                                         onWearToggle = {
                                             if (!NetworkUtils.requireOnline(context, "No internet connection. Cannot change avatar frame while offline.")) {
                                                 return@AvailableFrameGridCard
@@ -482,7 +463,7 @@ fun BagScreen(
                             }
 
                             // Bottom Spacer & Store CTA
-                            item(span = { GridItemSpan(3) }) {
+                            item(span = { GridItemSpan(2) }) {
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Card(
                                     shape = RoundedCornerShape(16.dp),
@@ -551,12 +532,13 @@ fun BagScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Box(
-                    modifier = Modifier
-                        .size(100.dp)
-                        .background(Color(0xFFF9FAFB), CircleShape),
+                    modifier = Modifier.size(96.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    AvatarFrameRenderer(
+                    AvatarHelper.UserAvatarImage(
+                        avatarUrl = session?.avatarUrl ?: "",
+                        userId = session?.userId ?: "",
+                        gender = session?.gender ?: "Male",
                         frameId = frame.id,
                         modifier = Modifier.fillMaxSize()
                     )
@@ -816,125 +798,110 @@ private fun AvailableFrameGridCard(
     frame: AvatarFrameItem,
     owned: UserOwnedFrame,
     isWearing: Boolean,
+    avatarUrl: String,
+    userId: String,
+    gender: String,
     onWearToggle: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = if (isWearing) Color(0xFFFDFBF7) else Color.White
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = if (isWearing) 3.dp else 1.dp),
-            border = BorderStroke(
-                width = if (isWearing) 1.5.dp else 1.dp,
-                color = if (isWearing) QivoOrange else Color(0xFFF0F1F3)
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(0.92f)
-                .shadow(
-                    elevation = if (isWearing) 4.dp else 1.5.dp,
-                    shape = RoundedCornerShape(16.dp),
-                    spotColor = if (isWearing) Color(0x33C5A059) else Color(0x10000000)
-                )
-                .clickable { onClick() }
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 6.dp, vertical = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Box(
-                        modifier = Modifier.size(54.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        AvatarFrameRenderer(
-                            frameId = frame.id,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
+    val daysText = remember(owned.expiresAt) {
+        if (owned.expiresAt.contains("2054")) {
+            "Permanent"
+        } else if (owned.expiresAt.isNotBlank()) {
+            owned.remainingTimeText
+        } else {
+            "Available"
+        }
+    }
 
-                    Text(
-                        text = frame.name,
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF1F2937),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center
+    Card(
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isWearing) Color(0xFFFFF7ED) else Color.White
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isWearing) 3.dp else 1.dp),
+        border = BorderStroke(
+            width = if (isWearing) 1.5.dp else 1.dp,
+            color = if (isWearing) QivoOrange else Color(0xFFE5E7EB)
+        ),
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = if (isWearing) 4.dp else 1.5.dp,
+                shape = RoundedCornerShape(18.dp),
+                spotColor = if (isWearing) Color(0x33FF6500) else Color(0x10000000)
+            )
+            .clickable { onClick() }
+    ) {
+        Box(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 18.dp, horizontal = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                // Centered Avatar Image with Frame Overlay
+                Box(
+                    modifier = Modifier
+                        .size(76.dp)
+                        .aspectRatio(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AvatarHelper.UserAvatarImage(
+                        avatarUrl = avatarUrl,
+                        userId = userId,
+                        gender = gender,
+                        frameId = frame.id,
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
 
-                // NEW tag top-left for newcomer frame
-                if (frame.id == "new_user") {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(4.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Brush.horizontalGradient(listOf(Color(0xFFFF8D00), Color(0xFFFF3D00))))
-                            .padding(horizontal = 4.dp, vertical = 1.dp)
-                    ) {
-                        Text(
-                            text = "NEW",
-                            fontSize = 8.5.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
-                        )
-                    }
-                }
+                Spacer(modifier = Modifier.height(12.dp))
 
-                // Wearing badge top-right
-                if (isWearing) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(4.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(QivoOrange)
-                            .padding(horizontal = 5.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = "Wearing",
-                            fontSize = 8.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
+                Text(
+                    text = frame.name,
+                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1E293B),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = daysText,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isWearing) QivoOrange else Color(0xFF6B7280),
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            // Wearing badge top-right
+            if (isWearing) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(QivoOrange)
+                        .padding(horizontal = 7.dp, vertical = 2.5.dp)
+                ) {
+                    Text(
+                        text = "Wearing",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
                 }
             }
         }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Remaining Days / Validity Tag
-        val daysText = remember(owned.expiresAt) {
-            if (owned.expiresAt.contains("2054")) {
-                "Permanent"
-            } else if (owned.expiresAt.isNotBlank()) {
-                owned.remainingTimeText
-            } else {
-                "Available"
-            }
-        }
-
-        Text(
-            text = daysText,
-            fontSize = 10.5.sp,
-            fontWeight = FontWeight.Medium,
-            color = if (isWearing) QivoOrange else Color(0xFF6B7280)
-        )
     }
 }
 

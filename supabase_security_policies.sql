@@ -1012,60 +1012,91 @@ CREATE OR REPLACE FUNCTION public.claim_welcome_bonus(
 RETURNS jsonb AS $$
 DECLARE
     v_caller_id TEXT;
-    v_already_claimed BOOLEAN;
-    v_device_claims_count INT;
+    v_old_user_id TEXT := NULL;
+    v_old_acc_display TEXT := NULL;
     v_new_coins BIGINT;
     v_bonus_amount CONSTANT BIGINT := 500;
 BEGIN
     v_caller_id := auth.uid()::text;
-    IF v_caller_id IS NULL THEN
+    IF v_caller_id IS NULL OR v_caller_id = '' THEN
         v_caller_id := p_user_id;
     END IF;
 
     IF v_caller_id IS NULL OR v_caller_id = '' THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Authentication required.');
-    END IF;
-
-    -- Check if user already claimed
-    SELECT EXISTS (
-        SELECT 1 FROM public.claimed_welcome_bonuses
-        WHERE user_id::text = v_caller_id
-    ) INTO v_already_claimed;
-
-    IF v_already_claimed THEN
         RETURN jsonb_build_object(
             'success', false,
-            'error', 'Welcome bonus has already been claimed for this account.',
-            'coins_awarded', 0
+            'error', 'Authentication required.',
+            'message', 'Authentication required.'
         );
     END IF;
 
-    -- Check device fingerprint limit (strict 1 claim per physical device)
-    IF p_device_hash IS NOT NULL AND p_device_hash <> '' THEN
-        SELECT COUNT(*) INTO v_device_claims_count
-        FROM public.claimed_welcome_bonuses
-        WHERE device_hash = p_device_hash;
+    p_device_hash := TRIM(COALESCE(p_device_hash, ''));
 
-        IF v_device_claims_count >= 1 THEN
+    -- 1. Check if this exact account already claimed
+    IF EXISTS (
+        SELECT 1 FROM public.claimed_welcome_bonuses
+        WHERE user_id::text = v_caller_id
+    ) THEN
+        SELECT COALESCE(numeric_id::text, user_id_number::text, id)
+        INTO v_old_acc_display
+        FROM public.profiles
+        WHERE id::text = v_caller_id;
+
+        IF v_old_acc_display IS NULL OR v_old_acc_display = '' THEN
+            v_old_acc_display := v_caller_id;
+        END IF;
+
+        RETURN jsonb_build_object(
+            'success', false,
+            'already_claimed', true,
+            'claimed_in_account_id', v_old_acc_display,
+            'old_account_id', v_caller_id,
+            'coins_awarded', 0,
+            'error', 'Coins already claimed in account [' || v_old_acc_display || ']',
+            'message', 'Coins already claimed in account [' || v_old_acc_display || ']'
+        );
+    END IF;
+
+    -- 2. Check if this physical device already claimed on another account (Anti-Multi-Account Abuse)
+    IF p_device_hash <> '' AND p_device_hash <> 'unknown' THEN
+        SELECT c.user_id, COALESCE(p.numeric_id::text, p.user_id_number::text, p.id, c.user_id)
+        INTO v_old_user_id, v_old_acc_display
+        FROM public.claimed_welcome_bonuses c
+        LEFT JOIN public.profiles p ON p.id::text = c.user_id::text
+        WHERE c.device_hash = p_device_hash
+        ORDER BY c.claimed_at ASC
+        LIMIT 1;
+
+        IF v_old_user_id IS NOT NULL THEN
+            IF v_old_acc_display IS NULL OR v_old_acc_display = '' THEN
+                v_old_acc_display := v_old_user_id;
+            END IF;
+
             RETURN jsonb_build_object(
                 'success', false,
-                'error', 'Free 500 welcome coins have already been claimed on this device.',
-                'coins_awarded', 0
+                'already_claimed', true,
+                'claimed_in_account_id', v_old_acc_display,
+                'old_account_id', v_old_user_id,
+                'coins_awarded', 0,
+                'error', 'Coins already claimed in account [' || v_old_acc_display || ']',
+                'message', 'Coins already claimed in account [' || v_old_acc_display || ']'
             );
         END IF;
     END IF;
 
-    -- Record claim
-    INSERT INTO public.claimed_welcome_bonuses (user_id, device_hash, bonus_coins)
-    VALUES (v_caller_id, COALESCE(p_device_hash, 'unknown'), v_bonus_amount);
+    -- 3. Record claim strictly
+    INSERT INTO public.claimed_welcome_bonuses (user_id, device_hash, bonus_coins, claimed_at)
+    VALUES (v_caller_id, CASE WHEN p_device_hash <> '' THEN p_device_hash ELSE 'unknown' END, v_bonus_amount, now())
+    ON CONFLICT (user_id) DO NOTHING;
 
-    -- Credit 500 bonus coins
+    -- 4. Credit bonus coins to profile
     UPDATE public.profiles
-    SET coins = coins + v_bonus_amount,
+    SET coins = COALESCE(coins, 0) + v_bonus_amount,
         updated_at = now()
     WHERE id::text = v_caller_id
     RETURNING coins INTO v_new_coins;
 
+    -- 5. Record transaction
     INSERT INTO public.coin_transactions (user_id, amount, type, title, description)
     VALUES (
         v_caller_id,
@@ -1078,7 +1109,8 @@ BEGIN
     RETURN jsonb_build_object(
         'success', true,
         'coins_awarded', v_bonus_amount,
-        'new_balance', v_new_coins
+        'new_balance', v_new_coins,
+        'message', 'Welcome to QIVO! ' || v_bonus_amount || ' Free Welcome Coins credited!'
     );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -2113,3 +2145,24 @@ BEGIN
     );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ========================================================
+-- DELETED CONVERSATIONS TABLE & POLICIES
+-- ========================================================
+CREATE TABLE IF NOT EXISTS public.deleted_conversations (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    partner_id TEXT NOT NULL,
+    cutoff_timestamp TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
+    UNIQUE(user_id, partner_id)
+);
+
+ALTER TABLE public.deleted_conversations ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow public read/write on deleted_conversations" ON public.deleted_conversations;
+CREATE POLICY "Allow public read/write on deleted_conversations"
+    ON public.deleted_conversations
+    FOR ALL
+    USING (true)
+    WITH CHECK (true);

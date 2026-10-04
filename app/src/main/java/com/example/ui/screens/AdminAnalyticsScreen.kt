@@ -416,7 +416,7 @@ fun AdminAnalyticsScreen(
             }
         }
 
-        // TABS (Clean 2-tab view without SQL / RPC code)
+        // TABS
         TabRow(
             selectedTabIndex = selectedTabIndex,
             containerColor = colors.cardBg,

@@ -88,8 +88,12 @@ fun ChatTopBannerAdCarousel(
         if (displayAds.size > 1) {
             while (true) {
                 delay(4500)
-                val nextPage = (pagerState.currentPage + 1) % displayAds.size
-                pagerState.animateScrollToPage(nextPage)
+                try {
+                    if (displayAds.size > 1) {
+                        val nextPage = (pagerState.currentPage + 1) % displayAds.size
+                        pagerState.animateScrollToPage(nextPage)
+                    }
+                } catch (_: Exception) {}
             }
         }
     }
@@ -105,7 +109,7 @@ fun ChatTopBannerAdCarousel(
                 state = pagerState,
                 modifier = Modifier.fillMaxWidth()
             ) { page ->
-                val ad = displayAds[page]
+                val ad = displayAds.getOrNull(page) ?: return@HorizontalPager
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()

@@ -230,9 +230,6 @@ class ChatListViewModel(application: Application) : AndroidViewModel(application
 
                 if (msgs.isNotEmpty()) {
                     ChatStateHolder.appendOrUpdateMessages(msgs)
-                    try {
-                        AppDataCacheManager.saveChatMessagesCache(appContext, userId, msgs)
-                    } catch (_: Exception) {}
                 }
 
                 val currentMsgs = ChatStateHolder.messagesList.value.ifEmpty { msgs }
@@ -324,9 +321,7 @@ class ChatListViewModel(application: Application) : AndroidViewModel(application
         }
         _conversations.value = newConversations
         _totalUnreadCount.value = newConversations.sumOf { it.unreadCount }
-        if (newConversations.isNotEmpty()) {
-            _initialLoading.value = false
-        }
+        _initialLoading.value = false
     }
 
     private fun areConversationListsEqual(a: List<ConversationItem>, b: List<ConversationItem>): Boolean {

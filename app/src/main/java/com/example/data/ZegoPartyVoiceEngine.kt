@@ -1,330 +1,261 @@
 package com.example.data
 
+import android.app.Application
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.AudioFormat
-import android.media.AudioManager
-import android.media.AudioRecord
-import android.media.AudioTrack
-import android.media.MediaRecorder
-import android.os.Build
 import android.util.Log
 import com.example.calling.ZegoCallConfig
-import com.example.calling.ZegoTokenGenerator
+import im.zego.zegoexpress.ZegoExpressEngine
+import im.zego.zegoexpress.callback.IZegoEventHandler
+import im.zego.zegoexpress.constants.ZegoScenario
+import im.zego.zegoexpress.constants.ZegoUpdateType
+import im.zego.zegoexpress.entity.ZegoRoomConfig
+import im.zego.zegoexpress.entity.ZegoStream
+import im.zego.zegoexpress.entity.ZegoUser
 import kotlinx.coroutines.*
-import java.util.concurrent.atomic.AtomicBoolean
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+import java.util.*
 
 /**
- * ZegoCloud Party Voice Room Engine
- * Provides multi-party live voice room capabilities, token authentication,
- * low-latency audio capture & playback, real-time volume detection, and speakerphone management.
+ * ZegoCloud Party Voice Room Engine (SECURE VERSION)
+ * Uses real ZEGO Express SDK and server-side token generation.
+ * No local secrets. No Supabase PCM transport.
  */
 class ZegoPartyVoiceEngine(private val context: Context) {
 
-    private val sampleRate = 16000
-    private val channelIn = AudioFormat.CHANNEL_IN_MONO
-    private val channelOut = AudioFormat.CHANNEL_OUT_MONO
-    private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-    private val bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelIn, audioFormat).coerceAtLeast(2048)
-
-    private var audioRecord: AudioRecord? = null
-    private var audioTrack: AudioTrack? = null
-    private var loopJob: Job? = null
-    private var receiveJob: Job? = null
-
+    private var engine: ZegoExpressEngine? = null
+    private val config = ZegoCallConfig()
     private var activeRoomId: String = ""
-    private var currentSeatIndex: Int = -1
-    private val isJoined = AtomicBoolean(false)
-    private val isAnchor = AtomicBoolean(false)
-    private val isMuted = AtomicBoolean(false)
-    private var isSpeakerOn: Boolean = true
+    private var localUserId: String = ""
+    private var isJoined = false
+    private var isMuted = false
 
     var onSpeakingVolumeChanged: ((userId: String, volume: Float) -> Unit)? = null
     var onConnectionStateChanged: ((state: String) -> Unit)? = null
 
-    val config = ZegoCallConfig()
+    private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
-    /**
-     * Enter ZegoCloud Party Voice Room as Audience and ensure loudspeaker is active
-     */
+    private var refreshJob: Job? = null
+
+    private fun initEngine(appId: Long) {
+        if (engine != null) return
+        
+        val profile = im.zego.zegoexpress.entity.ZegoEngineProfile()
+        profile.appID = appId
+        profile.scenario = ZegoScenario.HIGH_QUALITY_CHATROOM
+        profile.application = context.applicationContext as Application
+        
+        engine = ZegoExpressEngine.createEngine(profile, object : IZegoEventHandler() {
+            override fun onRoomStreamUpdate(
+                roomID: String?,
+                updateType: ZegoUpdateType?,
+                streamList: ArrayList<ZegoStream>?,
+                extendedData: JSONObject?
+            ) {
+                if (updateType == ZegoUpdateType.ADD) {
+                    streamList?.forEach { stream ->
+                        Log.d("ZegoPartyEngine", "Playing remote stream: ${stream.streamID}")
+                        engine?.startPlayingStream(stream.streamID)
+                    }
+                }
+            }
+
+            override fun onCapturedSoundLevelUpdate(level: Float) {
+                if (level > 0.1f) {
+                    onSpeakingVolumeChanged?.invoke(localUserId, level / 100f)
+                }
+            }
+
+            override fun onRemoteSoundLevelUpdate(soundLevels: HashMap<String, Float>?) {
+                soundLevels?.forEach { (streamId, level) ->
+                    val userId = streamId.replace("stream_", "")
+                    if (level > 0.1f) {
+                        onSpeakingVolumeChanged?.invoke(userId, level / 100f)
+                    }
+                }
+            }
+
+            override fun onRoomStateUpdate(
+                roomID: String?,
+                state: im.zego.zegoexpress.constants.ZegoRoomState?,
+                errorCode: Int,
+                extendedData: JSONObject?
+            ) {
+                Log.d("ZegoPartyEngine", "Room state update: $state, errorCode: $errorCode")
+                onConnectionStateChanged?.invoke(state?.name ?: "Unknown")
+            }
+        })
+        
+        engine?.startSoundLevelMonitor(250)
+    }
+
+    private suspend fun fetchToken(roomId: String): JSONObject? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+                val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+                val authHeader = UserSessionManager.getAuthHeader(context)
+                
+                val payload = JSONObject().apply {
+                    put("room_id", roomId)
+                }.toString()
+
+                val request = Request.Builder()
+                    .url("$baseUrl/functions/v1/party-room-zego-token")
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", authHeader)
+                    .post(payload.toRequestBody(jsonMediaType))
+                    .build()
+
+                SupabaseHttpClient.client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        return@withContext JSONObject(response.body?.string() ?: "{}")
+                    } else {
+                        Log.e("ZegoPartyEngine", "Token fetch failed with status: ${response.code}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("ZegoPartyEngine", "Token fetch error", e)
+            }
+            null
+        }
+    }
+
     fun enterPartyRoom(
         scope: CoroutineScope,
         roomId: String,
         userId: String,
         seatIndex: Int = -1
     ) {
-        activeRoomId = roomId.trim()
-        currentSeatIndex = seatIndex
-        setSpeakerphoneOn(true)
-
-        // Initialize AudioTrack for receiving remote voices
-        initAudioPlayback(scope, userId)
-
-        scope.launch(Dispatchers.IO) {
-            try {
-                withContext(Dispatchers.Main) {
-                    onConnectionStateChanged?.invoke("Connecting to ZegoCloud RTC...")
-                }
-                // Generate Zego Token04 for authenticated room login
-                val zegoRoomId = "party_room_$roomId"
-                val token = ZegoTokenGenerator.generateToken04(
-                    appId = config.appId,
-                    userId = userId,
-                    secret = config.appSign,
-                    effectiveTimeInSeconds = 7200L,
-                    payload = "{\"room_id\":\"$zegoRoomId\",\"role\":\"audience\"}"
-                )
-
-                Log.d("ZegoPartyEngine", "Entered ZegoCloud Voice Room $zegoRoomId with AppID: ${config.appId}, Token length: ${token.length}")
-
-                isJoined.set(true)
-                isAnchor.set(seatIndex != -1)
-
-                withContext(Dispatchers.Main) {
-                    onConnectionStateChanged?.invoke("Connected")
-                }
-            } catch (e: Exception) {
-                Log.e("ZegoPartyEngine", "Failed to enter ZegoCloud room", e)
-                withContext(Dispatchers.Main) {
-                    onConnectionStateChanged?.invoke("Connected")
-                }
-            }
-        }
-    }
-
-    fun enterPartyRoom(
-        scope: CoroutineScope,
-        roomId: Long,
-        userId: String,
-        seatIndex: Int = -1
-    ) {
-        enterPartyRoom(scope, roomId.toString(), userId, seatIndex)
-    }
-
-    private fun initAudioPlayback(scope: CoroutineScope, localUserId: String) {
-        if (audioTrack == null) {
-            try {
-                val audioAttributes = AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build()
-                val audioFormatSpec = AudioFormat.Builder()
-                    .setSampleRate(sampleRate)
-                    .setChannelMask(channelOut)
-                    .setEncoding(audioFormat)
-                    .build()
-                audioTrack = AudioTrack.Builder()
-                    .setAudioAttributes(audioAttributes)
-                    .setAudioFormat(audioFormatSpec)
-                    .setBufferSizeInBytes(bufferSize * 4)
-                    .setTransferMode(AudioTrack.MODE_STREAM)
-                    .build()
-                audioTrack?.play()
-            } catch (e: Exception) {
-                try {
-                    @Suppress("DEPRECATION")
-                    audioTrack = AudioTrack(
-                        AudioManager.STREAM_VOICE_CALL,
-                        sampleRate,
-                        channelOut,
-                        audioFormat,
-                        bufferSize * 4,
-                        AudioTrack.MODE_STREAM
-                    )
-                    audioTrack?.play()
-                } catch (e2: Exception) {
-                    Log.e("ZegoPartyEngine", "Error initializing audio playback track", e2)
-                }
-            }
-        }
-
-        // Collect incoming audio chunks from other speakers in the room
-        receiveJob?.cancel()
-        receiveJob = scope.launch(Dispatchers.IO) {
-            PartyRealtimeRelayManager.audioChunkEvents.collect { chunk ->
-                if ((chunk.roomId == activeRoomId || activeRoomId.isBlank() || chunk.roomId.isBlank()) && chunk.userId != localUserId) {
-                    try {
-                        if (audioTrack != null && chunk.pcmBytes.isNotEmpty()) {
-                            audioTrack?.write(chunk.pcmBytes, 0, chunk.pcmBytes.size)
+        activeRoomId = roomId
+        localUserId = userId
+        
+        // Cancel any existing refresh / verification loop
+        refreshJob?.cancel()
+        
+        refreshJob = scope.launch {
+            var lastToken = ""
+            var lastCanPublish = false
+            var isFirstTime = true
+            
+            while (isActive) {
+                val tokenData = fetchToken(roomId)
+                if (tokenData != null) {
+                    val token = tokenData.optString("token")
+                    val appId = tokenData.optLong("zego_app_id", tokenData.optLong("app_id"))
+                    val canPublish = tokenData.optBoolean("can_publish", false)
+                    val returnedRoomId = tokenData.optString("room_id", roomId)
+                    val zegoRoomId = "party_room_$returnedRoomId"
+                    
+                    if (isFirstTime) {
+                        initEngine(appId)
+                        val zegoUser = ZegoUser(userId, UserSessionManager.getSession(context)?.name ?: "User")
+                        val zegoRoomConfig = ZegoRoomConfig().apply {
+                            this.token = token
+                            this.isUserStatusNotify = true
                         }
-                    } catch (_: Exception) {}
-                }
-            }
-        }
-    }
-
-    /**
-     * User takes mic seat: switch role to ANCHOR and start capturing local microphone
-     */
-    fun takeMicSeat(scope: CoroutineScope, userId: String, seatIndex: Int = -1) {
-        isAnchor.set(true)
-        isMuted.set(false)
-        currentSeatIndex = seatIndex
-        startAudioCapture(scope, userId)
-    }
-
-    private fun startAudioCapture(scope: CoroutineScope, userId: String) {
-        stopAudioCaptureOnly()
-        try {
-            audioRecord = AudioRecord(
-                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-                sampleRate,
-                channelIn,
-                audioFormat,
-                bufferSize
-            )
-
-            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-                audioRecord?.release()
-                audioRecord = AudioRecord(
-                    MediaRecorder.AudioSource.MIC,
-                    sampleRate,
-                    channelIn,
-                    audioFormat,
-                    bufferSize
-                )
-            }
-
-            audioRecord?.startRecording()
-
-            loopJob = scope.launch(Dispatchers.Default) {
-                val pcmBuffer = ShortArray(bufferSize / 2)
-                val byteBuffer = ByteArray(bufferSize)
-                var lastSpeakingBroadcastTime = 0L
-                var wasSpeaking = false
-
-                while (isActive && isAnchor.get() && !isMuted.get()) {
-                    val record = audioRecord ?: break
-                    val read = record.read(pcmBuffer, 0, pcmBuffer.size)
-                    if (read > 0 && !isMuted.get()) {
-                        var sum = 0.0
-                        for (i in 0 until read) {
-                            val sample = pcmBuffer[i]
-                            sum += Math.abs(sample.toInt())
-                            byteBuffer[i * 2] = (sample.toInt() and 0xFF).toByte()
-                            byteBuffer[i * 2 + 1] = ((sample.toInt() shr 8) and 0xFF).toByte()
-                        }
-                        val avg = sum / read
-                        val volume = if (avg > 20.0) {
-                            val scaled = ((avg - 20.0) / 800.0).coerceIn(0.0, 1.0)
-                            Math.sqrt(scaled).toFloat().coerceIn(0.05f, 1f)
+                        
+                        Log.d("ZegoPartyEngine", "Logging into ZEGO Room: $zegoRoomId with app_id: $appId")
+                        engine?.loginRoom(zegoRoomId, zegoUser, zegoRoomConfig)
+                        isJoined = true
+                        isFirstTime = false
+                        lastToken = token
+                        lastCanPublish = canPublish
+                        
+                        if (canPublish) {
+                            startPublishing()
                         } else {
-                            0f
+                            stopPublishing()
                         }
-
-                        val isSpeaking = volume > 0.03f || avg > 25.0
-                        val now = System.currentTimeMillis()
-
-                        // Broadcast live audio stream packets to room
-                        if (activeRoomId.isNotBlank() && (isSpeaking || avg > 15.0)) {
-                            val activeChunk = byteBuffer.copyOf(read * 2)
-                            PartyRealtimeRelayManager.broadcastAudioChunk(
-                                activeRoomId,
-                                userId,
-                                currentSeatIndex,
-                                activeChunk
-                            )
+                    } else {
+                        // Dynamically renew token before its 10-minute expiry
+                        if (token.isNotEmpty() && token != lastToken) {
+                            Log.d("ZegoPartyEngine", "Renewing ZEGO token before expiry")
+                            engine?.renewToken(zegoRoomId, token)
+                            lastToken = token
                         }
-
-                        // Broadcast speaking wave status immediately on change or periodically
-                        if (isSpeaking != wasSpeaking || (isSpeaking && now - lastSpeakingBroadcastTime > 250)) {
-                            wasSpeaking = isSpeaking
-                            lastSpeakingBroadcastTime = now
-                            if (activeRoomId.isNotBlank()) {
-                                PartyRealtimeRelayManager.broadcastSpeaking(
-                                    activeRoomId,
-                                    userId,
-                                    currentSeatIndex,
-                                    isSpeaking,
-                                    volume
-                                )
+                        
+                        // Respect server's "can_publish" authoritative state (e.g. unseated/lose seat/banned)
+                        if (canPublish != lastCanPublish) {
+                            Log.d("ZegoPartyEngine", "Publish permission updated from server: can_publish=$canPublish")
+                            lastCanPublish = canPublish
+                            if (canPublish) {
+                                startPublishing()
+                            } else {
+                                stopPublishing()
                             }
                         }
-
-                        withContext(Dispatchers.Main) {
-                            onSpeakingVolumeChanged?.invoke(userId, volume)
-                        }
                     }
-                    delay(30)
+                } else {
+                    Log.e("ZegoPartyEngine", "Failed to retrieve ZEGO token and authoritative permissions")
                 }
+                
+                // Poll every 15 seconds to enforce real-time authority and handle token expiry/renews
+                delay(15000)
             }
-        } catch (e: Exception) {
-            Log.e("ZegoPartyEngine", "Error starting microphone capture", e)
         }
     }
 
-    private fun stopAudioCaptureOnly() {
-        loopJob?.cancel()
-        loopJob = null
-
-        try {
-            audioRecord?.stop()
-            audioRecord?.release()
-        } catch (_: Exception) {}
-        audioRecord = null
+    fun takeMicSeat(scope: CoroutineScope, userId: String, seatIndex: Int = -1) {
+        // Trigger an immediate server permission check and update
+        scope.launch {
+            triggerRefresh()
+        }
     }
 
-    private fun stopAudioCapture() {
-        stopAudioCaptureOnly()
-        receiveJob?.cancel()
-        receiveJob = null
-
-        try {
-            audioTrack?.stop()
-            audioTrack?.release()
-        } catch (_: Exception) {}
-        audioTrack = null
+    private suspend fun triggerRefresh() {
+        if (activeRoomId.isBlank()) return
+        val tokenData = fetchToken(activeRoomId) ?: return
+        val token = tokenData.optString("token")
+        val canPublish = tokenData.optBoolean("can_publish", false)
+        val returnedRoomId = tokenData.optString("room_id", activeRoomId)
+        val zegoRoomId = "party_room_$returnedRoomId"
+        
+        if (token.isNotEmpty()) {
+            engine?.renewToken(zegoRoomId, token)
+        }
+        
+        if (canPublish) {
+            startPublishing()
+        } else {
+            stopPublishing()
+        }
     }
 
-    /**
-     * User leaves mic seat: switch role back to AUDIENCE and stop microphone capture
-     */
+    private fun startPublishing() {
+        if (!isJoined) return
+        val streamId = "stream_$localUserId"
+        Log.d("ZegoPartyEngine", "Starting mic publish: $streamId")
+        engine?.startPublishingStream(streamId)
+        engine?.mutePublishStreamAudio(isMuted)
+    }
+
+    private fun stopPublishing() {
+        Log.d("ZegoPartyEngine", "Stopping mic publish")
+        engine?.stopPublishingStream()
+    }
+
     fun leaveMicSeat(userId: String) {
-        isAnchor.set(false)
-        isMuted.set(false)
-        stopAudioCapture()
-        onSpeakingVolumeChanged?.invoke(userId, 0f)
+        stopPublishing()
     }
 
-    /**
-     * Mute / Unmute microphone. When muted, microphone capture is completely closed and released.
-     */
     fun setMicMute(userId: String, mute: Boolean, scope: CoroutineScope? = null) {
-        isMuted.set(mute)
-        if (mute) {
-            stopAudioCapture()
-            onSpeakingVolumeChanged?.invoke(userId, 0f)
-        } else if (isAnchor.get() && scope != null) {
-            startAudioCapture(scope, userId)
-        }
+        isMuted = mute
+        engine?.mutePublishStreamAudio(mute)
     }
 
-    /**
-     * Toggle Speakerphone / Earpiece
-     */
     fun setSpeakerphoneOn(speakerOn: Boolean) {
-        isSpeakerOn = speakerOn
-        try {
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-            if (audioManager != null) {
-                audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-                @Suppress("DEPRECATION")
-                audioManager.isSpeakerphoneOn = speakerOn
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        engine?.setAudioRouteToSpeaker(speakerOn)
     }
 
-    /**
-     * Leave and clean up Zego Party Voice Room
-     */
     fun exitPartyRoom(userId: String) {
-        leaveMicSeat(userId)
-        isJoined.set(false)
-        try {
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-            audioManager?.mode = AudioManager.MODE_NORMAL
-        } catch (_: Exception) {}
+        refreshJob?.cancel()
+        refreshJob = null
+        engine?.logoutRoom()
+        isJoined = false
+        ZegoExpressEngine.destroyEngine(null)
+        engine = null
     }
 }

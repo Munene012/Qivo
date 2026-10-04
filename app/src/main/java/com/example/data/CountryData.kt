@@ -9,7 +9,6 @@ data class CoinPackage(
 )
 
 val defaultCoinPackages = listOf(
-    CoinPackage("pkg_10", 10, 1, 0.01),
     CoinPackage("pkg_500", 500, 80, 0.65),
     CoinPackage("pkg_1000", 1000, 160, 1.30),
     CoinPackage("pkg_2000", 2000, 320, 2.60),

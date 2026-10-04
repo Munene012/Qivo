@@ -21,6 +21,9 @@ android {
     versionName = "1.0"
  
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    ndk {
+      abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a"))
+    }
   }
  
   signingConfigs {
@@ -142,6 +145,7 @@ dependencies {
   // implementation(libs.thinking.data)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
+  implementation(libs.zego.express)
   implementation(libs.logging.interceptor)
   implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)

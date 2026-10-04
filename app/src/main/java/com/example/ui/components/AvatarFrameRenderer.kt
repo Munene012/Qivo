@@ -147,30 +147,6 @@ private fun DrawScope.drawHelicopterFrame(cx: Float, cy: Float, r: Float, rotor:
         )
     }
 
-    // Top Pink Heart Gem & Mini Crown
-    val topY = cy - r - 6.dp.toPx()
-    // Gold crown base on top
-    val crownPath = Path().apply {
-        moveTo(cx - 16.dp.toPx(), topY + 4.dp.toPx())
-        lineTo(cx - 14.dp.toPx(), topY - 12.dp.toPx())
-        lineTo(cx - 6.dp.toPx(), topY - 4.dp.toPx())
-        lineTo(cx, topY - 16.dp.toPx())
-        lineTo(cx + 6.dp.toPx(), topY - 4.dp.toPx())
-        lineTo(cx + 14.dp.toPx(), topY - 12.dp.toPx())
-        lineTo(cx + 16.dp.toPx(), topY + 4.dp.toPx())
-        close()
-    }
-    drawPath(crownPath, Brush.verticalGradient(listOf(Color(0xFFFFF9C4), Color(0xFFFFB300))))
-    drawPath(crownPath, Color(0xFFFF6F00), style = Stroke(width = 1.dp.toPx()))
-
-    // Golden Gem
-    drawCircle(
-        brush = Brush.radialGradient(listOf(Color(0xFFFFD54F), Color(0xFFC5A059), Color(0xFFA37E30))),
-        radius = 5.dp.toPx(),
-        center = Offset(cx, topY - 2.dp.toPx())
-    )
-    drawCircle(color = Color.White, radius = 1.5.dp.toPx(), center = Offset(cx - 1.5.dp.toPx(), topY - 3.5.dp.toPx()))
-
     // Fluffy Pastel Clouds on 9 o'clock and 3 o'clock
     drawCloudPuff(this, cx - r - 4.dp.toPx(), cy - 6.dp.toPx(), 9.dp.toPx(), Color(0xFFFFF9E6))
     drawCloudPuff(this, cx + r + 4.dp.toPx(), cy - 6.dp.toPx(), 9.dp.toPx(), Color(0xFFFFF9E6))
@@ -418,31 +394,6 @@ private fun DrawScope.drawGoldenKingFrame(cx: Float, cy: Float, r: Float, pulse:
         center = Offset(cx, cy)
     )
     drawCircle(brush = goldBrush, radius = r + 4.dp.toPx(), center = Offset(cx, cy), style = Stroke(width = 5.dp.toPx()))
-
-    // Top Sovereign King Crown
-    val crownY = cy - r - 8.dp.toPx()
-    val crownPath = Path().apply {
-        moveTo(cx - 20.dp.toPx(), crownY + 8.dp.toPx())
-        lineTo(cx - 18.dp.toPx(), crownY - 14.dp.toPx())
-        lineTo(cx - 8.dp.toPx(), crownY - 4.dp.toPx())
-        lineTo(cx, crownY - 20.dp.toPx())
-        lineTo(cx + 8.dp.toPx(), crownY - 4.dp.toPx())
-        lineTo(cx + 18.dp.toPx(), crownY - 14.dp.toPx())
-        lineTo(cx + 20.dp.toPx(), crownY + 8.dp.toPx())
-        close()
-    }
-    drawPath(
-        crownPath,
-        Brush.verticalGradient(listOf(Color(0xFFFFF59D), Color(0xFFFFB300), Color(0xFFE65100)))
-    )
-    drawPath(crownPath, Color(0xFFFF6F00), style = Stroke(width = 1.2.dp.toPx()))
-
-    // Crown Center Ruby Jewel
-    drawCircle(
-        brush = Brush.radialGradient(listOf(Color(0xFFFF5252), Color(0xFFB71C1C))),
-        radius = 4.dp.toPx(),
-        center = Offset(cx, crownY - 4.dp.toPx())
-    )
 
     // Bottom Royal Baroque Gold Shield Crest
     val crestY = cy + r + 4.dp.toPx()
@@ -702,25 +653,6 @@ private fun DrawScope.drawLionFrame(cx: Float, cy: Float, r: Float, pulse: Float
         center = Offset(cx, cy)
     )
     drawCircle(brush = lionGoldBrush, radius = r + 5.dp.toPx(), center = Offset(cx, cy), style = Stroke(width = 5.dp.toPx()))
-
-    // Top Imperial Golden Lion Head Sculpture
-    val lionY = cy - r - 10.dp.toPx()
-    // Lion Mane
-    val manePath = Path().apply {
-        moveTo(cx - 18.dp.toPx(), lionY + 10.dp.toPx())
-        cubicTo(cx - 24.dp.toPx(), lionY - 4.dp.toPx(), cx - 14.dp.toPx(), lionY - 18.dp.toPx(), cx, lionY - 20.dp.toPx())
-        cubicTo(cx + 14.dp.toPx(), lionY - 18.dp.toPx(), cx + 24.dp.toPx(), lionY - 4.dp.toPx(), cx + 18.dp.toPx(), lionY + 10.dp.toPx())
-        close()
-    }
-    drawPath(manePath, Brush.verticalGradient(listOf(Color(0xFFFFE082), Color(0xFFFFB300), Color(0xFFE65100))))
-    drawPath(manePath, Color(0xFFFF6F00), style = Stroke(width = 1.dp.toPx()))
-
-    // Lion Face (Muzzle & Nose)
-    drawCircle(Color(0xFFFFD54F), radius = 7.dp.toPx(), center = Offset(cx, lionY - 4.dp.toPx()))
-    // Lion Nose & Eyes
-    drawCircle(Color(0xFF5D4037), radius = 1.5.dp.toPx(), center = Offset(cx, lionY - 2.dp.toPx()))
-    drawCircle(Color(0xFF5D4037), radius = 1.dp.toPx(), center = Offset(cx - 3.dp.toPx(), lionY - 6.dp.toPx()))
-    drawCircle(Color(0xFF5D4037), radius = 1.dp.toPx(), center = Offset(cx + 3.dp.toPx(), lionY - 6.dp.toPx()))
 
     // Bottom Baroque Gold Tassel
     val tasselY = cy + r + 5.dp.toPx()

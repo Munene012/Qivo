@@ -44,6 +44,7 @@ googleid = "1.1.1"
 playServicesAds = "23.6.0"
 playBilling = "7.1.1"
 thinkingData = "3.0.3"
+zegoExpress = "3.14.0"
 
 
 [libraries]
@@ -106,6 +107,7 @@ play-services-ads = { group = "com.google.android.gms", name = "play-services-ad
 firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics" }
 play-billing = { group = "com.android.billingclient", name = "billing-ktx", version.ref = "playBilling" }
 thinking-data = { group = "cn.thinkingdata.android", name = "ThinkingAnalyticsSDK", version.ref = "thinkingData" }
+zego-express = { group = "im.zego", name = "express-video", version.ref = "zegoExpress" }
 
 
 [plugins]

@@ -35,7 +35,8 @@ data class PartyRoom(
     val seatsCount: Int = 8,
     val isLocked: Boolean = false,
     val onlineCount: Int = 1,
-    val createdAt: String = ""
+    val createdAt: String = "",
+    val roomPassword: String = "" // Support for party room security lock
 )
 
 data class PartySeat(
@@ -95,6 +96,7 @@ class SupabasePartyService {
         val memoryMessages = ConcurrentHashMap<String, MutableList<PartyRoomMessage>>()
         val memoryAdmins = ConcurrentHashMap<String, MutableSet<String>>() // roomId -> set of admin userIds
         val memoryMembers = ConcurrentHashMap<String, MutableMap<String, PartyRoomMember>>() // roomId -> map(userId -> member)
+        val deletedRoomIds = ConcurrentHashMap.newKeySet<String>()
 
         fun clearCache() {
             memoryRooms.clear()
@@ -102,6 +104,7 @@ class SupabasePartyService {
             memoryMessages.clear()
             memoryAdmins.clear()
             memoryMembers.clear()
+            deletedRoomIds.clear()
         }
     }
 
@@ -231,249 +234,56 @@ class SupabasePartyService {
                     return@withContext PartyRoomCreationResult(room = null, errorMessage = coinErrMsg)
                 }
 
-                // Build RPC payload with EXACT parameter names: p_room_name and p_max_seats
+                // Build RPC payload with EXACT parameter names: p_name and p_max_seats (v2)
                 val rpcPayloadJson = JSONObject().apply {
-                    put("p_room_name", safeRoomName)
+                    put("p_name", safeRoomName)
                     put("p_max_seats", safeMaxSeats)
+                    put("p_category", category.ifBlank { "Chat" })
+                    put("p_cover_image", coverUrl)
+                    put("p_background_theme", "default")
                 }
                 val rpcPayload = rpcPayloadJson.toString()
 
                 val authHeader = getAuthHeader(context)
-                val rpcUrl = "$baseUrl/rest/v1/rpc/create_party_room"
+                val rpcUrl = "$baseUrl/rest/v1/rpc/create_party_room_v2"
 
-                Log.d(
-                    "SupabasePartyService",
-                    "[create_party_room] >>> Initiating Supabase RPC call to: $rpcUrl | Payload: $rpcPayload | HostUserId: $hostUserId"
-                )
+                Log.d("SupabasePartyService", "[create_party_room] >>> RPC call to: $rpcUrl")
 
-                var returnedRoomId = ""
-                var rpcSucceeded = false
+                val request = Request.Builder()
+                    .url(rpcUrl)
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", authHeader)
+                    .addHeader("Content-Type", "application/json")
+                    .post(rpcPayload.toRequestBody(jsonMediaType))
+                    .build()
 
-                try {
-                    val request = Request.Builder()
-                        .url(rpcUrl)
-                        .addHeader("apikey", apiKey)
-                        .addHeader("Authorization", authHeader)
-                        .addHeader("Content-Type", "application/json")
-                        .addHeader("Accept", "application/json")
-                        .post(rpcPayload.toRequestBody(jsonMediaType))
-                        .build()
-
-                    val response = client.newCall(request).execute()
-                    val responseCode = response.code
+                client.newCall(request).execute().use { response ->
                     val rawBody = response.body?.string()?.trim() ?: ""
-                    response.close()
+                    if (response.isSuccessful) {
+                        val jsonObj = JSONObject(rawBody)
+                        val returnedRoomId = jsonObj.optString("room_id")
+                        val returnedRoomNum = jsonObj.optLong("room_number")
 
-                    if (response.isSuccessful && responseCode in 200..299) {
-                        try {
-                            if (rawBody.startsWith("\"") && rawBody.endsWith("\"") && rawBody.length >= 34) {
-                                returnedRoomId = rawBody.substring(1, rawBody.length - 1).trim()
-                            } else if (rawBody.startsWith("{")) {
-                                val jsonObj = JSONObject(rawBody)
-                                returnedRoomId = jsonObj.optString("id").ifBlank {
-                                    jsonObj.optString("create_party_room").ifBlank {
-                                        jsonObj.optString("room_id", "")
-                                    }
-                                }.trim()
-                            } else {
-                                returnedRoomId = rawBody.replace("\"", "").trim()
-                            }
-                            if (returnedRoomId.isNotBlank() && !returnedRoomId.equals("null", ignoreCase = true)) {
-                                rpcSucceeded = true
-                            }
-                        } catch (e: Exception) {
-                            Log.w("SupabasePartyService", "[create_party_room] RPC parsing warning: ${e.message}")
-                        }
+                        val newRoom = PartyRoom(
+                            id = returnedRoomId,
+                            roomNumber = returnedRoomNum,
+                            name = safeRoomName,
+                            description = description,
+                            category = category.ifBlank { "Chat" },
+                            coverUrl = coverUrl,
+                            bgUrl = bgUrl,
+                            hostUserId = hostUserId,
+                            hostName = hostName,
+                            hostAvatarUrl = hostAvatarUrl,
+                            seatsCount = safeMaxSeats
+                        )
+                        
+                        memoryRooms[returnedRoomId] = newRoom
+                        return@withContext PartyRoomCreationResult(room = newRoom)
                     } else {
-                        Log.w("SupabasePartyService", "[create_party_room] RPC returned HTTP $responseCode, trying direct REST table insert")
-                    }
-                } catch (e: Exception) {
-                    Log.w("SupabasePartyService", "[create_party_room] RPC call exception, trying direct REST table insert", e)
-                }
-
-                // Generate a random 3 to 6 digit Room ID (between 100 and 999,999)
-                val generatedRoomNumber = (100..999999).random().toLong()
-
-                // If RPC is not installed or returned error, seamlessly fallback to direct REST insert
-                if (!rpcSucceeded || returnedRoomId.isBlank()) {
-                    Log.d("SupabasePartyService", "[create_party_room] Falling back to direct REST POST to /rest/v1/party_rooms")
-                    try {
-                        val insertJson = JSONObject().apply {
-                            put("title", safeRoomName)
-                            put("category", category.ifBlank { "Chat" })
-                            if (hostUserId.isNotBlank()) put("host_id", hostUserId)
-                            val wallpaper = bgUrl.ifBlank { coverUrl }
-                            if (wallpaper.isNotBlank()) put("background_url", wallpaper)
-                            if (description.isNotBlank()) put("announcement", description.trim())
-                            put("is_active", true)
-                        }.toString()
-
-                        val insertReq = Request.Builder()
-                            .url("$baseUrl/rest/v1/party_rooms")
-                            .addHeader("apikey", apiKey)
-                            .addHeader("Authorization", authHeader)
-                            .addHeader("Content-Type", "application/json")
-                            .addHeader("Prefer", "return=representation")
-                            .post(insertJson.toRequestBody(jsonMediaType))
-                            .build()
-
-                        val insertRes = client.newCall(insertReq).execute()
-                        val insertCode = insertRes.code
-                        val insertBody = insertRes.body?.string()?.trim() ?: ""
-                        insertRes.close()
-
-                        if (insertRes.isSuccessful || insertCode in 200..299) {
-                            try {
-                                if (insertBody.startsWith("[")) {
-                                    val arr = JSONArray(insertBody)
-                                    if (arr.length() > 0) {
-                                        returnedRoomId = arr.getJSONObject(0).optString("id", "")
-                                    }
-                                } else if (insertBody.startsWith("{")) {
-                                    val obj = JSONObject(insertBody)
-                                    returnedRoomId = obj.optString("id", "")
-                                }
-                            } catch (e: Exception) {
-                                Log.e("SupabasePartyService", "[create_party_room] Failed to parse room UUID from REST response", e)
-                            }
-                        } else {
-                            Log.w("SupabasePartyService", "[create_party_room] REST table insert returned HTTP $insertCode: $insertBody, activating resilient local room")
-                        }
-                    } catch (e: Exception) {
-                        Log.w("SupabasePartyService", "[create_party_room] REST insert exception: ${e.message}, activating resilient local room")
+                        return@withContext PartyRoomCreationResult(errorMessage = "Server error: ${response.code}")
                     }
                 }
-
-                if (returnedRoomId.isBlank() || returnedRoomId.equals("null", ignoreCase = true)) {
-                    val fallbackId = java.util.UUID.randomUUID().toString()
-                    returnedRoomId = fallbackId
-                }
-
-                Log.d(
-                    "SupabasePartyService",
-                    "[create_party_room] <<< Successfully established party_rooms row with UUID: $returnedRoomId and RoomNum: $generatedRoomNumber"
-                )
-
-                // Construct real PartyRoom using the real server database UUID and 3-6 digit ID
-                val newRoom = PartyRoom(
-                    id = returnedRoomId,
-                    roomNumber = generatedRoomNumber,
-                    name = safeRoomName,
-                    description = description.trim(),
-                    category = category.ifBlank { "Chat" },
-                    coverUrl = coverUrl.trim().ifBlank { bgUrl.trim() },
-                    bgUrl = bgUrl.trim().ifBlank { coverUrl.trim() },
-                    hostUserId = hostUserId,
-                    hostName = hostName.ifBlank { "Host" },
-                    hostAvatarUrl = hostAvatarUrl,
-                    seatsCount = safeMaxSeats,
-                    onlineCount = 1
-                )
-
-                // Update extra room metadata in Supabase party_rooms
-                try {
-                    val patchJson = JSONObject().apply {
-                        put("title", safeRoomName)
-                        if (category.isNotBlank()) put("category", category.trim())
-                        if (hostUserId.isNotBlank()) put("host_id", hostUserId)
-                        val wallpaper = bgUrl.ifBlank { coverUrl }
-                        if (wallpaper.isNotBlank()) put("background_url", wallpaper)
-                        if (description.isNotBlank()) put("announcement", description.trim())
-                        put("is_active", true)
-                    }.toString()
-
-                    val patchReq = Request.Builder()
-                        .url("$baseUrl/rest/v1/party_rooms?id=eq.$returnedRoomId")
-                        .addHeader("apikey", apiKey)
-                        .addHeader("Authorization", authHeader)
-                        .addHeader("Content-Type", "application/json")
-                        .patch(patchJson.toRequestBody(jsonMediaType))
-                        .build()
-
-                    val patchRes = client.newCall(patchReq).execute()
-                    Log.d("SupabasePartyService", "[create_party_room] Metadata patch response code: ${patchRes.code}")
-                    patchRes.close()
-                } catch (e: Exception) {
-                    Log.w("SupabasePartyService", "[create_party_room] Metadata patch sync warning: ${e.message}")
-                }
-
-                // Deduct 5,000 coins for creating the party room and update local balance
-                try {
-                    val deductionResult = profileService.deductPartyRoomCreationFee(hostUserId, safeRoomName)
-                    if (context != null) {
-                        if (deductionResult.first && deductionResult.second >= 0L) {
-                            UserSessionManager.saveCoins(context, deductionResult.second)
-                        } else {
-                            UserSessionManager.subtractCoins(context, 5000L)
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w("SupabasePartyService", "[create_party_room] Coin deduction warning: ${e.message}")
-                    if (context != null) {
-                        UserSessionManager.subtractCoins(context, 5000L)
-                    }
-                }
-
-                // Cache room in memory now that server has confirmed row creation
-                memoryRooms[returnedRoomId] = newRoom
-
-                // Initialize unoccupied seats: Host is NOT auto-seated into party_room_seats
-                val initialSeats = (0 until safeMaxSeats).map { index ->
-                    PartySeat(seatIndex = index)
-                }.toMutableList()
-                memorySeats[returnedRoomId] = initialSeats
-
-                // Register host presence as owner in memory members (seatIndex = -1, audience)
-                if (hostUserId.isNotBlank()) {
-                    val hostMember = PartyRoomMember(
-                        userId = hostUserId,
-                        userName = hostName.ifBlank { "Host" },
-                        avatarUrl = hostAvatarUrl,
-                        role = "owner",
-                        seatIndex = -1,
-                        isMuted = false,
-                        isSpeaking = false
-                    )
-                    memoryMembers.getOrPut(returnedRoomId) { ConcurrentHashMap() }[hostUserId] = hostMember
-                }
-
-                // Welcome message in memory & DB
-                val welcomeMsg = PartyRoomMessage(
-                    roomId = returnedRoomId,
-                    senderName = "System",
-                    content = "🎉 Welcome to ${newRoom.name}! Mic seats are open.",
-                    msgType = "system"
-                )
-                memoryMessages[returnedRoomId] = mutableListOf(welcomeMsg)
-
-                try {
-                    val msgJson = JSONObject().apply {
-                        put("room_id", returnedRoomId)
-                        put("sender_name", "System")
-                        put("content", welcomeMsg.content)
-                        put("msg_type", "system")
-                    }.toString()
-
-                    val msgReq = Request.Builder()
-                        .url("$baseUrl/rest/v1/party_room_messages")
-                        .addHeader("apikey", apiKey)
-                        .addHeader("Authorization", authHeader)
-                        .addHeader("Content-Type", "application/json")
-                        .post(msgJson.toRequestBody(jsonMediaType))
-                        .build()
-
-                    val msgRes = client.newCall(msgReq).execute()
-                    msgRes.close()
-                } catch (e: Exception) {
-                    Log.w("SupabasePartyService", "[create_party_room] System welcome message sync warning: ${e.message}")
-                }
-
-                Log.d("SupabasePartyService", "[create_party_room] Party room setup complete for UUID: $returnedRoomId")
-
-                PartyRoomCreationResult(
-                    room = newRoom,
-                    errorMessage = null
-                )
             } catch (e: Exception) {
                 Log.e("SupabasePartyService", "[create_party_room] Network/RPC exception during creation", e)
                 PartyRoomCreationResult(
@@ -518,10 +328,14 @@ class SupabasePartyService {
                         val jsonArr = JSONArray(body)
                         for (i in 0 until jsonArr.length()) {
                             val obj = jsonArr.getJSONObject(i)
-                            val isActive = obj.optBoolean("is_active", true)
-                            if (!isActive) continue
-
                             val rawId = obj.optString("id")
+                            if (rawId.isBlank() || deletedRoomIds.contains(rawId)) continue
+
+                            val isActive = obj.optBoolean("is_active", true)
+                            val status = obj.optString("status", "open")
+                            val isDeleted = obj.optBoolean("is_deleted", false)
+                            if (!isActive || status == "closed" || isDeleted) continue
+
                             var parsedRoomNum = obj.optLong("room_number", 0L)
                             if (parsedRoomNum <= 0L) {
                                 parsedRoomNum = if (rawId.isNotBlank()) {
@@ -547,8 +361,9 @@ class SupabasePartyService {
                                 hostName = obj.optString("host_name", "Host"),
                                 hostAvatarUrl = obj.optString("host_avatar_url", ""),
                                 seatsCount = obj.optInt("seats_count", 8),
-                                isLocked = obj.optBoolean("is_locked", false),
-                                onlineCount = obj.optInt("online_count", 1)
+                                isLocked = obj.optBoolean("is_locked", false) || (if (obj.isNull("room_password")) "" else obj.optString("room_password", "").trim()).let { it.isNotEmpty() && !it.equals("null", ignoreCase = true) },
+                                onlineCount = obj.optInt("online_count", 1),
+                                roomPassword = if (obj.isNull("room_password")) "" else obj.optString("room_password", "").trim().let { if (it.equals("null", ignoreCase = true)) "" else it }
                             )
                             roomsList.add(r)
                             memoryRooms[r.id] = r
@@ -562,10 +377,10 @@ class SupabasePartyService {
 
             // If Supabase returned results, use them
             if (roomsList.isNotEmpty()) {
-                roomsList
+                roomsList.filter { it.id !in deletedRoomIds }
             } else {
                 // Otherwise only return rooms created during the current user's session
-                val localRooms = memoryRooms.values.toList()
+                val localRooms = memoryRooms.values.filter { it.id !in deletedRoomIds }.toList()
                 if (category == "All" || category.isBlank()) {
                     localRooms
                 } else {
@@ -718,70 +533,34 @@ class SupabasePartyService {
                 avatarUrl = avatarUrl
             )
 
-            // Persist to Supabase Database
+            // Persist to Supabase Database via secure RPC
             val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
             val apiKey = SupabaseConfig.supabaseAnonKey.trim()
             if (baseUrl.isNotEmpty() && apiKey.isNotEmpty() && roomId.isNotBlank()) {
                 try {
                     val authHeader = getAuthHeader()
-
-                    // 1. Delete/clear any existing seat record for this user in this room to enforce single-seat invariant
-                    try {
-                        val deletePrevReq = Request.Builder()
-                            .url("$baseUrl/rest/v1/party_room_seats?room_id=eq.$roomId&user_id=eq.$userId")
-                            .addHeader("apikey", apiKey)
-                            .addHeader("Authorization", authHeader)
-                            .delete()
-                            .build()
-                        client.newCall(deletePrevReq).execute().close()
-                    } catch (_: Exception) {}
-
-                    // 2. Try calling RPC occupy_party_seat
                     val rpcJson = JSONObject().apply {
                         put("p_room_id", roomId)
                         put("p_seat_index", seatIndex)
-                        put("p_user_id", userId)
-                        put("p_user_name", userName)
-                        put("p_avatar_url", avatarUrl)
                     }.toString()
 
                     val rpcReq = Request.Builder()
-                        .url("$baseUrl/rest/v1/rpc/occupy_party_seat")
+                        .url("$baseUrl/rest/v1/rpc/secure_occupy_seat")
                         .addHeader("apikey", apiKey)
                         .addHeader("Authorization", authHeader)
                         .addHeader("Content-Type", "application/json")
                         .post(rpcJson.toRequestBody(jsonMediaType))
                         .build()
 
-                    val rpcResp = client.newCall(rpcReq).execute()
-                    val rpcSuccess = rpcResp.isSuccessful
-                    rpcResp.close()
-
-                    if (!rpcSuccess) {
-                        // Upsert directly into party_room_seats
-                        val seatJson = JSONObject().apply {
-                            put("room_id", roomId)
-                            put("seat_index", seatIndex)
-                            put("user_id", userId)
-                            put("user_name", userName)
-                            put("avatar_url", avatarUrl)
-                            put("is_muted", false)
-                            put("is_speaking", false)
-                        }.toString()
-
-                        val postReq = Request.Builder()
-                            .url("$baseUrl/rest/v1/party_room_seats?on_conflict=room_id,seat_index")
-                            .addHeader("apikey", apiKey)
-                            .addHeader("Authorization", authHeader)
-                            .addHeader("Content-Type", "application/json")
-                            .addHeader("Prefer", "resolution=merge-duplicates")
-                            .post(seatJson.toRequestBody(jsonMediaType))
-                            .build()
-
-                        client.newCall(postReq).execute().close()
+                    client.newCall(rpcReq).execute().use { response ->
+                        if (!response.isSuccessful) {
+                            Log.e("SupabasePartyService", "Seat occupy RPC failed: ${response.code}")
+                            return@withContext false
+                        }
                     }
                 } catch (e: Exception) {
-                    Log.w("SupabasePartyService", "Seat occupy sync warning: ${e.message}")
+                    Log.e("SupabasePartyService", "Seat occupy error", e)
+                    return@withContext false
                 }
             }
 
@@ -821,54 +600,19 @@ class SupabasePartyService {
                 )
             }
 
-            // Sync to Supabase Database (RPC + direct REST delete and update fallback)
+            // Sync to Supabase Database via secure RPC
             val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
             val apiKey = SupabaseConfig.supabaseAnonKey.trim()
-            if (baseUrl.isNotEmpty() && apiKey.isNotEmpty() && roomId.isNotBlank() && userId.isNotBlank()) {
-                val authHeader = getAuthHeader()
-
-                // 1. Direct REST Delete to remove seat row
+            if (baseUrl.isNotEmpty() && apiKey.isNotEmpty() && roomId.isNotBlank()) {
                 try {
-                    val deleteReq = Request.Builder()
-                        .url("$baseUrl/rest/v1/party_room_seats?room_id=eq.$roomId&user_id=eq.$userId")
-                        .addHeader("apikey", apiKey)
-                        .addHeader("Authorization", authHeader)
-                        .delete()
-                        .build()
-                    client.newCall(deleteReq).execute().close()
-                } catch (e: Exception) {
-                    Log.w("SupabasePartyService", "Seat delete REST warning: ${e.message}")
-                }
-
-                // 2. Direct REST Patch fallback to reset fields if row remains
-                try {
-                    val patchJson = JSONObject().apply {
-                        put("user_id", "")
-                        put("user_name", "")
-                        put("avatar_url", "")
-                        put("is_muted", false)
-                        put("is_speaking", false)
-                    }.toString()
-
-                    val patchReq = Request.Builder()
-                        .url("$baseUrl/rest/v1/party_room_seats?room_id=eq.$roomId&user_id=eq.$userId")
-                        .addHeader("apikey", apiKey)
-                        .addHeader("Authorization", authHeader)
-                        .addHeader("Content-Type", "application/json")
-                        .patch(patchJson.toRequestBody(jsonMediaType))
-                        .build()
-                    client.newCall(patchReq).execute().close()
-                } catch (_: Exception) {}
-
-                // 3. Call RPC release_party_seat
-                try {
+                    val authHeader = getAuthHeader()
                     val rpcJson = JSONObject().apply {
                         put("p_room_id", roomId)
-                        put("p_user_id", userId)
+                        put("p_seat_index", freedSeatIndex)
                     }.toString()
 
                     val rpcReq = Request.Builder()
-                        .url("$baseUrl/rest/v1/rpc/release_party_seat")
+                        .url("$baseUrl/rest/v1/rpc/secure_release_seat")
                         .addHeader("apikey", apiKey)
                         .addHeader("Authorization", authHeader)
                         .addHeader("Content-Type", "application/json")
@@ -877,7 +621,7 @@ class SupabasePartyService {
 
                     client.newCall(rpcReq).execute().close()
                 } catch (e: Exception) {
-                    Log.w("SupabasePartyService", "Seat release RPC warning: ${e.message}")
+                    Log.w("SupabasePartyService", "Seat release error: ${e.message}")
                 }
             }
 
@@ -1249,33 +993,7 @@ class SupabasePartyService {
             joinedAt = System.currentTimeMillis().toString()
         )
 
-        // Asynchronously persist to Supabase party_room_members table
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
-                val apiKey = SupabaseConfig.supabaseAnonKey.trim()
-                if (baseUrl.isNotEmpty() && apiKey.isNotEmpty()) {
-                    val authHeader = getAuthHeader()
-                    val memberJson = JSONObject().apply {
-                        put("room_id", roomId)
-                        put("user_id", userId)
-                        put("user_name", userName.ifBlank { "Guest" })
-                        put("avatar_url", avatarUrl)
-                        put("role", role)
-                    }.toString()
-
-                    val req = Request.Builder()
-                        .url("$baseUrl/rest/v1/party_room_members")
-                        .addHeader("apikey", apiKey)
-                        .addHeader("Authorization", authHeader)
-                        .addHeader("Content-Type", "application/json")
-                        .addHeader("Prefer", "resolution=merge-duplicates")
-                        .post(memberJson.toRequestBody(jsonMediaType))
-                        .build()
-                    client.newCall(req).execute().close()
-                }
-            } catch (_: Exception) {}
-        }
+        // Presence tracking no longer directly inserts into party_room_members (now handled by join_party_room RPC)
     }
 
     /**
@@ -1531,20 +1249,27 @@ class SupabasePartyService {
     suspend fun deletePartyRoom(roomId: String, hostUserId: String = "", context: Context? = null): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                // Remove from local memory
+                if (roomId.isBlank()) return@withContext false
+
+                // 1. Mark as locally deleted immediately so it is never shown again in UI or discovery
+                deletedRoomIds.add(roomId)
                 memoryRooms.remove(roomId)
                 memorySeats.remove(roomId)
                 memoryMessages.remove(roomId)
                 memoryAdmins.remove(roomId)
                 memoryMembers.remove(roomId)
 
+                // 2. Clear persisted session if it was this room
                 if (context != null) {
                     try {
                         AppDataCacheManager.removePartyRoomFromCache(context, roomId)
+                        if (PartyRoomSessionManager.getPersistedRoomId(context) == roomId) {
+                            PartyRoomSessionManager.clearActiveRoomSession(context)
+                        }
                     } catch (_: Exception) {}
                 }
 
-                // Broadcast room closed event via realtime relay
+                // 3. Broadcast room closed event via realtime relay
                 try {
                     PartyRealtimeRelayManager.broadcastRoomClosed(roomId)
                 } catch (_: Exception) {}
@@ -1552,67 +1277,69 @@ class SupabasePartyService {
                 val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
                 val apiKey = SupabaseConfig.supabaseAnonKey.trim()
 
-                if (baseUrl.isNotEmpty() && apiKey.isNotEmpty() && roomId.isNotBlank()) {
+                if (baseUrl.isNotEmpty() && apiKey.isNotEmpty()) {
                     val authHeader = getAuthHeader(context)
 
-                    // Delete seats
+                    // Try official RPC calls for closing/deleting party room
                     try {
-                        val reqSeats = Request.Builder()
-                            .url("$baseUrl/rest/v1/party_room_seats?room_id=eq.$roomId")
+                        val rpcPayload = JSONObject().apply {
+                            put("p_room_id", roomId)
+                            put("room_id", roomId)
+                        }.toString()
+                        val reqRpc1 = Request.Builder()
+                            .url("$baseUrl/rest/v1/rpc/delete_party_room")
                             .addHeader("apikey", apiKey)
                             .addHeader("Authorization", authHeader)
-                            .delete()
+                            .addHeader("Content-Type", "application/json")
+                            .post(rpcPayload.toRequestBody(jsonMediaType))
                             .build()
-                        client.newCall(reqSeats).execute().close()
+                        client.newCall(reqRpc1).execute().close()
                     } catch (_: Exception) {}
 
                     try {
-                        val reqSeatsAlt = Request.Builder()
-                            .url("$baseUrl/rest/v1/party_seats?room_id=eq.$roomId")
+                        val rpcPayload = JSONObject().apply {
+                            put("p_room_id", roomId)
+                            put("room_id", roomId)
+                        }.toString()
+                        val reqRpc2 = Request.Builder()
+                            .url("$baseUrl/rest/v1/rpc/close_party_room")
                             .addHeader("apikey", apiKey)
                             .addHeader("Authorization", authHeader)
-                            .delete()
+                            .addHeader("Content-Type", "application/json")
+                            .post(rpcPayload.toRequestBody(jsonMediaType))
                             .build()
-                        client.newCall(reqSeatsAlt).execute().close()
+                        client.newCall(reqRpc2).execute().close()
                     } catch (_: Exception) {}
 
-                    // Delete messages
-                    try {
-                        val reqMsg = Request.Builder()
-                            .url("$baseUrl/rest/v1/party_room_messages?room_id=eq.$roomId")
-                            .addHeader("apikey", apiKey)
-                            .addHeader("Authorization", authHeader)
-                            .delete()
-                            .build()
-                        client.newCall(reqMsg).execute().close()
-                    } catch (_: Exception) {}
+                    // Purge dependent tables
+                    val tables = listOf(
+                        "party_room_seats",
+                        "party_seats",
+                        "party_room_messages",
+                        "party_room_admins",
+                        "party_room_members",
+                        "party_room_bans",
+                        "party_room_gifts",
+                        "party_room_listeners"
+                    )
+                    for (table in tables) {
+                        try {
+                            val req = Request.Builder()
+                                .url("$baseUrl/rest/v1/$table?room_id=eq.$roomId")
+                                .addHeader("apikey", apiKey)
+                                .addHeader("Authorization", authHeader)
+                                .delete()
+                                .build()
+                            client.newCall(req).execute().close()
+                        } catch (_: Exception) {}
+                    }
 
-                    // Delete admins
-                    try {
-                        val reqAdm = Request.Builder()
-                            .url("$baseUrl/rest/v1/party_room_admins?room_id=eq.$roomId")
-                            .addHeader("apikey", apiKey)
-                            .addHeader("Authorization", authHeader)
-                            .delete()
-                            .build()
-                        client.newCall(reqAdm).execute().close()
-                    } catch (_: Exception) {}
-
-                    // Delete members
-                    try {
-                        val reqMem = Request.Builder()
-                            .url("$baseUrl/rest/v1/party_room_members?room_id=eq.$roomId")
-                            .addHeader("apikey", apiKey)
-                            .addHeader("Authorization", authHeader)
-                            .delete()
-                            .build()
-                        client.newCall(reqMem).execute().close()
-                    } catch (_: Exception) {}
-
-                    // Mark is_active = false in party_rooms first (safe fallback against foreign key constraints)
+                    // Update room status to closed and inactive
                     try {
                         val deactivateJson = JSONObject().apply {
                             put("is_active", false)
+                            put("status", "closed")
+                            put("is_deleted", true)
                         }.toString()
                         val reqDeact = Request.Builder()
                             .url("$baseUrl/rest/v1/party_rooms?id=eq.$roomId")
@@ -1624,7 +1351,7 @@ class SupabasePartyService {
                         client.newCall(reqDeact).execute().close()
                     } catch (_: Exception) {}
 
-                    // Delete the room record permanently
+                    // Direct row delete from party_rooms
                     try {
                         val reqRoom = Request.Builder()
                             .url("$baseUrl/rest/v1/party_rooms?id=eq.$roomId")
@@ -1632,15 +1359,658 @@ class SupabasePartyService {
                             .addHeader("Authorization", authHeader)
                             .delete()
                             .build()
-                        val res = client.newCall(reqRoom).execute()
-                        res.close()
+                        client.newCall(reqRoom).execute().close()
                     } catch (_: Exception) {}
                 }
                 true
             } catch (e: Exception) {
                 Log.e("SupabasePartyService", "Delete room error", e)
+                true
+            }
+        }
+    }
+
+    /**
+     * Send a gift in a party room using secure server-side RPC gift_party_room
+     */
+    suspend fun sendGift(
+        roomId: String,
+        recipientId: String,
+        giftId: String,
+        quantity: Int,
+        idempotencyKey: String = java.util.UUID.randomUUID().toString()
+    ): Boolean {
+        return withContext(Dispatchers.IO) {
+            val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+            val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+            if (baseUrl.isEmpty() || apiKey.isEmpty()) return@withContext false
+
+            try {
+                val rpcJson = JSONObject().apply {
+                    put("p_room_id", roomId)
+                    put("p_recipient_id", recipientId)
+                    put("p_gift_id", giftId)
+                    put("p_quantity", quantity)
+                    put("p_idempotency_key", idempotencyKey)
+                }.toString()
+
+                val authHeader = getAuthHeader()
+                val request = Request.Builder()
+                    .url("$baseUrl/rest/v1/rpc/gift_party_room")
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", authHeader)
+                    .addHeader("Content-Type", "application/json")
+                    .post(rpcJson.toRequestBody(jsonMediaType))
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    response.isSuccessful
+                }
+            } catch (e: Exception) {
+                Log.e("SupabasePartyService", "Send gift error", e)
                 false
             }
         }
+    }
+
+    /**
+     * Manage room admins using secure RPC manage_party_admin
+     */
+    suspend fun manageAdmin(roomId: String, userId: String, action: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+            val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+            try {
+                val rpcJson = JSONObject().apply {
+                    put("p_room_id", roomId)
+                    put("p_user_id", userId)
+                    put("p_action", action)
+                }.toString()
+
+                val authHeader = getAuthHeader()
+                val request = Request.Builder()
+                    .url("$baseUrl/rest/v1/rpc/manage_party_admin")
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", authHeader)
+                    .addHeader("Content-Type", "application/json")
+                    .post(rpcJson.toRequestBody(jsonMediaType))
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    response.isSuccessful
+                }
+            } catch (e: Exception) {
+                false
+            }
+        }
+    }
+
+    /**
+     * Kick a member from the room using secure RPC kick_party_member
+     */
+    suspend fun kickMember(roomId: String, userId: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+            val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+            try {
+                val rpcJson = JSONObject().apply {
+                    put("p_room_id", roomId)
+                    put("p_user_id", userId)
+                }.toString()
+
+                val authHeader = getAuthHeader()
+                val request = Request.Builder()
+                    .url("$baseUrl/rest/v1/rpc/kick_party_member")
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", authHeader)
+                    .addHeader("Content-Type", "application/json")
+                    .post(rpcJson.toRequestBody(jsonMediaType))
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    response.isSuccessful
+                }
+            } catch (e: Exception) {
+                false
+            }
+        }
+    }
+
+    /**
+     * Update room seat count using secure RPC update_room_seats_count
+     */
+    suspend fun updateSeatCount(roomId: String, newCount: Int): Boolean {
+        return withContext(Dispatchers.IO) {
+            val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+            val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+            try {
+                val rpcJson = JSONObject().apply {
+                    put("p_room_id", roomId)
+                    put("p_new_count", newCount)
+                }.toString()
+
+                val authHeader = getAuthHeader()
+                val request = Request.Builder()
+                    .url("$baseUrl/rest/v1/rpc/update_room_seats_count")
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", authHeader)
+                    .addHeader("Content-Type", "application/json")
+                    .post(rpcJson.toRequestBody(jsonMediaType))
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    response.isSuccessful
+                }
+            } catch (e: Exception) {
+                false
+            }
+        }
+    }
+
+    /**
+     * Update room password (or remove if empty/null) by Room Owner or Admin
+     */
+    suspend fun updateRoomPassword(
+        roomId: String,
+        password: String?,
+        context: Context? = null
+    ): Boolean {
+        return withContext(Dispatchers.IO) {
+            val cleanPassword = if (password.isNullOrBlank() || password.trim().equals("null", ignoreCase = true)) "" else password.trim()
+            val isNowLocked = cleanPassword.isNotEmpty()
+            val existing = memoryRooms[roomId]
+            if (existing != null) {
+                memoryRooms[roomId] = existing.copy(
+                    roomPassword = cleanPassword,
+                    isLocked = isNowLocked
+                )
+            }
+            if (context != null && roomId.isNotBlank()) {
+                val prefs = context.getSharedPreferences("qivo_room_passwords", Context.MODE_PRIVATE)
+                if (cleanPassword.isNotEmpty()) {
+                    prefs.edit().putString("room_pwd_$roomId", cleanPassword).apply()
+                } else {
+                    prefs.edit().remove("room_pwd_$roomId").apply()
+                }
+            }
+
+            // 1. Invoke RPC if available in database
+            val rpcSuccess = setPartyRoomPasswordRpc(roomId, cleanPassword)
+
+            // 2. Also patch directly via REST
+            val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+            val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+            if (baseUrl.isNotEmpty() && apiKey.isNotEmpty() && roomId.isNotBlank()) {
+                try {
+                    val patchObj = JSONObject().apply {
+                        if (cleanPassword.isNotEmpty()) {
+                            put("room_password", cleanPassword)
+                            put("is_locked", true)
+                        } else {
+                            put("room_password", JSONObject.NULL)
+                            put("is_locked", false)
+                        }
+                    }
+
+                    val authHeader = getAuthHeader(context)
+                    val req = Request.Builder()
+                        .url("$baseUrl/rest/v1/party_rooms?id=eq.$roomId")
+                        .addHeader("apikey", apiKey)
+                        .addHeader("Authorization", authHeader)
+                        .addHeader("Content-Type", "application/json")
+                        .patch(patchObj.toString().toRequestBody(jsonMediaType))
+                        .build()
+
+                    val res = client.newCall(req).execute()
+                    val ok = res.isSuccessful || res.code in 200..299
+                    res.close()
+                    return@withContext ok || rpcSuccess
+                } catch (e: Exception) {
+                    Log.w("SupabasePartyService", "Update room password error: ${e.message}")
+                }
+            }
+            true
+        }
+    }
+
+    /**
+     * Fetch latest single party room details by its ID
+     */
+    suspend fun fetchPartyRoomById(roomId: String, context: Context? = null): PartyRoom? {
+        return withContext(Dispatchers.IO) {
+            if (roomId.isBlank() || deletedRoomIds.contains(roomId)) return@withContext null
+            val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+            val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+            if (baseUrl.isNotEmpty() && apiKey.isNotEmpty()) {
+                try {
+                    val queryUrl = "$baseUrl/rest/v1/party_rooms?id=eq.$roomId&select=*"
+                    val authHeader = getAuthHeader(context)
+                    val request = Request.Builder()
+                        .url(queryUrl)
+                        .addHeader("apikey", apiKey)
+                        .addHeader("Authorization", authHeader)
+                        .get()
+                        .build()
+
+                    val response = client.newCall(request).execute()
+                    if (response.isSuccessful) {
+                        val body = response.body?.string() ?: "[]"
+                        val jsonArr = JSONArray(body)
+                        if (jsonArr.length() > 0) {
+                            val obj = jsonArr.getJSONObject(0)
+                            val rawId = obj.optString("id")
+                            val isActive = obj.optBoolean("is_active", true)
+                            val status = obj.optString("status", "open")
+                            val isDeleted = obj.optBoolean("is_deleted", false)
+                            if (!isActive || status == "closed" || isDeleted || deletedRoomIds.contains(rawId)) {
+                                response.close()
+                                return@withContext null
+                            }
+
+                            var parsedRoomNum = obj.optLong("room_number", 0L)
+                            if (parsedRoomNum <= 0L) {
+                                parsedRoomNum = (Math.abs(rawId.hashCode()) % 999900 + 100).toLong()
+                            }
+                            val rTitle = obj.optString("title").ifBlank { obj.optString("name", "Party Lounge") }
+                            val rDesc = obj.optString("announcement").ifBlank { obj.optString("description", "") }
+                            val rBg = obj.optString("background_url").ifBlank { obj.optString("bg_url", "") }
+                            val rCover = obj.optString("cover_url").ifBlank { rBg }
+                            val rHostId = obj.optString("host_id").ifBlank { obj.optString("host_user_id", "") }
+                            
+                            val rawPassword = if (obj.isNull("room_password")) "" else obj.optString("room_password", "").trim()
+                            val cleanPassword = if (rawPassword.equals("null", ignoreCase = true)) "" else rawPassword
+                            val isLockedInDb = obj.optBoolean("is_locked", false)
+                            val hasLock = isLockedInDb && cleanPassword.isNotEmpty()
+                            val finalPassword = if (hasLock) cleanPassword else ""
+
+                            val r = PartyRoom(
+                                id = rawId,
+                                roomNumber = parsedRoomNum,
+                                name = rTitle,
+                                description = rDesc,
+                                category = obj.optString("category", "Chat"),
+                                coverUrl = rCover,
+                                bgUrl = rBg,
+                                hostUserId = rHostId,
+                                hostName = obj.optString("host_name", "Host"),
+                                hostAvatarUrl = obj.optString("host_avatar_url", ""),
+                                seatsCount = obj.optInt("seats_count", 8),
+                                isLocked = hasLock,
+                                onlineCount = obj.optInt("online_count", 1),
+                                roomPassword = finalPassword
+                            )
+                            memoryRooms[r.id] = r
+                            response.close()
+                            return@withContext r
+                        }
+                    }
+                    response.close()
+                } catch (e: Exception) {
+                    Log.w("SupabasePartyService", "Fetch single room error: ${e.message}")
+                }
+            }
+            val mem = memoryRooms[roomId]
+            if (mem != null && !deletedRoomIds.contains(roomId)) mem else null
+        }
+    }
+
+    /**
+     * Verify private party room password and join room session
+     * Returns Pair(Boolean isVerified, String errorMessage)
+     */
+    suspend fun verifyAndJoinPartyRoom(
+        roomId: String,
+        enteredPassword: String,
+        userId: String = "",
+        userName: String = "",
+        avatarUrl: String = "",
+        context: Context? = null
+    ): Pair<Boolean, String> {
+        return withContext(Dispatchers.IO) {
+            try {
+                if (roomId.isBlank()) return@withContext Pair(false, "Invalid party room")
+                val freshRoom = fetchPartyRoomById(roomId, context) ?: memoryRooms[roomId]
+                if (freshRoom == null || deletedRoomIds.contains(roomId)) {
+                    return@withContext Pair(false, "Party room is no longer active.")
+                }
+
+                // Password Check:
+                val rawPassword = freshRoom.roomPassword.trim()
+                val expectedPassword = if (rawPassword.equals("null", ignoreCase = true)) "" else rawPassword
+                val isRoomLocked = freshRoom.isLocked && expectedPassword.isNotEmpty()
+
+                if (isRoomLocked) {
+                    val cleanEntered = enteredPassword.trim()
+                    if (cleanEntered.isEmpty()) {
+                        return@withContext Pair(false, "Please enter the 6-digit room PIN.")
+                    }
+                    val rpcVerified = verifyPartyRoomPasswordRpc(roomId, cleanEntered)
+                    if (!rpcVerified && cleanEntered != expectedPassword) {
+                        return@withContext Pair(false, "Incorrect password! Please try again.")
+                    }
+                }
+
+                // Password matches or room is public -> register presence and join
+                if (userId.isNotBlank()) {
+                    val memberMap = memoryMembers.getOrPut(roomId) { ConcurrentHashMap() }
+                    memberMap[userId] = PartyRoomMember(
+                        userId = userId,
+                        userName = userName.ifBlank { "User" },
+                        avatarUrl = avatarUrl,
+                        role = if (userId == freshRoom.hostUserId) "owner" else "audience"
+                    )
+
+                    // Insert/update into party_room_members table in Supabase
+                    val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+                    val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+                    if (baseUrl.isNotEmpty() && apiKey.isNotEmpty()) {
+                        try {
+                            val memberJson = JSONObject().apply {
+                                put("room_id", roomId)
+                                put("user_id", userId)
+                                put("user_name", userName.ifBlank { "User" })
+                                put("avatar_url", avatarUrl)
+                                put("role", if (userId == freshRoom.hostUserId) "owner" else "audience")
+                            }.toString()
+                            val req = Request.Builder()
+                                .url("$baseUrl/rest/v1/party_room_members")
+                                .addHeader("apikey", apiKey)
+                                .addHeader("Authorization", getAuthHeader(context))
+                                .addHeader("Content-Type", "application/json")
+                                .addHeader("Prefer", "resolution=merge-duplicates")
+                                .post(memberJson.toRequestBody(jsonMediaType))
+                                .build()
+                            client.newCall(req).execute().close()
+                        } catch (_: Exception) {}
+                    }
+                }
+
+                // Attempt RPC join call as background auxiliary
+                try {
+                    joinPartyRoomRpc(roomId, enteredPassword)
+                } catch (_: Exception) {}
+
+                // Save active session for instant reconnection if connection is lost
+                PartyRoomSessionManager.saveActiveRoomSession(context, freshRoom)
+
+                Pair(true, "")
+            } catch (e: Exception) {
+                Log.e("SupabasePartyService", "Verify and join room error: ${e.message}")
+                Pair(false, "Connection error. Please try again.")
+            }
+        }
+    }
+
+    /**
+     * Call secure RPC to join party room
+     */
+    fun joinPartyRoomRpc(roomId: String, password: String?): Boolean {
+        return try {
+            val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+            val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+            val authHeader = getAuthHeader()
+            
+            val json = JSONObject().apply {
+                put("room_id", roomId)
+                put("password", password ?: "")
+            }.toString()
+
+            val req = Request.Builder()
+                .url("$baseUrl/rest/v1/rpc/join_party_room")
+                .addHeader("apikey", apiKey)
+                .addHeader("Authorization", authHeader)
+                .addHeader("Content-Type", "application/json")
+                .post(json.toRequestBody(jsonMediaType))
+                .build()
+            
+            client.newCall(req).execute().use { response ->
+                response.isSuccessful
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Call secure RPC to create party room
+     */
+    fun createPartyRoomRpc(name: String, description: String, category: String): Boolean {
+        return try {
+            val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+            val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+            val authHeader = getAuthHeader()
+            
+            val json = JSONObject().apply {
+                put("p_name", name)
+                put("p_description", description)
+                put("p_category", category)
+            }.toString()
+
+            val req = Request.Builder()
+                .url("$baseUrl/rest/v1/rpc/create_party_room_v2")
+                .addHeader("apikey", apiKey)
+                .addHeader("Authorization", authHeader)
+                .addHeader("Content-Type", "application/json")
+                .post(json.toRequestBody(jsonMediaType))
+                .build()
+            
+            client.newCall(req).execute().use { it.isSuccessful }
+        } catch (e: Exception) { false }
+    }
+
+    /**
+     * Call secure RPC to leave party room
+     */
+    fun leavePartyRoomRpc(roomId: String): Boolean {
+        return try {
+            val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+            val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+            val authHeader = getAuthHeader()
+            
+            val json = JSONObject().apply { put("p_room_id", roomId) }.toString()
+
+            val req = Request.Builder()
+                .url("$baseUrl/rest/v1/rpc/leave_party_room")
+                .addHeader("apikey", apiKey)
+                .addHeader("Authorization", authHeader)
+                .addHeader("Content-Type", "application/json")
+                .post(json.toRequestBody(jsonMediaType))
+                .build()
+            
+            client.newCall(req).execute().use { it.isSuccessful }
+        } catch (e: Exception) { false }
+    }
+
+    /**
+     * Call secure RPC to occupy seat
+     */
+    fun secureOccupySeatRpc(roomId: String, seatIndex: Int): Boolean {
+        return try {
+            val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+            val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+            val authHeader = getAuthHeader()
+            
+            val json = JSONObject().apply { 
+                put("p_room_id", roomId)
+                put("p_seat_index", seatIndex)
+            }.toString()
+
+            val req = Request.Builder()
+                .url("$baseUrl/rest/v1/rpc/secure_occupy_seat")
+                .addHeader("apikey", apiKey)
+                .addHeader("Authorization", authHeader)
+                .addHeader("Content-Type", "application/json")
+                .post(json.toRequestBody(jsonMediaType))
+                .build()
+            
+            client.newCall(req).execute().use { it.isSuccessful }
+        } catch (e: Exception) { false }
+    }
+
+    /**
+     * Call secure RPC to release seat
+     */
+    fun secureReleaseSeatRpc(roomId: String, seatIndex: Int): Boolean {
+        return try {
+            val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+            val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+            val authHeader = getAuthHeader()
+            
+            val json = JSONObject().apply { 
+                put("p_room_id", roomId)
+                put("p_seat_index", seatIndex)
+            }.toString()
+
+            val req = Request.Builder()
+                .url("$baseUrl/rest/v1/rpc/secure_release_seat")
+                .addHeader("apikey", apiKey)
+                .addHeader("Authorization", authHeader)
+                .addHeader("Content-Type", "application/json")
+                .post(json.toRequestBody(jsonMediaType))
+                .build()
+            
+            client.newCall(req).execute().use { it.isSuccessful }
+        } catch (e: Exception) { false }
+    }
+
+    /**
+     * Call secure RPC to gift room
+     */
+    fun giftPartyRoomRpc(roomId: String, giftId: String, amount: Int): Boolean {
+        return try {
+            val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+            val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+            val authHeader = getAuthHeader()
+            
+            val json = JSONObject().apply { 
+                put("p_room_id", roomId)
+                put("p_gift_id", giftId)
+                put("p_amount", amount)
+            }.toString()
+
+            val req = Request.Builder()
+                .url("$baseUrl/rest/v1/rpc/gift_party_room")
+                .addHeader("apikey", apiKey)
+                .addHeader("Authorization", authHeader)
+                .addHeader("Content-Type", "application/json")
+                .post(json.toRequestBody(jsonMediaType))
+                .build()
+            
+            client.newCall(req).execute().use { it.isSuccessful }
+        } catch (e: Exception) { false }
+    }
+
+    /**
+     * Call secure RPC to manage admin
+     */
+    fun managePartyAdminRpc(roomId: String, userId: String, action: String): Boolean {
+        return try {
+            val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+            val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+            val authHeader = getAuthHeader()
+            
+            val json = JSONObject().apply { 
+                put("p_room_id", roomId)
+                put("p_user_id", userId)
+                put("p_action", action)
+            }.toString()
+
+            val req = Request.Builder()
+                .url("$baseUrl/rest/v1/rpc/manage_party_admin")
+                .addHeader("apikey", apiKey)
+                .addHeader("Authorization", authHeader)
+                .addHeader("Content-Type", "application/json")
+                .post(json.toRequestBody(jsonMediaType))
+                .build()
+            
+            client.newCall(req).execute().use { it.isSuccessful }
+        } catch (e: Exception) { false }
+    }
+
+    /**
+     * Call secure RPC to update seat count
+     */
+    fun updateRoomSeatsCountRpc(roomId: String, newCount: Int): Boolean {
+        return try {
+            val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+            val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+            val authHeader = getAuthHeader()
+            
+            val json = JSONObject().apply { 
+                put("p_room_id", roomId)
+                put("p_seats_count", newCount)
+            }.toString()
+
+            val req = Request.Builder()
+                .url("$baseUrl/rest/v1/rpc/update_room_seats_count")
+                .addHeader("apikey", apiKey)
+                .addHeader("Authorization", authHeader)
+                .addHeader("Content-Type", "application/json")
+                .post(json.toRequestBody(jsonMediaType))
+                .build()
+            
+            client.newCall(req).execute().use { it.isSuccessful }
+        } catch (e: Exception) { false }
+    }
+
+    /**
+     * Call secure RPC to set password
+     */
+    fun setPartyRoomPasswordRpc(roomId: String, password: String?): Boolean {
+        return try {
+            val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+            val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+            val authHeader = getAuthHeader()
+            
+            val json = JSONObject().apply { 
+                put("p_room_id", roomId)
+                put("p_password", password ?: "")
+            }.toString()
+
+            val req = Request.Builder()
+                .url("$baseUrl/rest/v1/rpc/set_party_room_password")
+                .addHeader("apikey", apiKey)
+                .addHeader("Authorization", authHeader)
+                .addHeader("Content-Type", "application/json")
+                .post(json.toRequestBody(jsonMediaType))
+                .build()
+            
+            client.newCall(req).execute().use { it.isSuccessful }
+        } catch (e: Exception) { false }
+    }
+
+    /**
+     * Call secure RPC to verify password
+     */
+    fun verifyPartyRoomPasswordRpc(roomId: String, password: String): Boolean {
+        return try {
+            val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+            val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+            val authHeader = getAuthHeader()
+
+            val json = JSONObject().apply {
+                put("p_room_id", roomId)
+                put("p_password", password.trim())
+            }.toString()
+
+            val req = Request.Builder()
+                .url("$baseUrl/rest/v1/rpc/verify_party_room_password")
+                .addHeader("apikey", apiKey)
+                .addHeader("Authorization", authHeader)
+                .addHeader("Content-Type", "application/json")
+                .post(json.toRequestBody(jsonMediaType))
+                .build()
+
+            val res = client.newCall(req).execute()
+            if (res.isSuccessful) {
+                val body = res.body?.string() ?: ""
+                res.close()
+                val jsonRes = JSONObject(body)
+                jsonRes.optBoolean("success", false)
+            } else {
+                res.close()
+                false
+            }
+        } catch (_: Exception) { false }
     }
 }

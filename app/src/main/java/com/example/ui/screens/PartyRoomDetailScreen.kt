@@ -42,8 +42,10 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -142,7 +144,10 @@ fun PartyRoomDetailScreen(
     var showMembersPanel by remember { mutableStateOf(false) }
     var showAdminManageDialog by remember { mutableStateOf(false) }
     var showSeatCapacityDialog by remember { mutableStateOf(false) }
+    var showRoomLockDialog by remember { mutableStateOf(false) }
     var showRoomSettingsDialog by remember { mutableStateOf(false) }
+    var showPasswordDialog by remember { mutableStateOf(false) }
+    var passwordInput by remember { mutableStateOf("") }
     var isUploadingRoomMedia by remember { mutableStateOf(false) }
     var showLeaveConfirmDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
@@ -204,12 +209,10 @@ fun PartyRoomDetailScreen(
         showLeaveConfirmDialog = true
     }
 
-    // Initialize and join ZegoCloud Voice & Party Engine
+    // Initialize and join ZegoCloud Voice & Party Engine via Session Manager
     DisposableEffect(room.id) {
-        ZegoCloudVoiceEngine.initEngine(context)
-        ZegoCloudVoiceEngine.joinRoom(room.id, currentUserId, currentUserName, false)
         onDispose {
-            ZegoCloudVoiceEngine.leaveRoom()
+            // Cleanup handled by onDispose below or leaveRoom
         }
     }
 
@@ -331,8 +334,9 @@ fun PartyRoomDetailScreen(
         }
     }
 
-    // Connect to ZegoCloud RTC & Realtime Relay Room on launch
+    // Connect to ZegoCloud RTC & Realtime Relay Room on launch and persist active session
     LaunchedEffect(currentRoom.id, currentRoom.roomNumber) {
+        PartyRoomSessionManager.enterRoom(currentRoom, context)
         PartyRealtimeRelayManager.connectRoom(currentRoom.id, currentUserId)
         PartyMusicManager.setRoomId(currentRoom.id)
         voiceEngine.enterPartyRoom(scope, currentRoom.id, currentUserId, mySeatIndex)
@@ -343,7 +347,7 @@ fun PartyRoomDetailScreen(
         PartyRealtimeRelayManager.roomClosedEvents.collect { closedEvent ->
             if (closedEvent.roomId == currentRoom.id && !isDeletingRoom) {
                 AppToast.show("This party room was closed by the host")
-                PartyRoomSessionManager.leaveRoom(currentUserId, scope)
+                PartyRoomSessionManager.leaveRoom(currentUserId, context, scope)
                 onLeaveRoom()
             }
         }
@@ -680,7 +684,7 @@ fun PartyRoomDetailScreen(
                         onClick = {
                             isLeavingRoom = true
                             PartyMusicManager.stopMusic()
-                            PartyRoomSessionManager.leaveRoom(currentUserId, scope)
+                            PartyRoomSessionManager.leaveRoom(currentUserId, context, scope)
                             onLeaveRoom()
                             AppToast.show("You left ${currentRoom.name}")
                         },
@@ -944,6 +948,34 @@ fun PartyRoomDetailScreen(
                             }
                         }
 
+                        // Room Password Lock Button (Host & Admins)
+                        Surface(
+                            onClick = { showRoomLockDialog = true },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (currentRoom.roomPassword.isNotBlank()) Color(0x8800C853) else Color(0x887E57C2),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (currentRoom.roomPassword.isNotBlank()) Color(0xFF69F0AE) else Color(0xFFB39DDB)),
+                            modifier = Modifier.testTag("party_room_lock_button")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (currentRoom.roomPassword.isNotBlank()) androidx.compose.material.icons.Icons.Default.Lock else androidx.compose.material.icons.Icons.Default.LockOpen,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (currentRoom.roomPassword.isNotBlank()) "Room Locked 🔒" else "Lock Room",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+
                         // Host Delete Room button (Opens Swipe-to-Delete Interface)
                         if (isRoomOwner) {
                             Surface(
@@ -990,7 +1022,7 @@ fun PartyRoomDetailScreen(
                             PartySeatItem(
                                 seat = seat,
                                 isMyUser = seat.userId == currentUserId && currentUserId.isNotBlank(),
-                                isSpeaking = if (seat.userId == currentUserId) currentSpeakingAmplitude > 0.05f else seat.isSpeaking,
+                                isSpeaking = if (seat.userId == currentUserId) (!isMicMuted && currentSpeakingAmplitude > 0.015f) else seat.isSpeaking,
                                 activeReaction = activeSeatReactions[seat.seatIndex]?.first,
                                 onClick = {
                                     if (seat.userId.isBlank()) {
@@ -1487,7 +1519,7 @@ fun PartyRoomDetailScreen(
                                     Button(
                                         onClick = {
                                             scope.launch {
-                                                partyService.removeRoomAdmin(currentRoom.id, adminId, adminName)
+                                                partyService.manageAdmin(currentRoom.id, adminId, "REMOVE")
                                                 roomAdmins = partyService.fetchRoomAdmins(currentRoom.id)
                                                 AppToast.show("Removed admin role for $adminName")
                                             }
@@ -1542,9 +1574,10 @@ fun PartyRoomDetailScreen(
                                                     return@Button
                                                 }
                                                 scope.launch {
-                                                    val res = partyService.appointRoomAdmin(currentRoom.id, candidate.userId, candidate.userName)
+                                                    val ok = partyService.manageAdmin(currentRoom.id, candidate.userId, "ADD")
                                                     roomAdmins = partyService.fetchRoomAdmins(currentRoom.id)
-                                                    AppToast.show(res.second)
+                                                    if (ok) AppToast.show("Appointed ${candidate.userName} as Admin")
+                                                    else AppToast.show("Could not appoint admin")
                                                 }
                                             },
                                             colors = ButtonDefaults.buttonColors(containerColor = QivoOrange),
@@ -1808,7 +1841,7 @@ fun PartyRoomDetailScreen(
                                         context.startActivity(intent)
                                     }
                                 }
-                                PartyRoomSessionManager.enterRoom(currentRoom)
+                                PartyRoomSessionManager.enterRoom(currentRoom, context)
                                 PartyRoomSessionManager.setSeated(isSeated, mySeatIndex)
                                 PartyRoomSessionManager.setMicMuted(isMicMuted)
                                 PartyRoomSessionManager.minimizeRoom()
@@ -1832,7 +1865,7 @@ fun PartyRoomDetailScreen(
                             onClick = {
                                 isLeavingRoom = true
                                 showLeaveConfirmDialog = false
-                                PartyRoomSessionManager.leaveRoom(currentUserId, scope)
+                                PartyRoomSessionManager.leaveRoom(currentUserId, context, scope)
                                 AppToast.show("Left party room")
                                 onLeaveRoom()
                             },
@@ -1933,7 +1966,7 @@ fun PartyRoomDetailScreen(
                                 scope.launch {
                                     partyService.deletePartyRoom(currentRoom.id, currentUserId, context)
                                     AppDataCacheManager.removePartyRoomFromCache(context, currentRoom.id)
-                                    PartyRoomSessionManager.leaveRoom(currentUserId, scope)
+                                    PartyRoomSessionManager.leaveRoom(currentUserId, context, scope)
                                     AppToast.show("Party room deleted permanently")
                                     showDeleteConfirmDialog = false
                                     isDeletingRoom = false
@@ -1984,7 +2017,7 @@ fun PartyRoomDetailScreen(
                                     .clip(RoundedCornerShape(12.dp))
                                     .clickable {
                                         scope.launch {
-                                            partyService.updateRoomSeatCount(currentRoom.id, count)
+                                            partyService.updateSeatCount(currentRoom.id, count)
                                             seats = partyService.fetchRoomSeats(currentRoom.id, count)
                                             currentRoom = currentRoom.copy(seatsCount = count)
                                             AppToast.show("Seats updated to $count")
@@ -2005,6 +2038,353 @@ fun PartyRoomDetailScreen(
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // 10A. ROOM PASSWORD LOCK DIALOG (Owner & Admin Customization)
+        // ==========================================
+        if (showRoomLockDialog && (isRoomOwner || isRoomAdmin)) {
+            val clipboardManager = LocalClipboardManager.current
+            var lockPasswordInput by remember { mutableStateOf("") }
+            var lockErrorMsg by remember { mutableStateOf("") }
+            var isSavingPassword by remember { mutableStateOf(false) }
+            var showCurrentPassword by remember { mutableStateOf(true) }
+            var showNewPassword by remember { mutableStateOf(false) }
+
+            val cleanActivePassword = remember(currentRoom.roomPassword) {
+                currentRoom.roomPassword.let { if (it.equals("null", ignoreCase = true)) "" else it.trim() }
+            }
+            val isCurrentlyLocked = cleanActivePassword.isNotEmpty()
+
+            Dialog(onDismissRequest = { if (!isSavingPassword) showRoomLockDialog = false }) {
+                Card(
+                    shape = RoundedCornerShape(26.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1B162C)),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.5.dp,
+                        Brush.linearGradient(
+                            listOf(Color(0xFF8B5CF6), Color(0xFFFF6500))
+                        )
+                    ),
+                    modifier = Modifier.fillMaxWidth().padding(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Header
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.align(Alignment.CenterStart)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (isCurrentlyLocked) Color(0x3300E676) else Color(0x33FF6500)
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = if (isCurrentlyLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                                        contentDescription = null,
+                                        tint = if (isCurrentlyLocked) Color(0xFF00E676) else Color(0xFFFF8D00),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Column {
+                                    Text(
+                                        text = if (isCurrentlyLocked) "Room Lock Settings" else "Lock Party Room",
+                                        fontSize = 17.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = if (isCurrentlyLocked) "Password Protected 🔒" else "Currently Public / Unlocked 🔓",
+                                        fontSize = 11.sp,
+                                        color = if (isCurrentlyLocked) Color(0xFF69F0AE) else Color(0xFFFFB74D)
+                                    )
+                                }
+                            }
+
+                            IconButton(
+                                onClick = { if (!isSavingPassword) showRoomLockDialog = false },
+                                modifier = Modifier.align(Alignment.TopEnd).size(28.dp)
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // 1. ACTIVE / CURRENT PASSWORD DISPLAY (Visible to owner & admin as requested)
+                        if (isCurrentlyLocked) {
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = Color(0xFF241D3B),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF69F0AE).copy(alpha = 0.4f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(14.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Key,
+                                                contentDescription = null,
+                                                tint = Color(0xFF69F0AE),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Text(
+                                                text = "Current Active Password",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = Color(0xFFE0E0E0)
+                                            )
+                                        }
+
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            // Toggle visibility
+                                            IconButton(
+                                                onClick = { showCurrentPassword = !showCurrentPassword },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (showCurrentPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                                    contentDescription = "Toggle visibility",
+                                                    tint = Color.White.copy(alpha = 0.7f),
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+
+                                            // Copy button
+                                            IconButton(
+                                                onClick = {
+                                                    clipboardManager.setText(AnnotatedString(cleanActivePassword))
+                                                    AppToast.show("Room password copied! 📋")
+                                                },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.ContentCopy,
+                                                    contentDescription = "Copy Password",
+                                                    tint = Color(0xFFFFD54F),
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    // Formatted password display box
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(Color(0xFF140F22))
+                                            .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(10.dp))
+                                            .padding(vertical = 10.dp, horizontal = 12.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = if (showCurrentPassword) {
+                                                cleanActivePassword.map { "$it " }.joinToString("").trim()
+                                            } else {
+                                                "● ● ● ● ● ●"
+                                            },
+                                            fontSize = 20.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            letterSpacing = 4.sp,
+                                            color = Color(0xFF69F0AE),
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+
+                        // 2. SET / CHANGE PASSWORD SECTION
+                        Column(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = if (isCurrentlyLocked) "Change Room Password" else "Set 6-Digit Password",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Only 6 numeric digits allowed. Share this PIN with guests to grant access.",
+                                fontSize = 11.sp,
+                                color = Color.White.copy(alpha = 0.6f)
+                            )
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            androidx.compose.material3.OutlinedTextField(
+                                value = lockPasswordInput,
+                                onValueChange = {
+                                    if (it.length <= 6 && it.all { char -> char.isDigit() }) {
+                                        lockPasswordInput = it
+                                        lockErrorMsg = ""
+                                    }
+                                },
+                                singleLine = true,
+                                textStyle = androidx.compose.ui.text.TextStyle(
+                                    textAlign = TextAlign.Center,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp,
+                                    letterSpacing = 6.sp,
+                                    color = Color.White
+                                ),
+                                placeholder = {
+                                    Text(
+                                        "New 6-digit PIN",
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = TextAlign.Center,
+                                        fontSize = 13.sp,
+                                        color = Color.White.copy(alpha = 0.35f)
+                                    )
+                                },
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                    keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword,
+                                    imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                                ),
+                                trailingIcon = {
+                                    IconButton(onClick = { showNewPassword = !showNewPassword }) {
+                                        Icon(
+                                            imageVector = if (showNewPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                            contentDescription = "Toggle password visibility",
+                                            tint = Color.White.copy(alpha = 0.6f),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                },
+                                visualTransformation = if (showNewPassword) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedBorderColor = Color(0xFFFF6500),
+                                    unfocusedBorderColor = Color(0x55FFFFFF),
+                                    focusedContainerColor = Color(0xFF241D3B),
+                                    unfocusedContainerColor = Color(0xFF241D3B)
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth().testTag("party_room_lock_input")
+                            )
+                        }
+
+                        if (lockErrorMsg.isNotBlank()) {
+                            Text(
+                                text = lockErrorMsg,
+                                color = Color(0xFFFF5252),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        // Actions: Remove / Change or Set / Cancel
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // If locked, show Remove Password button
+                            if (isCurrentlyLocked) {
+                                Button(
+                                    onClick = {
+                                        isSavingPassword = true
+                                        scope.launch {
+                                            val ok = partyService.updateRoomPassword(currentRoom.id, "", context)
+                                            if (ok) {
+                                                currentRoom = currentRoom.copy(roomPassword = "", isLocked = false)
+                                                AppToast.show("Room unlocked! 🔓")
+                                                showRoomLockDialog = false
+                                            } else {
+                                                lockErrorMsg = "Failed to unlock room. Try again."
+                                            }
+                                            isSavingPassword = false
+                                        }
+                                    },
+                                    enabled = !isSavingPassword,
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.weight(1f).height(46.dp)
+                                ) {
+                                    Text("Unlock Room", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
+
+                            Button(
+                                onClick = {
+                                    if (lockPasswordInput.length != 6) {
+                                        lockErrorMsg = "Password must be exactly 6 digits!"
+                                        return@Button
+                                    }
+                                    isSavingPassword = true
+                                    scope.launch {
+                                        val ok = partyService.updateRoomPassword(currentRoom.id, lockPasswordInput, context)
+                                        if (ok) {
+                                            currentRoom = currentRoom.copy(roomPassword = lockPasswordInput, isLocked = true)
+                                            AppToast.show("Password set successfully! 🔒")
+                                            showRoomLockDialog = false
+                                        } else {
+                                            lockErrorMsg = "Failed to set password. Try again."
+                                        }
+                                        isSavingPassword = false
+                                    }
+                                },
+                                enabled = !isSavingPassword && lockPasswordInput.length == 6,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFFF6500),
+                                    disabledContainerColor = Color(0x33FF6500)
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f).height(46.dp)
+                            ) {
+                                if (isSavingPassword) {
+                                    CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                                } else {
+                                    Text(
+                                        text = if (isCurrentlyLocked) "Update PIN" else "Set & Lock",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        TextButton(
+                            onClick = { showRoomLockDialog = false },
+                            enabled = !isSavingPassword,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Cancel", color = Color.White.copy(alpha = 0.7f), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                         }
                     }
                 }
@@ -2319,23 +2699,23 @@ fun PartyRoomDetailScreen(
                     showGiftDialog = false
                     initialSelectedGiftRecipientId = null
                     scope.launch {
-                        val deductResult = profileService.deductGiftCoins(
-                            senderId = currentUserId,
-                            giftName = gift.name,
-                            coins = gift.coins,
-                            receiverId = currentRoom.id,
-                            receiverName = currentRoom.name,
-                            isAdmin = session?.isAdmin == true,
-                            isCoinSeller = session?.isCoinSeller == true
+                        // Use secure server-side gifting RPC
+                        val ok = partyService.sendGift(
+                            roomId = currentRoom.id,
+                            recipientId = currentRoom.id, // Party-wide gift recorded as room-recipient
+                            giftId = gift.id,
+                            quantity = 1
                         )
-                        if (!deductResult.first) {
-                            AppToast.show("Insufficient coins to send ${gift.name} (${gift.coins} coins)!", isLong = true)
-                            requiredCoinsForGift = gift.coins
-                            showInsufficientCoinsSheet = true
+                        
+                        if (!ok) {
+                            AppToast.show("Gifting failed. Check balance.", isLong = true)
                             return@launch
                         }
-                        userCoins = deductResult.second
-                        UserSessionManager.saveCoins(context, deductResult.second)
+
+                        // Update local balance (optimistic or re-fetch)
+                        val freshCoins = profileService.fetchCoins(currentUserId)
+                        userCoins = freshCoins
+                        UserSessionManager.saveCoins(context, freshCoins)
 
                         activeGiftBannerGift = gift
                         activeGiftRecipientName = "the party"
@@ -2350,30 +2730,29 @@ fun PartyRoomDetailScreen(
                     showGiftDialog = false
                     initialSelectedGiftRecipientId = null
                     scope.launch {
-                        val deductResult = profileService.deductGiftCoins(
-                            senderId = currentUserId,
-                            giftName = gift.name,
-                            coins = totalRequiredCoins,
-                            receiverId = if (selectedRecipients.size == 1) selectedRecipients.first().id else currentRoom.id,
-                            receiverName = if (selectedRecipients.size == 1) selectedRecipients.first().name else currentRoom.name,
-                            isAdmin = session?.isAdmin == true,
-                            isCoinSeller = session?.isCoinSeller == true
-                        )
-                        if (!deductResult.first) {
-                            AppToast.show("Insufficient coins to send ${gift.name} ($totalRequiredCoins coins)!", isLong = true)
-                            requiredCoinsForGift = totalRequiredCoins
-                            showInsufficientCoinsSheet = true
-                            return@launch
+                        var allSuccess = true
+                        selectedRecipients.forEach { recipient ->
+                            val ok = partyService.sendGift(
+                                roomId = currentRoom.id,
+                                recipientId = recipient.id,
+                                giftId = gift.id,
+                                quantity = 1
+                            )
+                            if (!ok) allSuccess = false
                         }
-                        userCoins = deductResult.second
-                        UserSessionManager.saveCoins(context, deductResult.second)
+
+                        if (!allSuccess) {
+                            AppToast.show("Some gifts could not be sent. Check balance.", isLong = true)
+                        }
+
+                        val freshCoins = profileService.fetchCoins(currentUserId)
+                        userCoins = freshCoins
+                        UserSessionManager.saveCoins(context, freshCoins)
 
                         val recipientLabel = if (selectedRecipients.size == 1) {
                             selectedRecipients.first().name
-                        } else if (selectedRecipients.size >= partyGiftRecipients.size && partyGiftRecipients.size > 1) {
-                            "everyone in the party"
                         } else {
-                            "${selectedRecipients.size} members (${selectedRecipients.take(3).joinToString { it.name }}${if (selectedRecipients.size > 3) "..." else ""})"
+                            "${selectedRecipients.size} members"
                         }
 
                         activeGiftBannerGift = gift
@@ -2493,7 +2872,7 @@ fun PartyRoomDetailScreen(
 }
 
 /**
- * Smooth waves radiating outwards outside the frame when a user is speaking
+ * Smooth waves radiating outwards from avatar when a user is speaking on mic
  */
 @Composable
 fun SpeakingRadioWaves(
@@ -2505,7 +2884,7 @@ fun SpeakingRadioWaves(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = LinearEasing),
+            animation = tween(1400, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "w1"
@@ -2515,7 +2894,7 @@ fun SpeakingRadioWaves(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1200, delayMillis = 400, easing = LinearEasing),
+            animation = tween(1400, delayMillis = 450, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "w2"
@@ -2525,7 +2904,7 @@ fun SpeakingRadioWaves(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1200, delayMillis = 800, easing = LinearEasing),
+            animation = tween(1400, delayMillis = 900, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "w3"
@@ -2536,8 +2915,8 @@ fun SpeakingRadioWaves(
         contentAlignment = Alignment.Center
     ) {
         listOf(wave1, wave2, wave3).forEach { progress ->
-            val currentScale = 1f + (progress * 0.75f)
-            val currentAlpha = ((1f - progress) * 0.85f).coerceIn(0f, 1f)
+            val currentScale = 1.0f + (progress * 0.95f)
+            val currentAlpha = ((1f - progress) * 0.95f).coerceIn(0f, 1f)
 
             Box(
                 modifier = Modifier
@@ -2545,16 +2924,16 @@ fun SpeakingRadioWaves(
                     .scale(currentScale)
                     .clip(CircleShape)
                     .border(
-                        width = (2.2f * (1f - progress * 0.4f)).dp,
+                        width = (2.5f * (1f - progress * 0.5f)).dp,
                         brush = Brush.radialGradient(
                             listOf(
                                 Color(0xFFFF9100).copy(alpha = currentAlpha),
-                                Color(0xFFFFD54F).copy(alpha = currentAlpha * 0.6f)
+                                Color(0xFFFFD54F).copy(alpha = currentAlpha * 0.8f)
                             )
                         ),
                         shape = CircleShape
                     )
-                    .background(Color(0xFFFF9100).copy(alpha = currentAlpha * 0.12f))
+                    .background(Color(0xFFFF9100).copy(alpha = currentAlpha * 0.18f))
             )
         }
     }

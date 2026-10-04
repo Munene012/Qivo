@@ -145,6 +145,7 @@ class SupabaseChatService {
                     .addHeader("Prefer", "return=representation")
                     .post(jsonBody.toRequestBody(jsonMediaType))
                     .build()
+                android.util.Log.d("SupabaseChatService", "POST messages URL: $endpoint, Body: $jsonBody")
 
                 var createdMsgId: Long? = null
                 var createdTimeStr: String? = null
@@ -240,6 +241,125 @@ class SupabaseChatService {
         messageText = messageText,
         context = context
     ).messageId
+
+    /**
+     * High-speed batch message broadcast for Message Blast.
+     * Inserts all messages in a single atomic PostgREST HTTP request instead of 100 sequential calls.
+     */
+    suspend fun sendBatchBlastMessages(
+        senderId: String,
+        senderName: String,
+        senderAvatar: String,
+        messageText: String,
+        recipients: List<Pair<String, String>>,
+        context: Context? = null
+    ): Boolean {
+        if (recipients.isEmpty() || senderId.isBlank() || messageText.isBlank()) return false
+        return withContext(Dispatchers.IO) {
+            try {
+                val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+                val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+                if (baseUrl.isEmpty() || apiKey.isEmpty()) return@withContext false
+
+                val endpoint = "$baseUrl/rest/v1/messages"
+                val jsonArray = org.json.JSONArray()
+                val nowStr = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'", java.util.Locale.US).apply {
+                    timeZone = java.util.TimeZone.getTimeZone("UTC")
+                }.format(java.util.Date())
+
+                for (recipient in recipients) {
+                    val rId = recipient.first
+                    val rName = recipient.second
+                    if (rId.isNotBlank() && rId != senderId) {
+                        val obj = JSONObject().apply {
+                            put("sender_id", senderId)
+                            put("sender_name", senderName)
+                            put("sender_avatar", senderAvatar)
+                            put("receiver_id", rId)
+                            put("receiver_name", rName)
+                            put("message", messageText)
+                            put("is_read", false)
+                            put("created_at", nowStr)
+                        }
+                        jsonArray.put(obj)
+                    }
+                }
+
+                if (jsonArray.length() == 0) return@withContext false
+
+                val authHeader = UserSessionManager.getAuthHeader(context)
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", authHeader)
+                    .addHeader("Content-Type", "application/json")
+                    .addHeader("Prefer", "return=minimal")
+                    .post(jsonArray.toString().toRequestBody(jsonMediaType))
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    response.isSuccessful || response.code in 200..204
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                false
+            }
+        }
+    }
+
+    /**
+     * Executes atomic server-side send_message_blast RPC if installed.
+     * Completes entire blast in a single ~100ms roundtrip.
+     */
+    suspend fun executeServerMessageBlastRpc(
+        senderId: String,
+        messageText: String,
+        targetCount: Int,
+        context: Context? = null
+    ): Pair<Boolean, Long?> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+                val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+                if (baseUrl.isEmpty() || apiKey.isEmpty()) return@withContext Pair(false, null)
+
+                val endpoint = "$baseUrl/rest/v1/rpc/send_message_blast"
+                val jsonBody = JSONObject().apply {
+                    put("p_sender_id", senderId)
+                    put("p_message", messageText)
+                    put("p_target_count", targetCount)
+                }.toString()
+
+                val authHeader = UserSessionManager.getAuthHeader(context)
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", authHeader)
+                    .addHeader("Content-Type", "application/json")
+                    .post(jsonBody.toRequestBody(jsonMediaType))
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful || response.code in 200..204) {
+                        val respBody = response.body?.string()?.trim() ?: ""
+                        if (respBody.isNotEmpty()) {
+                            try {
+                                val json = JSONObject(respBody)
+                                val isSuccess = json.optBoolean("success", false)
+                                val newBalance = if (json.has("new_balance")) json.optLong("new_balance") else null
+                                if (isSuccess) {
+                                    return@withContext Pair(true, newBalance)
+                                }
+                            } catch (_: Exception) {}
+                        }
+                    }
+                    Pair(false, null)
+                }
+            } catch (e: Exception) {
+                Pair(false, null)
+            }
+        }
+    }
 
     /**
      * Request Fast Reply reward from server (Edge Function -> RPC process_fast_reply_reward)
@@ -749,11 +869,16 @@ class SupabaseChatService {
                         }
 
                         if (updateCache) {
-                            val finalToCache = if (offset == 0) {
-                                messagesList
-                            } else {
-                                (getInMemoryMessages(userId) + messagesList).distinctBy { it.id }
+                            val existing = getInMemoryMessages(userId).ifEmpty {
+                                if (context != null) AppDataCacheManager.getCachedChatMessagesSync(context, userId) else emptyList()
                             }
+                            val optimistic = existing.filter { it.id <= 0L }
+                            val mergedServer = (existing.filter { it.id > 0L } + messagesList)
+                                .distinctBy { it.id }
+                            val finalToCache = (optimistic + mergedServer).sortedWith(
+                                compareByDescending<ChatMessage> { parseTimestampToMillis(it.createdAt) }
+                                    .thenByDescending { it.id }
+                            )
                             val unread = finalToCache.count { !it.isRead && it.receiverId.trim().equals(userId.trim(), ignoreCase = true) }
                             _totalUnreadCount.value = unread
                             updateInMemoryMessages(userId, finalToCache)

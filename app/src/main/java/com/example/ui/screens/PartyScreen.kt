@@ -202,7 +202,7 @@ fun PartyScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.screenBg)
+            .background(Color(0xFF381A05))
             .testTag("party_screen_root")
     ) {
         // 1. Fixed Top Header with sunset amber gradient
@@ -214,8 +214,9 @@ fun PartyScreen(
                     if (colors.isDark) {
                         Brush.verticalGradient(
                             listOf(
-                                Color(0xFF09120B),
-                                Color(0xFF050A06)
+                                Color(0xFF381A05),
+                                Color(0xFF241003),
+                                Color(0xFF381A05)
                             )
                         )
                     } else {
@@ -274,7 +275,7 @@ fun PartyScreen(
 
         // 2. Persistent Category Filter Pills (Always visible across all tabs and empty states)
         Surface(
-            color = colors.screenBg,
+            color = Color(0xFF381A05),
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
@@ -291,9 +292,8 @@ fun PartyScreen(
                             .clip(RoundedCornerShape(20.dp))
                             .clickable { selectedCategory = cat }
                             .testTag("filter_$cat"),
-                        color = if (isSelected) QivoOrange else if (colors.isDark) Color(0xFF23201E) else Color(0xFFF1F1F1),
-                        shape = RoundedCornerShape(20.dp),
-                        border = if (!isSelected) androidx.compose.foundation.BorderStroke(1.dp, colors.divider) else null
+                        color = if (isSelected) QivoOrange else Color.White.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(20.dp)
                     ) {
                         Text(
                             text = cat,

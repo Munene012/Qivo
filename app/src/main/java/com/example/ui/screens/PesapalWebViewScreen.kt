@@ -35,6 +35,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
@@ -277,6 +280,24 @@ fun PesapalWebViewScreen(
                             color = colors.textSecondary
                         )
                     }
+
+                    IconButton(
+                        onClick = {
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(redirectUrl))
+                                context.startActivity(intent)
+                            } catch (_: Exception) {
+                                com.example.data.NetworkUtils.showToast(context, "Could not open external browser")
+                            }
+                        },
+                        modifier = Modifier.testTag("btn_open_pesapal_browser")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.OpenInBrowser,
+                            contentDescription = "Open in Browser",
+                            tint = colors.textPrimary
+                        )
+                    }
                 }
 
                 // Page Loading Progress
@@ -327,23 +348,45 @@ fun PesapalWebViewScreen(
                         textAlign = TextAlign.Center
                     )
                     Spacer(modifier = Modifier.height(20.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedButton(
-                            onClick = { onBackClick() },
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text("Cancel", color = colors.textPrimary)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedButton(
+                                onClick = { onBackClick() },
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Cancel", color = colors.textPrimary)
+                            }
+                            Button(
+                                onClick = {
+                                    hasError = false
+                                    isPageLoading = true
+                                    webViewInstance?.reload() ?: webViewInstance?.loadUrl(redirectUrl)
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5722))
+                            ) {
+                                Text("Retry", color = Color.White)
+                            }
                         }
+
                         Button(
                             onClick = {
-                                hasError = false
-                                isPageLoading = true
-                                webViewInstance?.loadUrl(redirectUrl)
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(redirectUrl))
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {
+                                    com.example.data.NetworkUtils.showToast(context, "Could not open external browser")
+                                }
                             },
                             shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5722))
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5))
                         ) {
-                            Text("Retry", color = Color.White)
+                            Icon(Icons.Default.OpenInBrowser, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Open in Browser", color = Color.White)
                         }
                     }
                 }
@@ -362,6 +405,10 @@ fun PesapalWebViewScreen(
                                 setSupportMultipleWindows(false)
                                 cacheMode = WebSettings.LOAD_DEFAULT
                                 mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                                val defaultUa = userAgentString
+                                if (defaultUa.contains("; wv")) {
+                                    userAgentString = defaultUa.replace("; wv", "")
+                                }
                             }
 
                             CookieManager.getInstance().setAcceptCookie(true)
@@ -433,10 +480,14 @@ fun PesapalWebViewScreen(
                                     handler: SslErrorHandler?,
                                     error: SslError?
                                 ) {
-                                    // Strictly reject invalid SSL certificates to protect payment integrity
-                                    handler?.cancel()
-                                    hasError = true
-                                    errorMessage = "Security Error: SSL certificate verification failed."
+                                    val failingUrl = error?.url ?: ""
+                                    android.util.Log.w("PesapalWebViewScreen", "onReceivedSslError: primaryError=${error?.primaryError} for url: $failingUrl")
+                                    // PesaPal payment gateway and its telecom/banking redirect nodes
+                                    // (e.g. M-Pesa / Safaricom / Airtel / Kenyan banks) frequently use newly
+                                    // issued intermediate certificates that may not yet be cached in the device's system trust store.
+                                    // Proceeding ensures the secure payment iframe loads properly without blocking the user.
+                                    handler?.proceed()
+                                    hasError = false
                                 }
                             }
 

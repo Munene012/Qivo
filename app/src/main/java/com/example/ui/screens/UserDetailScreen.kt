@@ -364,6 +364,23 @@ fun UserDetailScreen(
                     }
                 }
 
+                // Bottom Gradient Scrim for Detail Section Transition (Improved Fade effect)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(130.dp)
+                        .align(Alignment.BottomCenter)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent, 
+                                    Color(0xFF381A05).copy(alpha = 0.5f),
+                                    Color(0xFF381A05)
+                                )
+                            )
+                        )
+                )
+
                 // Top Gradient Scrim for Status Bar & Buttons
                 Box(
                     modifier = Modifier
@@ -383,7 +400,7 @@ fun UserDetailScreen(
                         color = Color.Black.copy(alpha = 0.6f),
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .padding(end = 18.dp, bottom = 20.dp)
+                            .padding(end = 18.dp, bottom = 30.dp)
                     ) {
                         Text(
                             text = "${pagerState.currentPage + 1}/${displayPhotos.size}",
@@ -394,7 +411,6 @@ fun UserDetailScreen(
                         )
                     }
                 }
-
             }
 
             // 2. Lower Part (Spacious Scrollable Details Section)
@@ -536,22 +552,6 @@ fun UserDetailScreen(
                             ) {
                                 Text(
                                     text = "💰 Coin Seller",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                )
-                            }
-                        }
-
-                        // Official Agent Badge (if applicable)
-                        if (liveUser.isAgent) {
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = Color(0xFF7C4DFF)
-                            ) {
-                                Text(
-                                    text = "⭐ Official Agent",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White,
@@ -1414,9 +1414,7 @@ fun UserDetailScreen(
                         }
                     }
                 }
-            }
         }
-    }
 
     // Fullscreen Photo Viewer (Supports Extra Album Photos & Profile Avatar)
     val currentFullscreenPhoto = fullscreenPhotoUrl
@@ -1647,6 +1645,7 @@ fun UserDetailScreen(
             }
         )
     }
+    }
 }
 
 // Helper Composable for displaying profile key-value details with modern gradient icon badges
@@ -1807,4 +1806,5 @@ private fun getBackgroundDetails(user: UserProfile): List<ProfileDetailItem> {
 
 private fun getSetProfileDetails(user: UserProfile): List<ProfileDetailItem> {
     return getBackgroundDetails(user) + getLifestyleDetails(user)
+}
 }

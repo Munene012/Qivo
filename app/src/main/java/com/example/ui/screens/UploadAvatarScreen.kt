@@ -88,33 +88,20 @@ fun UploadAvatarScreen(
                 val uploaded = profileService.uploadProfilePhoto(context, userId, uri, accessToken = token)
                 isUploading = false
                 if (uploaded != null) {
+                    val oldPhoto = avatarUrl
                     avatarUrl = uploaded
                     selectedMascotKey = null
-                    // Immediately update in Supabase database so all screens see it
-                    launch(Dispatchers.IO) {
-                        try {
-                            profileService.updateAvatarUrl(
-                                userId = userId,
-                                avatarUrl = uploaded,
-                                context = context,
-                                accessToken = token
-                            )
-                        } catch (_: Exception) {}
-                    }
-                    UserSessionManager.saveSession(
+                    profileService.safeReplaceProfilePhoto(
                         context = context,
-                        email = userEmail,
                         userId = userId,
-                        name = userName,
-                        gender = userGender,
-                        country = userCountry,
-                        avatarUrl = uploaded,
-                        numericId = numericId,
+                        newBitmap = null,
+                        newAvatarKeyOrUrl = uploaded,
+                        oldAvatarUrl = oldPhoto,
                         accessToken = token
                     )
                     AppToast.show("Avatar uploaded successfully! 🎉")
                 } else {
-                    AppToast.show("Could not upload photo. Please try again.")
+                    AppToast.show("Could not upload photo. Please check internet connection.")
                 }
             }
         }
@@ -130,30 +117,17 @@ fun UploadAvatarScreen(
             onBackClick = { showGalleryAndCrop = false },
             onPhotoCroppedAndUploaded = { uploadedUrl ->
                 showGalleryAndCrop = false
+                val oldPhoto = avatarUrl
                 avatarUrl = uploadedUrl
                 selectedMascotKey = null
                 scope.launch {
                     val token = UserSessionManager.getValidAccessToken(context)
-                    // Immediately update in Supabase database
-                    launch(Dispatchers.IO) {
-                        try {
-                            profileService.updateAvatarUrl(
-                                userId = userId,
-                                avatarUrl = uploadedUrl,
-                                context = context,
-                                accessToken = token
-                            )
-                        } catch (_: Exception) {}
-                    }
-                    UserSessionManager.saveSession(
+                    profileService.safeReplaceProfilePhoto(
                         context = context,
-                        email = userEmail,
                         userId = userId,
-                        name = userName,
-                        gender = userGender,
-                        country = userCountry,
-                        avatarUrl = uploadedUrl,
-                        numericId = numericId,
+                        newBitmap = null,
+                        newAvatarKeyOrUrl = uploadedUrl,
+                        oldAvatarUrl = oldPhoto,
                         accessToken = token
                     )
                     // Auto advance to home on successful avatar upload
@@ -225,7 +199,8 @@ fun UploadAvatarScreen(
                 country = userCountry,
                 avatarUrl = fallbackAvatar,
                 numericId = numericId,
-                accessToken = token
+                accessToken = token,
+                isProfileCompleted = true
             )
             AppToast.show("Welcome to QIVO, $userName! 🎉")
             onCompleteAndGoHome(fallbackAvatar)
@@ -587,7 +562,8 @@ fun UploadAvatarScreen(
                             country = userCountry,
                             avatarUrl = finalAvatar,
                             numericId = numericId,
-                            accessToken = token
+                            accessToken = token,
+                            isProfileCompleted = true
                         )
                         AppToast.show("Welcome to QIVO, $userName! 🎉")
                         onCompleteAndGoHome(finalAvatar)

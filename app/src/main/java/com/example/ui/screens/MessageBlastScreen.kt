@@ -337,22 +337,53 @@ fun MessageBlastScreen(
             Button(
                 onClick = {
                     if (!NetworkUtils.requireOnline(context)) {
+                        AppToast.show("Please connect to the internet to send message blast.")
                         return@Button
                     }
 
-                    if (messageText.trim().isEmpty()) {
+                    val cleanMessage = messageText.trim()
+                    if (cleanMessage.isEmpty()) {
                         AppToast.show("Please enter a broadcast message.")
                         return@Button
                     }
+
                     if (userCoins < totalCost) {
                         showInsufficientCoinsSheet = true
+                        AppToast.show("Insufficient coins! You need $totalCost coins to send message blast.", isLong = true)
                         return@Button
                     }
 
                     scope.launch {
                         isBlasting = true
 
-                        // Deduct coins strictly server-side via RPC first
+                        // 1. Check recipient user availability FIRST before deducting coins or sending
+                        val targetGender = if (myGender.equals("Male", ignoreCase = true)) "Female" else "Male"
+                        val recipientProfiles = try {
+                            val list = profileService.fetchProfilesPaged(limit = targetUsersCount * 3 + 20, targetGender = targetGender)
+                            if (list.isNotEmpty()) list else profileService.fetchProfilesPaged(limit = targetUsersCount * 3 + 20, targetGender = null)
+                        } catch (_: Exception) {
+                            emptyList()
+                        }
+
+                        val validRecipients = recipientProfiles
+                            .filter { recipient ->
+                                recipient.id != userId &&
+                                recipient.id.isNotBlank() &&
+                                !profileService.isUserBlocked(userId, recipient.id, context)
+                            }
+
+                        if (validRecipients.size < targetUsersCount) {
+                            isBlasting = false
+                            AppToast.show(
+                                "Not enough users available! Required $targetUsersCount recipients, but only found ${validRecipients.size}.",
+                                isLong = true
+                            )
+                            return@launch
+                        }
+
+                        val finalRecipients = validRecipients.take(targetUsersCount)
+
+                        // 2. Deduct coins strictly server-side
                         val res = profileService.adjustCoinsServer(
                             userId = userId,
                             amount = -totalCost.toLong(),
@@ -363,7 +394,8 @@ fun MessageBlastScreen(
 
                         if (!res.first) {
                             isBlasting = false
-                            AppToast.show("Server rejected coin deduction. Insufficient balance or error.")
+                            showInsufficientCoinsSheet = true
+                            AppToast.show("Insufficient coins! Server rejected transaction.", isLong = true)
                             return@launch
                         }
 
@@ -371,43 +403,28 @@ fun MessageBlastScreen(
                         userCoins = res.second
                         UserSessionManager.saveCoins(context, res.second)
 
-                        // 2. Query target opposite-gender profiles to distribute individual direct messages
-                        val targetGender = if (myGender.equals("Male", ignoreCase = true)) "Female" else "Male"
-                        val recipientProfiles = try {
-                            val list = profileService.fetchProfilesPaged(limit = targetUsersCount * 2 + 20, targetGender = targetGender)
-                            if (list.isNotEmpty()) list else profileService.fetchProfilesPaged(limit = targetUsersCount * 2 + 20, targetGender = null)
-                        } catch (_: Exception) {
-                            emptyList()
-                        }
-
-                        // Send direct messages to target recipients so conversations appear in chat list (skip any blocked user)
-                        val cleanMessage = messageText.trim()
-                        val validRecipients = recipientProfiles
-                            .filter { recipient ->
-                                recipient.id != userId &&
-                                !profileService.isUserBlocked(userId, recipient.id, context)
-                            }
-                            .take(targetUsersCount)
-
-                        validRecipients.forEach { recipient ->
-                            chatService.sendMessage(
-                                senderId = userId,
-                                senderName = myName,
-                                senderAvatar = myAvatarUrl,
-                                receiverId = recipient.id,
-                                receiverName = recipient.name,
-                                messageText = cleanMessage,
-                                context = context
-                            )
-                        }
-
-                        // 3. Notify Edge Function
-                        invokeMessageBlastEdgeFunction(
-                            userId = userId,
-                            message = cleanMessage,
-                            targetUserCount = targetUsersCount,
-                            totalCoinsDeducted = totalCost
+                        // 3. Send ALL messages in ONE SINGLE BATCH HTTP REQUEST (~200ms)
+                        val recipientPairs = finalRecipients.map { it.id to it.name }
+                        chatService.sendBatchBlastMessages(
+                            senderId = userId,
+                            senderName = myName,
+                            senderAvatar = myAvatarUrl,
+                            messageText = cleanMessage,
+                            recipients = recipientPairs,
+                            context = context
                         )
+
+                        // 4. Fire Edge Function notification asynchronously in background
+                        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                            try {
+                                invokeMessageBlastEdgeFunction(
+                                    userId = userId,
+                                    message = cleanMessage,
+                                    targetUserCount = targetUsersCount,
+                                    totalCoinsDeducted = totalCost
+                                )
+                            } catch (_: Exception) {}
+                        }
 
                         isBlasting = false
                         AppToast.show("Message Blast Sent to $targetUsersCount Users! (-$totalCost Coins)", isLong = true)

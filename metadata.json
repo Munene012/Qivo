@@ -1,6 +1,6 @@
 {
-  "name": "QIVO",
-  "description": "QIVO authentication and party app with Supabase email/password login.",
+  "name": "Qivo",
+  "description": "Qivo authentication and party app with Supabase email/password login.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

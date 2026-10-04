@@ -1,108 +1,61 @@
 package com.example.ui.screens
-import com.example.ui.components.AppToast
-import com.example.data.AppDataCacheManager
 
-import android.content.Intent
-import android.net.Uri
-import android.os.Build
-import android.provider.Settings
-import android.widget.Toast
+import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.draw.clipToBounds
-import com.example.ui.components.QivoBackgroundStamp
-import com.example.ui.theme.QivoOrange
-import com.example.ui.theme.QivoOrangeDark
-import com.example.ui.theme.QivoGoldLight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.MarkChatUnread
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SupportAgent
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.data.AvatarHelper
-import com.example.data.ChatMessage
-import com.example.data.SupabaseAdService
-import com.example.data.AppAdvertisement
-import com.example.data.SupabaseChatService
-import com.example.data.SupabaseProfileService
 import com.example.data.UserProfile
 import com.example.data.UserSessionManager
-import com.example.ui.components.ChatTopBannerAdCarousel
-import com.example.ui.components.ChatTopBannerAd
+import com.example.ui.components.AppLoadingSpinner
+import com.example.ui.components.AppToast
 import com.example.ui.components.CustomRefreshHeaderItem
 import com.example.ui.components.rememberCustomPullRefreshState
+import com.example.ui.theme.AppTheme
+import com.example.ui.theme.QivoOrange
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
@@ -112,7 +65,11 @@ fun ChatScreen(
     listState: LazyListState = rememberLazyListState(),
     viewModel: ChatListViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
     onOpenUserDetail: (UserProfile) -> Unit = {},
-    onOpenConversation: (UserProfile) -> Unit = {}
+    onOpenConversation: (UserProfile) -> Unit = {},
+    onOpenAgencyGroupChat: () -> Unit = {},
+    onOpenOfficialTeam: () -> Unit = {},
+    onOpenFriends: () -> Unit = {},
+    onOpenSupport: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -120,7 +77,7 @@ fun ChatScreen(
     val session = remember { UserSessionManager.getSession(context) }
     val currentUserId = session?.userId ?: ""
 
-    // Initialize ViewModel once with user ID; stays active throughout the user's session
+    // Initialize ViewModel once with user ID
     LaunchedEffect(currentUserId) {
         if (currentUserId.isNotBlank()) {
             viewModel.initialize(currentUserId)
@@ -133,22 +90,16 @@ fun ChatScreen(
     val displayedLimit by viewModel.displayedLimit.collectAsState()
     val isLoadingMoreChats by viewModel.isLoadingMoreChats.collectAsState()
     val hasMoreServerChats by viewModel.hasMoreServerChats.collectAsState()
-    val chatBannerAds by viewModel.bannerAds.collectAsState()
     val profilesMap by viewModel.profilesMap.collectAsState()
     val totalUnreadCount by viewModel.totalUnreadCount.collectAsState()
 
+    var selectedTab by remember { mutableStateOf("All") } // "All", "Unread"
     var selectedChatForDelete by remember { mutableStateOf<ConversationItem?>(null) }
-
-    var isNotificationsEnabled by remember {
-        mutableStateOf(NotificationManagerCompat.from(context).areNotificationsEnabled())
-    }
-    var hasDismissedNotificationPrompt by remember { mutableStateOf(false) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                isNotificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
                 viewModel.onScreenResumed()
             }
         }
@@ -164,24 +115,28 @@ fun ChatScreen(
         }
     )
 
-    // Scroll to top on first click if scrolled down; trigger refresh if already at top / second click
+    // Scroll to top and trigger refresh when refreshTrigger is activated
     LaunchedEffect(refreshTrigger) {
         if (refreshTrigger > 0L) {
             val isAtTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset <= 10
             if (!isAtTop) {
                 listState.animateScrollToItem(0)
-            } else {
-                pullRefreshState.triggerRefresh(scope)
-                viewModel.pullToRefresh()
             }
+            pullRefreshState.triggerRefresh(scope)
+            viewModel.pullToRefresh()
         }
     }
 
-    val displayedConversations = remember(conversations, displayedLimit) {
-        conversations.take(displayedLimit)
+    // Filter conversations based on selected tab
+    val filteredConversations = remember(conversations, selectedTab, displayedLimit) {
+        val base = conversations.take(displayedLimit)
+        when (selectedTab) {
+            "Unread" -> base.filter { it.isUnread || it.unreadCount > 0 }
+            else -> base
+        }
     }
 
-    // Trigger loading more conversations when scrolling near bottom (20 items at a time)
+    // Load more chats when scrolling near bottom
     val shouldLoadMoreChats by remember {
         derivedStateOf {
             val totalItems = listState.layoutInfo.totalItemsCount
@@ -196,107 +151,247 @@ fun ChatScreen(
         }
     }
 
-    val colors = com.example.ui.theme.AppTheme.colors
-    val isDark = colors.isDark
+    val welcomePrefs = remember { context.getSharedPreferences("qivo_prefs", Context.MODE_PRIVATE) }
+    val hasClaimedWelcomeBonus by remember { 
+        mutableStateOf(welcomePrefs.getBoolean("welcome_bonus_claimed", false)) 
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.screenBg)
+            .background(Color(0xFF381A05)) // Matching warm espresso background
             .testTag("chat_screen_root")
     ) {
-        // Content Area (Chats scroll behind/under the header)
-        Column(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            if (initialLoading && conversations.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    com.example.ui.components.AppLoadingSpinner(size = 36.dp)
-                }
-            } else if (conversations.isEmpty()) {
-
-                // Empty State with top padding for header
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .padding(horizontal = 24.dp)
-                        .statusBarsPadding()
-                        .padding(top = 70.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(90.dp)
-                            .clip(CircleShape)
-                            .background(if (isDark) Color(0xFF2E1742) else Color(0xFFF3E8FF)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Chat,
-                            contentDescription = "No Messages",
-                            tint = Color(0xFFC084FC),
-                            modifier = Modifier.size(40.dp)
+        // Atmospheric Top Sunset Orange-Yellow Glow Overlay (replaces teal/blue as requested)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(260.dp)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color(0x60E65100), // Vibrant deep sunset orange at the very top
+                            Color(0x35FF9100), // Amber mid glow
+                            Color(0x12FFD54F), // Soft gold aura
+                            Color.Transparent
                         )
+                    )
+                )
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+        ) {
+            // 1. Top Bar: "Message" title, "Friends" capsule button, and Support Headphone button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Message",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Black,
+                    fontStyle = FontStyle.Italic,
+                    color = Color.White,
+                    letterSpacing = 0.5.sp
+                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Friends Capsule Pill Button
+                    Surface(
+                        onClick = onOpenFriends,
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color(0x331F212E),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x40FFFFFF)),
+                        modifier = Modifier.height(36.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Group,
+                                contentDescription = "Friends",
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Friends",
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                }
+            }
 
-                    Text(
-                        text = "No Messages Yet",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = colors.textPrimary,
-                        textAlign = TextAlign.Center
-                    )
+            // 2. Filter Tabs Row: [ All ] [ Unread ] [ Familiar Faces ]  [ ☰ ]
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("All", "Unread").forEach { tab ->
+                        val isSelected = selectedTab == tab
+                        Surface(
+                            onClick = { selectedTab = tab },
+                            shape = RoundedCornerShape(18.dp),
+                            color = if (isSelected) Color(0xFF282A3A) else Color(0xFF131520),
+                            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, Color(0x40FFFFFF)) else null,
+                            modifier = Modifier.height(34.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = tab,
+                                    fontSize = 13.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) Color.White else Color(0xFF8E92A4)
+                                )
+                            }
+                        }
+                    }
+                }
 
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = "Your chats, voice messages, and interactions with real users will appear here.",
-                        fontSize = 14.sp,
-                        color = colors.textSecondary,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 20.sp
+                // Filter / Menu icon removed as requested
+                /*
+                IconButton(
+                    onClick = {
+                        selectedTab = if (selectedTab == "All") "Unread" else "All"
+                    },
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Menu,
+                        contentDescription = "Filter",
+                        tint = Color(0xFF8E92A4),
+                        modifier = Modifier.size(20.dp)
                     )
                 }
-            } else {
-                // Real Conversations List - scrolls under the header
-                val statusBarTopInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .nestedScroll(pullRefreshState.getNestedScrollConnection(scope)),
-                    contentPadding = PaddingValues(
-                        start = 0.dp,
-                        end = 0.dp,
-                        top = statusBarTopInset + 64.dp, // Header height + status bar
-                        bottom = 100.dp
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    // Pull to Refresh indicator inside scroll area
-                    item(key = "pull_refresh_item") {
-                        CustomRefreshHeaderItem(pullRefreshState = pullRefreshState)
-                    }
+                */
+            }
 
-                    // Continuous Auto-Swiping Top Banner Ad Carousel (max 3, zero layout impact when empty)
-                    item(key = "banner_ads_item") {
-                        ChatTopBannerAdCarousel(ads = chatBannerAds)
-                    }
+            Spacer(modifier = Modifier.height(6.dp))
 
+            // 3. Main Scrollable List
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .weight(1f),
+                contentPadding = PaddingValues(
+                    start = 0.dp,
+                    end = 0.dp,
+                    top = 4.dp,
+                    bottom = 90.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                // Pull to Refresh indicator
+                item(key = "pull_refresh_item") {
+                    CustomRefreshHeaderItem(pullRefreshState = pullRefreshState)
+                }
+
+                // Pinned Item 1: Niko / Qivo Team
+                item(key = "pinned_qivo_team_item") {
+                    PinnedChatRow(
+                        title = "Qivo Team",
+                        subtitle = if (hasClaimedWelcomeBonus) "[Welcome! 500 Coins Claimed]" else "[Welcome]",
+                        timestamp = "9/27",
+                        icon = {
+                            QivoTeamAvatar(size = 54.dp)
+                        },
+                        onClick = onOpenOfficialTeam
+                    )
+                }
+
+                // Initial loading state
+                if (initialLoading && conversations.isEmpty()) {
+                    item(key = "initial_loading_item") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(260.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            AppLoadingSpinner(size = 36.dp)
+                        }
+                    }
+                } else if (filteredConversations.isEmpty()) {
+                    item(key = "empty_conversations_item") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp)
+                                .padding(top = 40.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(70.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF1B1D2A)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Chat,
+                                    contentDescription = "No Messages",
+                                    tint = Color(0xFF6C728C),
+                                    modifier = Modifier.size(34.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Text(
+                                text = if (selectedTab == "Unread") "No Unread Messages" else "No Messages Yet",
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                textAlign = TextAlign.Center
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Text(
+                                text = "Your conversations and live messages will appear here.",
+                                fontSize = 13.sp,
+                                color = Color(0xFF8E92A4),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                } else {
+                    // Conversation Items
                     items(
-                        items = displayedConversations,
-                        key = { it.partnerId },
+                        count = filteredConversations.size,
+                        key = { index ->
+                            val it = filteredConversations[index]
+                            "conv_${it.partnerId}_${it.partnerNumericId}_$index"
+                        },
                         contentType = { "conversation_item" }
-                    ) { item ->
+                    ) { index ->
+                        val item = filteredConversations[index]
                         val targetProfile = profilesMap[item.partnerId] ?: UserProfile(
                             id = item.partnerId,
                             numericId = item.partnerNumericId,
@@ -305,11 +400,13 @@ fun ChatScreen(
                             gender = item.partnerGender,
                             birthDate = "2000-01-01",
                             country = item.partnerCountry,
-                            avatarUrl = item.partnerAvatar
+                            avatarUrl = item.partnerAvatar,
+                            userLevel = 0
                         )
 
-                        ConversationItemRow(
+                        ReferenceStyleConversationRow(
                             item = item,
+                            profile = targetProfile,
                             onClick = {
                                 onOpenConversation(targetProfile)
                             },
@@ -321,252 +418,29 @@ fun ChatScreen(
                             }
                         )
                     }
-
-                    if (displayedLimit < conversations.size || isLoadingMoreChats) {
-                        item(key = "chat_list_loading_more") {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 14.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    com.example.ui.components.AppLoadingSpinner(size = 18.dp)
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Loading more chats...",
-                                        fontSize = 12.sp,
-                                        color = colors.textSecondary
-                                    )
-                                }
-
-                            }
-                        }
-                    }
                 }
-            }
-        }
 
-        // Top Fixed Header with sunset amber gradient (Chats scroll UNDER this header)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clipToBounds()
-                .background(
-                    if (isDark) {
-                        Brush.verticalGradient(
-                            listOf(
-                                Color(0xFF09120B),
-                                Color(0xFF050A06)
-                            )
-                        )
-                    } else {
-                        Brush.verticalGradient(
-                            listOf(
-                                Color(0xFFBF360C),
-                                Color(0xFFE65100),
-                                Color(0xFFFF6500),
-                                Color(0xFFFF8D00)
-                            )
-                        )
-                    }
-                )
-        ) {
-            QivoBackgroundStamp(
-                modifier = Modifier.matchParentSize(),
-                isDark = isDark
-            )
-
-            // Top Navigation Bar (Chat title with total unread counter & icon)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(horizontalAlignment = Alignment.Start) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "Chat",
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
-                        )
-                        if (totalUnreadCount > 0) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Box(
-                                modifier = Modifier
-                                    .height(20.dp)
-                                    .widthIn(min = 20.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFB3FF00))
-                                    .padding(horizontal = 6.dp),
-                                contentAlignment = Alignment.Center
+                if (displayedLimit < conversations.size || isLoadingMoreChats) {
+                    item(key = "chat_list_loading_more") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 14.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
                             ) {
+                                AppLoadingSpinner(size = 18.dp)
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = if (totalUnreadCount > 99) "99+" else "$totalUnreadCount",
-                                    color = Color.Black,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
+                                    text = "Loading more chats...",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF8E92A4)
                                 )
                             }
                         }
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Box(
-                        modifier = Modifier
-                            .width(28.dp)
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(Color(0xFFB3FF00)) // Lime Accent
-                    )
-                }
-
-                if (totalUnreadCount > 0) {
-                    Icon(
-                        imageVector = Icons.Default.MarkChatUnread,
-                        contentDescription = "Unread Messages",
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-            }
-        }
-
-        // Floating Bottom Notification Permission Prompt (if notifications are disabled/denied)
-        AnimatedVisibility(
-            visible = !isNotificationsEnabled && !hasDismissedNotificationPrompt,
-            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(horizontal = 14.dp, vertical = 12.dp)
-        ) {
-            Surface(
-                shape = RoundedCornerShape(18.dp),
-                color = if (isDark) Color(0xFF1E1B2E) else Color.White,
-                shadowElevation = 10.dp,
-                tonalElevation = 6.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(
-                        width = 1.dp,
-                        brush = Brush.horizontalGradient(
-                            listOf(
-                                QivoOrange.copy(alpha = 0.5f),
-                                QivoGoldLight.copy(alpha = 0.5f)
-                            )
-                        ),
-                        shape = RoundedCornerShape(18.dp)
-                    )
-                    .testTag("enable_notification_popup")
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(
-                                        QivoOrange,
-                                        QivoOrangeDark
-                                    )
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.NotificationsActive,
-                            contentDescription = "Notifications",
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    Column(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = "Enable Notifications",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isDark) Color.White else Color(0xFF111827)
-                        )
-                        Text(
-                            text = "Get notified instantly when someone messages or calls you.",
-                            fontSize = 11.5.sp,
-                            color = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B),
-                            lineHeight = 15.sp,
-                            modifier = Modifier.padding(top = 2.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    Button(
-                        onClick = {
-                            try {
-                                val intent = Intent().apply {
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                        action = Settings.ACTION_APP_NOTIFICATION_SETTINGS
-                                        putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                                    } else {
-                                        action = Settings.ACTION_APPLICATION_DETAILS_SETTINGS
-                                        data = Uri.fromParts("package", context.packageName, null)
-                                    }
-                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                }
-                                context.startActivity(intent)
-                            } catch (_: Exception) {
-                                try {
-                                    val fallbackIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                        data = Uri.fromParts("package", context.packageName, null)
-                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                    }
-                                    context.startActivity(fallbackIntent)
-                                } catch (_: Exception) {}
-                            }
-                        },
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = QivoOrange
-                        ),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                        modifier = Modifier.height(34.dp)
-                    ) {
-                        Text(
-                            text = "Enable",
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    IconButton(
-                        onClick = { hasDismissedNotificationPrompt = true },
-                        modifier = Modifier
-                            .size(28.dp)
-                            .padding(start = 2.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Dismiss",
-                            tint = if (isDark) Color(0xFF64748B) else Color(0xFF9CA3AF),
-                            modifier = Modifier.size(16.dp)
-                        )
                     }
                 }
             }
@@ -578,7 +452,7 @@ fun ChatScreen(
         val chatToDelete = selectedChatForDelete!!
         ModalBottomSheet(
             onDismissRequest = { selectedChatForDelete = null },
-            containerColor = colors.cardBg,
+            containerColor = Color(0xFF191B26),
             shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
         ) {
             Column(
@@ -591,14 +465,14 @@ fun ChatScreen(
                     text = "Delete Chat with ${chatToDelete.partnerName}?",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = colors.textPrimary,
+                    color = Color.White,
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "This will delete this conversation on your side.",
+                    text = "This will delete this conversation on your device.",
                     fontSize = 13.sp,
-                    color = colors.textSecondary,
+                    color = Color(0xFF8E92A4),
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(20.dp))
@@ -630,71 +504,29 @@ fun ChatScreen(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+/**
+ * Pinned Item Row (e.g. Qivo Team, Strangers' Messages) matching reference design exactly
+ */
 @Composable
-private fun ConversationItemRow(
-    item: ConversationItem,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-    onAvatarClick: () -> Unit
+private fun PinnedChatRow(
+    title: String,
+    subtitle: String,
+    timestamp: String,
+    icon: @Composable () -> Unit,
+    onClick: () -> Unit
 ) {
-    val colors = com.example.ui.theme.AppTheme.colors
-    val isDark = colors.isDark
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick
-            ),
-        shape = RoundedCornerShape(0.dp),
-        colors = CardDefaults.cardColors(containerColor = colors.screenBg),
-        border = null
+    Surface(
+        onClick = onClick,
+        color = Color.Transparent,
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Profile Photo / Avatar with Green Online Indicator
-            Box(
-                modifier = Modifier
-                    .size(54.dp)
-                    .clickable(onClick = onAvatarClick)
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    AvatarHelper.UserAvatarImage(
-                        avatarUrl = item.partnerAvatar,
-                        userId = item.partnerId,
-                        gender = item.partnerGender,
-                        numericId = item.partnerNumericId,
-                        contentDescription = item.partnerName,
-                        showFrame = true,
-                        shape = CircleShape,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                }
-
-                // Live Green Online Dot
-                if (item.isOnline) {
-                    Box(
-                        modifier = Modifier
-                            .size(13.dp)
-                            .align(Alignment.BottomEnd)
-                            .clip(CircleShape)
-                            .background(if (isDark) Color(0xFF18181C) else Color.White)
-                            .padding(2.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF00E676))
-                    )
-                }
-            }
+            icon()
 
             Spacer(modifier = Modifier.width(14.dp))
 
@@ -705,30 +537,151 @@ private fun ConversationItemRow(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = item.partnerName,
-                        fontSize = 16.sp,
+                        text = title,
                         fontWeight = FontWeight.Bold,
-                        color = colors.textPrimary,
+                        fontSize = 16.sp,
+                        color = Color.White,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
 
-                    val formattedDate = if (item.timestamp.length >= 10) {
-                        item.timestamp.substring(5, 10).replace("-", "/")
-                    } else {
-                        "Just now"
+                    if (timestamp.isNotBlank()) {
+                        Text(
+                            text = timestamp,
+                            fontSize = 11.5.sp,
+                            color = Color(0xFF6B7085)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = subtitle,
+                    fontSize = 13.sp,
+                    color = Color(0xFF8E92A4),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Conversation Row exactly matching the screenshot:
+ * - Avatar with unread count badge at top-right
+ * - Online green indicator at bottom-right of avatar
+ * - User name + [ ♦ 0 ] diamond wealth level badge
+ * - Message preview text
+ * - Timestamp on the right
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ReferenceStyleConversationRow(
+    item: ConversationItem,
+    profile: UserProfile,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onAvatarClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
+        shape = RoundedCornerShape(0.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        border = null
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Profile Photo / Avatar with Online Dot & Unread Badge
+            Box(
+                modifier = Modifier
+                    .size(54.dp)
+                    .clickable(onClick = onAvatarClick)
+            ) {
+                // Round Avatar
+                AvatarHelper.UserAvatarImage(
+                    avatarUrl = item.partnerAvatar,
+                    userId = item.partnerId,
+                    gender = item.partnerGender,
+                    numericId = item.partnerNumericId,
+                    contentDescription = item.partnerName,
+                    showFrame = false,
+                    shape = CircleShape,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+
+                // Unread Badge removed as requested
+
+
+                // Live Online Dot at BOTTOM-RIGHT of Avatar
+                Box(
+                    modifier = Modifier
+                        .size(13.dp)
+                        .align(Alignment.BottomEnd)
+                        .clip(CircleShape)
+                        .background(Color(0xFF090A10))
+                        .padding(1.5.dp)
+                        .clip(CircleShape)
+                        .background(if (item.isOnline) Color(0xFF00E676) else Color(0xFF4A4E63))
+                )
+            }
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            // Text Content Column
+            Column(modifier = Modifier.weight(1f)) {
+                // Name + Diamond Wealth Level Badge + Timestamp
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f, fill = false)
+                    ) {
+                        Text(
+                            text = item.partnerName.ifBlank { "User" },
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        // Diamond Wealth / Level Badge [ ♦ 0 ] removed as requested
+                        // WealthLevelDiamondBadge(level = profile.userLevel)
                     }
 
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // Formatted Timestamp (e.g. 7:42 AM or 9/27)
                     Text(
-                        text = formattedDate,
-                        fontSize = 11.sp,
-                        color = colors.textSecondary
+                        text = formatConversationTimestamp(item.timestamp),
+                        fontSize = 11.5.sp,
+                        color = Color(0xFF6B7085)
                     )
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                val previewText = remember(item.latestMessage) {
+                // Message Preview
+                val previewSnippet = remember(item.latestMessage) {
                     val raw = item.latestMessage
                         .replace(Regex("^\\[GLOBAL BLAST\\]\\s*", RegexOption.IGNORE_CASE), "")
                         .replace(Regex("^GLOBAL BLAST:\\s*", RegexOption.IGNORE_CASE), "")
@@ -739,118 +692,174 @@ private fun ConversationItemRow(
                         raw
                     } else {
                         val lower = raw.lowercase()
-                        if (lower.startsWith("[voice]") ||
-                            lower.startsWith("voice_") ||
-                            lower.contains("/storage/v1/object/public/voice/") ||
-                            lower.contains("/storage/v1/object/voice/") ||
-                            lower.contains("/voice/") ||
-                            lower.contains(".m4a") ||
-                            lower.contains(".aac") ||
-                            lower.contains(".mp3") ||
-                            lower.contains(".wav") ||
-                            lower.contains(".ogg") ||
-                            lower.contains(".amr") ||
-                            lower.contains(".3gp") ||
-                            lower.contains(".opus")
-                        ) {
-                            "[voice]"
-                        } else if (raw.startsWith("[image]", ignoreCase = true) ||
-                            raw.startsWith("[photo]", ignoreCase = true) ||
-                            raw.startsWith("content://", ignoreCase = true) ||
-                            raw.startsWith("file://", ignoreCase = true) ||
-                            ((raw.startsWith("http://", ignoreCase = true) || raw.startsWith("https://", ignoreCase = true)) &&
-                            (raw.contains("/storage/") || raw.contains("/photos/") || raw.contains("/avatars/") ||
-                             raw.endsWith(".jpg", ignoreCase = true) || raw.endsWith(".jpeg", ignoreCase = true) ||
-                             raw.endsWith(".png", ignoreCase = true) || raw.endsWith(".webp", ignoreCase = true) ||
-                             raw.endsWith(".gif", ignoreCase = true)))
-                        ) {
-                            "[photo]"
-                        } else if (raw.startsWith("[gift]", ignoreCase = true)) {
-                            val giftText = raw.removePrefix("[gift]").trim()
-                            if (giftText.isNotEmpty()) "🎁 $giftText" else "🎁 Gift"
+                        if (lower.startsWith("[voice]") || lower.contains("/voice/") || lower.endsWith(".m4a") || lower.endsWith(".aac")) {
+                            "[Voice message]"
+                        } else if (lower.startsWith("[image]") || lower.startsWith("[photo]") || lower.contains("/photos/")) {
+                            "[Photo]"
+                        } else if (lower.startsWith("[gift]")) {
+                            val g = raw.removePrefix("[gift]").trim()
+                            if (g.isNotEmpty()) "🎁 $g" else "🎁 Gift"
                         } else {
                             raw
                         }
                     }
                 }
 
-                val isDraft = previewText.startsWith("Draft:", ignoreCase = true)
-                val displayMessageAnnotated = remember(previewText, item.isUnread, isDark, colors) {
-                    if (isDraft) {
-                        androidx.compose.ui.text.buildAnnotatedString {
-                            withStyle(androidx.compose.ui.text.SpanStyle(
-                                color = Color(0xFFFF6500), // Vibrant sunset amber
-                                fontWeight = FontWeight.Bold
-                            )) {
-                                append("Draft: ")
-                            }
-                            val draftContent = previewText.removePrefix("Draft:").removePrefix("draft:")
-                            withStyle(androidx.compose.ui.text.SpanStyle(
-                                color = if (item.isUnread) (if (isDark) Color.White else Color(0xFF0F172A)) else colors.textSecondary,
-                                fontWeight = if (item.isUnread) FontWeight.Medium else FontWeight.Light
-                            )) {
-                                append(draftContent)
-                            }
-                        }
-                    } else {
-                        androidx.compose.ui.text.buildAnnotatedString {
-                            withStyle(androidx.compose.ui.text.SpanStyle(
-                                color = if (item.isUnread) (if (isDark) Color.White else Color(0xFF0F172A)) else colors.textSecondary,
-                                fontWeight = if (item.isUnread) FontWeight.Medium else FontWeight.Light
-                            )) {
-                                append(previewText)
-                            }
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = displayMessageAnnotated,
-                        fontSize = 13.sp,
-                        letterSpacing = 0.15.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-
-                    // Unread Counter Badge and Unread Icon Indicator
-                    if (item.unreadCount > 0) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFFF9100))
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .height(18.dp)
-                                    .widthIn(min = 18.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFFF3D00))
-                                    .padding(horizontal = 5.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = if (item.unreadCount > 99) "99+" else "${item.unreadCount}",
-                                    color = Color.White,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-                }
+                Text(
+                    text = previewSnippet.ifBlank { "Tap to chat" },
+                    fontSize = 13.5.sp,
+                    color = Color(0xFF8E92A4),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
+    }
+}
+
+/**
+ * Diamond Wealth Level Badge: [ ♦ 0 ]
+ * Styled exactly like the screenshot with metallic dark capsule and diamond symbol
+ */
+@Composable
+fun WealthLevelDiamondBadge(
+    level: Int,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = if (level > 0) Color(0xFF3B2D54) else Color(0xFF2E3240),
+        border = androidx.compose.foundation.BorderStroke(
+            0.5.dp,
+            if (level > 0) Color(0xFF9D84FF) else Color(0x33FFFFFF)
+        ),
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(
+                text = "♦",
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (level > 0) Color(0xFFC4B5FD) else Color(0xFF9499AD)
+            )
+            Text(
+                text = "$level",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        }
+    }
+}
+
+/**
+ * 3D Qivo Team Circular Avatar for Pinned Row
+ */
+@Composable
+fun QivoTeamAvatar(modifier: Modifier = Modifier, size: Dp = 54.dp) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(
+                Brush.linearGradient(
+                    listOf(Color(0xFFFFD54F), Color(0xFFFF9100), Color(0xFFFF3D00))
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(size * 0.82f)
+                .clip(CircleShape)
+                .background(
+                    Brush.radialGradient(
+                        listOf(Color(0xFF281806), Color(0xFF140C03))
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "Qivo",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Black,
+                color = Color(0xFFFFD54F)
+            )
+        }
+    }
+}
+
+/**
+ * 3D Glossy Pink/Orange Speech Bubble Avatar for Strangers' Messages Pinned Row
+ */
+@Composable
+fun StrangersMessagesAvatar(modifier: Modifier = Modifier, size: Dp = 54.dp) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(
+                Brush.linearGradient(
+                    listOf(Color(0xFFFF4081), Color(0xFFF50057), Color(0xFF880E4F))
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        // Inner speech bubble graphic
+        Box(
+            modifier = Modifier
+                .size(size * 0.65f)
+                .clip(RoundedCornerShape(size * 0.25f))
+                .background(Color.White.copy(alpha = 0.92f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.ChatBubble,
+                contentDescription = "Strangers",
+                tint = Color(0xFFE91E63),
+                modifier = Modifier.size(size * 0.40f)
+            )
+        }
+
+        // Small orange notification dot at top right
+        Box(
+            modifier = Modifier
+                .size(12.dp)
+                .align(Alignment.TopEnd)
+                .clip(CircleShape)
+                .background(Color(0xFFFF9100))
+                .border(2.dp, Color(0xFF090A10), CircleShape)
+        )
+    }
+}
+
+private fun formatConversationTimestamp(isoString: String): String {
+    if (isoString.isBlank()) return "Just now"
+    return try {
+        val clean = isoString.substringBefore(".").substringBefore("+").removeSuffix("Z")
+        val parsed = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }.parse(clean)
+        if (parsed != null) {
+            val now = System.currentTimeMillis()
+            val diffMs = now - parsed.time
+            val diffHours = diffMs / (1000 * 60 * 60)
+
+            if (diffHours < 24) {
+                java.text.SimpleDateFormat("h:mm a", java.util.Locale.US).format(parsed)
+            } else if (diffHours < 48) {
+                "Yesterday"
+            } else {
+                java.text.SimpleDateFormat("M/d", java.util.Locale.US).format(parsed)
+            }
+        } else {
+            if (isoString.length >= 10) isoString.substring(5, 10).replace("-", "/") else "Just now"
+        }
+    } catch (_: Exception) {
+        if (isoString.length >= 10) isoString.substring(5, 10).replace("-", "/") else "Just now"
     }
 }

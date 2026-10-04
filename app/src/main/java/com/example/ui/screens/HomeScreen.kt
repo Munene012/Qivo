@@ -6,7 +6,10 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -100,6 +103,11 @@ import com.example.data.UserSessionManager
 import com.example.ui.components.CustomRefreshHeaderItem
 import com.example.ui.components.rememberCustomPullRefreshState
 import com.example.ui.theme.QivoYellow
+import com.example.data.CalendarHelper
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
 
 object HomeScreenDataStore {
@@ -188,6 +196,26 @@ fun HomeScreen(
         HomeScreenDataStore.selectedTab = selectedTab
     }
 
+    var accumulatedSwipeX by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    val tabSwipeModifier = Modifier.draggable(
+        state = rememberDraggableState { delta ->
+            accumulatedSwipeX += delta
+        },
+        orientation = Orientation.Horizontal,
+        onDragStarted = {
+            accumulatedSwipeX = 0f
+        },
+        onDragStopped = { velocity ->
+            val threshold = 60f
+            if ((accumulatedSwipeX < -threshold || velocity < -300f) && selectedTab == "Recommend") {
+                selectedTab = "Nearby"
+            } else if ((accumulatedSwipeX > threshold || velocity > 300f) && selectedTab == "Nearby") {
+                selectedTab = "Recommend"
+            }
+            accumulatedSwipeX = 0f
+        }
+    )
+
     val pageSize = 15
 
     // Instant memory / cache retrieval to prevent blank screen or flickering loading states
@@ -197,14 +225,27 @@ fun HomeScreen(
             inMemory.sortedWith(com.example.data.UserProfileSorting.recommendComparator)
         } else {
             val cached = AppDataCacheManager.getCachedProfilesSync(context, category = "home_$targetOppositeGender")
-            val batch = cached.sortedWith(com.example.data.UserProfileSorting.recommendComparator).take(pageSize)
+            val batch = cached.sortedWith(com.example.data.UserProfileSorting.getPersonalizedComparator(effectiveUserId)).take(pageSize)
             if (batch.isNotEmpty()) {
                 HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = batch
             }
             batch
         }
     }
+    var refreshSeed by remember { mutableStateOf(System.currentTimeMillis()) }
     var realProfiles by remember(targetOppositeGender) { mutableStateOf<List<UserProfile>>(initialCachedProfiles) }
+
+    LaunchedEffect(selectedTab) {
+        HomeScreenDataStore.selectedTab = selectedTab
+        if (realProfiles.isNotEmpty()) {
+            val comparator = if (selectedTab == "Nearby") {
+                com.example.data.UserProfileSorting.getNearbyComparator(effectiveCountry)
+            } else {
+                com.example.data.UserProfileSorting.getPersonalizedComparator(effectiveUserId, refreshSeed)
+            }
+            realProfiles = realProfiles.sortedWith(comparator)
+        }
+    }
     var isLoadingProfiles by remember(targetOppositeGender) { mutableStateOf(initialCachedProfiles.isEmpty()) }
     var isLoadingMore by remember { mutableStateOf(false) }
     var hasMoreProfiles by remember(targetOppositeGender) {
@@ -221,10 +262,11 @@ fun HomeScreen(
                 if (isPullRefresh || realProfiles.isEmpty()) {
                     isLoadingProfiles = realProfiles.isEmpty()
                 }
+                val currentComparator = com.example.data.UserProfileSorting.getPersonalizedComparator(effectiveUserId, refreshSeed)
                 // 1. Immediately display cached profiles for instant offline/online UI (take initial 15)
                 val cached = AppDataCacheManager.getCachedProfiles(context, category = "home_$targetOppositeGender")
                 if (cached.isNotEmpty() && realProfiles.isEmpty()) {
-                    val initialBatch = cached.sortedWith(com.example.data.UserProfileSorting.recommendComparator).take(pageSize)
+                    val initialBatch = cached.sortedWith(currentComparator).take(pageSize)
                     realProfiles = initialBatch
                     HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = initialBatch
                     isLoadingProfiles = false
@@ -234,7 +276,7 @@ fun HomeScreen(
                 if (NetworkUtils.isOnline(context) && (isPullRefresh || realProfiles.isEmpty())) {
                     val initial = profileService.fetchProfilesPaged(offset = 0, limit = pageSize, targetGender = targetOppositeGender)
                     if (initial.isNotEmpty()) {
-                        val sorted = initial.sortedWith(com.example.data.UserProfileSorting.recommendComparator)
+                        val sorted = initial.sortedWith(currentComparator)
                         val first15 = sorted.take(pageSize)
                         realProfiles = first15
                         HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = first15
@@ -251,7 +293,7 @@ fun HomeScreen(
                 } else {
                     // Offline fallback: if no cached data was found yet
                     if (realProfiles.isEmpty() && cached.isNotEmpty()) {
-                        val initialBatch = cached.sortedWith(com.example.data.UserProfileSorting.recommendComparator).take(pageSize)
+                        val initialBatch = cached.sortedWith(currentComparator).take(pageSize)
                         realProfiles = initialBatch
                         HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = initialBatch
                     }
@@ -284,7 +326,9 @@ fun HomeScreen(
                             val existingIds = realProfiles.map { it.id }.toSet()
                             val distinctNew = nextBatch.filter { it.id !in existingIds }
                             if (distinctNew.isNotEmpty()) {
-                                val combined = (realProfiles + distinctNew).sortedWith(com.example.data.UserProfileSorting.recommendComparator)
+                                val currentComparator = com.example.data.UserProfileSorting.getPersonalizedComparator(effectiveUserId, refreshSeed)
+                                val sortedNew = distinctNew.sortedWith(currentComparator)
+                                val combined = realProfiles + sortedNew
                                 realProfiles = combined
                                 HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = combined
                                 AppDataCacheManager.saveProfilesCache(context, combined, category = "home_$targetOppositeGender")
@@ -310,13 +354,15 @@ fun HomeScreen(
     // Pull to refresh state
     val pullRefreshState = rememberCustomPullRefreshState(
         onRefresh = {
+            refreshSeed = System.currentTimeMillis()
+            val freshComparator = com.example.data.UserProfileSorting.getPersonalizedComparator(effectiveUserId, refreshSeed)
             HomeScreenDataStore.savedFirstVisibleItemIndex = 0
             HomeScreenDataStore.savedFirstVisibleItemScrollOffset = 0
             if (!NetworkUtils.isOnline(context)) {
                 scope.launch {
                     val cached = AppDataCacheManager.getCachedProfiles(context, category = "home_$targetOppositeGender")
                     if (cached.isNotEmpty()) {
-                        val initialBatch = cached.sortedWith(com.example.data.UserProfileSorting.recommendComparator).take(pageSize)
+                        val initialBatch = cached.sortedWith(freshComparator).take(pageSize)
                         realProfiles = initialBatch
                         HomeScreenDataStore.cachedProfilesByGender[targetOppositeGender] = initialBatch
                     }
@@ -325,7 +371,7 @@ fun HomeScreen(
                 try {
                     val fresh = profileService.fetchProfilesPaged(offset = 0, limit = pageSize, targetGender = targetOppositeGender)
                     if (fresh.isNotEmpty()) {
-                        val sorted = fresh.sortedWith(com.example.data.UserProfileSorting.recommendComparator)
+                        val sorted = fresh.sortedWith(freshComparator)
                         val first15 = sorted.take(pageSize)
                         realProfiles = first15
                         hasMoreProfiles = fresh.size >= pageSize
@@ -486,13 +532,71 @@ fun HomeScreen(
             otherProfiles
         }
 
-        val sortedList = if (selectedTab == "Nearby") {
-            genderMatched.sortedWith(com.example.data.UserProfileSorting.getNearbyComparator(effectiveCountry))
+        val countryFiltered = if (selectedTab == "Nearby") {
+            // Nearby tab: ONLY users from same country as you
+            val userCountryClean = effectiveCountry.trim().lowercase()
+            genderMatched.filter { user ->
+                user.country.trim().lowercase() == userCountryClean
+            }
         } else {
-            genderMatched.sortedWith(com.example.data.UserProfileSorting.recommendComparator)
+            // Recommend tab: Regional filtering rules:
+            // 1. African user -> African users only
+            // 2. European user -> European and Asian users
+            // 3. American user -> American and Canadian users
+            val userCountryClean = effectiveCountry.trim().lowercase()
+            
+            // Helper functions for regional groupings
+            fun isAfrican(c: String): Boolean {
+                val africa = setOf(
+                    "kenya", "uganda", "tanzania", "rwanda", "burundi", "south sudan", "nigeria", "ghana", "south africa",
+                    "somalia", "dr congo", "congo", "egypt", "ethiopia", "morocco", "algeria", "tunisia", "angola", "mozambique",
+                    "sudan", "libya", "senegal", "cameroon", "zimbabwe", "ivory coast", "zambia", "mali", "malawi", "burkina faso",
+                    "chad", "guinea", "benin", "togo", "sierra leone", "liberia", "mauritania", "eritrea", "namibia", "gambia",
+                    "botswana", "gabon", "lesotho", "guinea-bissau", "equatorial guinea", "mauritius", "djibouti", "eswatini",
+                    "comoros", "cape verde", "seychelles", "ke", "ug", "tz", "rw", "bi", "ss", "ng", "gh", "za", "so", "cd"
+                )
+                return c in africa
+            }
+
+            fun isEuropeanOrAsian(c: String): Boolean {
+                val euroAsia = setOf(
+                    "india", "china", "japan", "south korea", "united kingdom", "germany", "france", "italy", "spain", "netherlands",
+                    "ukraine", "poland", "russia", "pakistan", "bangladesh", "vietnam", "thailand", "singapore", "malaysia", "indonesia",
+                    "philippines", "turkey", "iran", "iraq", "saudi arabia", "uzbekistan", "afghanistan", "nepal", "yemen", "north korea",
+                    "taiwan", "sri lanka", "kazakhstan", "syria", "cambodia", "jordan", "azerbaijan", "united arab emirates", "israel",
+                    "austria", "belgium", "sweden", "switzerland", "norway", "denmark", "finland", "ireland", "portugal", "greece",
+                    "czech republic", "romania", "hungary", "in", "cn", "jp", "kr", "gb", "de", "fr", "it", "es", "nl", "pk", "bd", "vn", "th", "sg", "my", "id", "uk"
+                )
+                return c in euroAsia
+            }
+
+            fun isAmerican(c: String): Boolean {
+                val americas = setOf(
+                    "united states", "canada", "brazil", "mexico", "colombia", "argentina", "peru", "venezuela", "chile", "guatemala",
+                    "ecuador", "bolivia", "cuba", "haiti", "dominican republic", "honduras", "paraguay", "el salvador", "nicaragua",
+                    "costa rica", "panama", "uruguay", "jamaica", "trinidad and tobago", "guyana", "suriname", "bahamas", "belize",
+                    "us", "ca", "br", "mx", "co", "ar", "pe", "ve", "cl"
+                )
+                return c in americas
+            }
+
+            when {
+                isAfrican(userCountryClean) -> {
+                    genderMatched.filter { isAfrican(it.country.trim().lowercase()) }
+                }
+                isEuropeanOrAsian(userCountryClean) -> {
+                    genderMatched.filter { isEuropeanOrAsian(it.country.trim().lowercase()) }
+                }
+                isAmerican(userCountryClean) -> {
+                    genderMatched.filter { isAmerican(it.country.trim().lowercase()) }
+                }
+                else -> {
+                    genderMatched // Unknown country -> show all matching gender
+                }
+            }
         }
 
-        sortedList
+        countryFiltered
     }
 
     val chunkedProfiles = remember(displayedProfiles) {
@@ -532,10 +636,22 @@ fun HomeScreen(
         }
     }
 
+    val tabBarBgColor by androidx.compose.animation.animateColorAsState(
+        targetValue = Color(0xFF381A05),
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 200),
+        label = "tabBarBgColor"
+    )
+
+    val topBarBgColor by androidx.compose.animation.animateColorAsState(
+        targetValue = Color(0xFF381A05),
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 200),
+        label = "topBarBgColor"
+    )
+
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.screenBg)
+            .background(Color(0xFF381A05)) // Warm espresso status bar color
             .testTag("home_screen_root")
     ) {
         val density = LocalDensity.current
@@ -554,21 +670,31 @@ fun HomeScreen(
         val maxOffsetY = padBottom - margin
         val statusBarTopInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
+        // Atmospheric Top Sunset Orange-Yellow Glow Overlay (Fades cleanly into uniform background)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(260.dp)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color(0x70E65100), // Vibrant deep sunset orange
+                            Color(0x35FF9100), // Amber mid glow
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            // Fixed Top Status Bar Overlay (Seamlessly matches the exact top color of the signature sunset header)
+            // Fixed Top Status Bar Overlay (Seamlessly matches scroll state)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(statusBarTopInset)
-                    .background(
-                        if (isDark) {
-                            Color(0xFF1E172B)
-                        } else {
-                            Color(0xFFFF6500)
-                        }
-                    )
+                    .background(topBarBgColor)
             )
 
             LazyColumn(
@@ -576,6 +702,7 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
+                    .then(tabSwipeModifier)
                     .nestedScroll(pullRefreshState.getNestedScrollConnection(scope)),
                 contentPadding = PaddingValues(bottom = 88.dp)
             ) {
@@ -590,27 +717,18 @@ fun HomeScreen(
                                 .fillMaxWidth()
                                 .height(96.dp)
                                 .clipToBounds()
-                                .background(
-                                    if (isDark) {
-                                        Brush.verticalGradient(
-                                            listOf(
-                                                Color(0xFF1E172B),
-                                                Color(0xFF0C0A12)
-                                            )
-                                        )
-                                    } else {
-                                        Brush.verticalGradient(
-                                            listOf(
-                                                Color(0xFFFF6500), // Sunset Orange
-                                                Color(0xFFFF8D00), // Amber Gold
-                                                Color(0xFFFFB300), // Warm Gold
-                                                Color(0xFFF9F9FB)  // Pearl Canvas
-                                            )
-                                        )
-                                    }
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color(0xFF381A05),
+                                    Color(0xFF241003),
+                                    Color(0xFF381A05),
+                                    Color(0xFF381A05)
                                 )
+                            )
+                        )
                         ) {
-                            QivoBackgroundStamp(isDark = isDark)
+                            QivoBackgroundStamp(isDark = true)
                         }
 
                         Column(
@@ -632,17 +750,16 @@ fun HomeScreen(
                                         .clickable { onOpenMessageBlast() },
                                     shape = RoundedCornerShape(14.dp),
                                     colors = CardDefaults.cardColors(
-                                        containerColor = if (isDark) Color(0xFF2C160F) else Color(0xFFFFF2EB)
+                                        containerColor = Color(0xFF2C160F)
                                     ),
-                                    elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 4.dp else 2.5.dp)
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                                 ) {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .background(
                                                 Brush.verticalGradient(
-                                                    colors = if (isDark) listOf(Color(0xFF3D1F15), Color(0xFF24110B))
-                                                    else listOf(Color(0xFFFFECE2), Color(0xFFFFD9CC))
+                                                    colors = listOf(Color(0xFF3D1F15), Color(0xFF24110B))
                                                 )
                                             )
                                             .padding(7.dp)
@@ -650,7 +767,7 @@ fun HomeScreen(
                                         Column(modifier = Modifier.align(Alignment.TopStart).padding(start = 2.dp, top = 2.dp)) {
                                             Text(
                                                 text = "Message\nBlast",
-                                                color = if (isDark) Color(0xFFFFAB91) else Color(0xFFE64A19),
+                                                color = Color(0xFFFFAB91),
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 lineHeight = 15.sp
@@ -677,17 +794,16 @@ fun HomeScreen(
                                         },
                                     shape = RoundedCornerShape(14.dp),
                                     colors = CardDefaults.cardColors(
-                                        containerColor = if (isDark) Color(0xFF282008) else Color(0xFFFFF9E6)
+                                        containerColor = Color(0xFF282008)
                                     ),
-                                    elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 4.dp else 2.5.dp)
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                                 ) {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .background(
                                                 Brush.verticalGradient(
-                                                    colors = if (isDark) listOf(Color(0xFF3E310C), Color(0xFF201904))
-                                                    else listOf(Color(0xFFFFF8E1), Color(0xFFFFE8A3))
+                                                    colors = listOf(Color(0xFF3E310C), Color(0xFF201904))
                                                 )
                                             )
                                             .padding(7.dp)
@@ -695,7 +811,7 @@ fun HomeScreen(
                                         Column(modifier = Modifier.align(Alignment.TopStart).padding(start = 2.dp, top = 2.dp)) {
                                             Text(
                                                 text = "Game\nCenter",
-                                                color = if (isDark) Color(0xFFFFE082) else Color(0xFFB78103),
+                                                color = Color(0xFFFFE082),
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 lineHeight = 15.sp
@@ -718,17 +834,16 @@ fun HomeScreen(
                                         .clickable { onOpenTaskCenter() },
                                     shape = RoundedCornerShape(14.dp),
                                     colors = CardDefaults.cardColors(
-                                        containerColor = if (isDark) Color(0xFF201335) else Color(0xFFF6EEFF)
+                                        containerColor = Color(0xFF201335)
                                     ),
-                                    elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 4.dp else 2.5.dp)
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                                 ) {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .background(
                                                 Brush.verticalGradient(
-                                                    colors = if (isDark) listOf(Color(0xFF321D50), Color(0xFF1B0E2D))
-                                                    else listOf(Color(0xFFF3E8FF), Color(0xFFE5D0FF))
+                                                    colors = listOf(Color(0xFF321D50), Color(0xFF1B0E2D))
                                                 )
                                             )
                                             .padding(7.dp)
@@ -736,7 +851,7 @@ fun HomeScreen(
                                         Column(modifier = Modifier.align(Alignment.TopStart).padding(start = 2.dp, top = 2.dp)) {
                                             Text(
                                                 text = "Tasks\nCenter",
-                                                color = if (isDark) Color(0xFFD8B4FE) else Color(0xFF7C3AED),
+                                                color = Color(0xFFD8B4FE),
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 lineHeight = 15.sp
@@ -755,16 +870,17 @@ fun HomeScreen(
                     }
                 }
 
-                // 2. STICKY HEADER: RECOMMEND & NEARBY TABS (Retains clean white background with crisp tabs)
+                // 2. STICKY HEADER: RECOMMEND & NEARBY TABS (Dark Midnight background matching Chat List screen)
                 stickyHeader(key = "sticky_recommend_nearby_header") {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .then(tabSwipeModifier)
                             .shadow(
-                                elevation = if (isScrolled) 3.dp else 0.dp,
-                                spotColor = Color.Black.copy(alpha = 0.08f)
+                                elevation = if (isScrolled) 4.dp else 0.dp,
+                                spotColor = Color.Black.copy(alpha = 0.35f)
                             )
-                            .background(colors.screenBg)
+                            .background(tabBarBgColor)
                     ) {
                         Row(
                             modifier = Modifier
@@ -784,7 +900,7 @@ fun HomeScreen(
                                     text = "Recommend",
                                     fontSize = 20.sp,
                                     fontWeight = if (selectedTab == "Recommend") FontWeight.Bold else FontWeight.Medium,
-                                    color = if (selectedTab == "Recommend") colors.textPrimary else colors.textSecondary
+                                    color = if (selectedTab == "Recommend") Color.White else Color.White.copy(alpha = 0.55f)
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 if (selectedTab == "Recommend") {
@@ -810,7 +926,7 @@ fun HomeScreen(
                                     text = "Nearby",
                                     fontSize = 20.sp,
                                     fontWeight = if (selectedTab == "Nearby") FontWeight.Bold else FontWeight.Medium,
-                                    color = if (selectedTab == "Nearby") colors.textPrimary else colors.textSecondary
+                                    color = if (selectedTab == "Nearby") Color.White else Color.White.copy(alpha = 0.55f)
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 if (selectedTab == "Nearby") {
@@ -1145,7 +1261,8 @@ private fun RealProfileCard(
             try {
                 val yearStr = user.birthDate.split("-", "/", " ", ".").firstOrNull { it.length == 4 }
                 val birthYear = yearStr?.toIntOrNull() ?: 2005
-                (2026 - birthYear).coerceIn(18, 99).toString()
+                val currentYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+                (currentYear - birthYear).coerceIn(18, 99).toString()
             } catch (e: Exception) {
                 "20"
             }

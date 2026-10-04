@@ -63,7 +63,6 @@ import com.example.ui.components.AccountSecurity3DIcon
 import com.example.ui.components.BlockedList3DIcon
 import com.example.ui.components.CallSettings3DIcon
 import com.example.ui.components.ClearCache3DIcon
-import com.example.ui.components.DarkMode3DIcon
 import com.example.ui.components.DeleteAccount3DIcon
 import com.example.ui.components.SignOut3DIcon
 import com.example.data.UserSessionManager
@@ -91,7 +90,7 @@ fun SystemSettingsScreen(
     val colors = AppTheme.colors
     val isDark = colors.isDark
 
-    val isDarkModeEnabled = AppThemeManager.isDarkModeState.value
+    val session = remember { UserSessionManager.getSession(context) }
     var showSignOutDialog by remember { mutableStateOf(false) }
     var showDeleteAccountDialog by remember { mutableStateOf(false) }
 
@@ -111,9 +110,24 @@ fun SystemSettingsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.screenBg)
+            .background(Color(0xFF381A05))
             .testTag("system_settings_screen")
     ) {
+        // Top Sunset Orange-Yellow Glow Overlay
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp)
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        listOf(
+                            Color(0x70E65100),
+                            Color(0x35FF9100),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -160,9 +174,9 @@ fun SystemSettingsScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-                border = BorderStroke(1.dp, colors.cardBorder),
-                elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 0.dp else 1.dp)
+                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f)),
+                border = null,
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     // Item 1: Account & Security
@@ -177,56 +191,7 @@ fun SystemSettingsScreen(
 
                     HorizontalDivider(color = colors.divider)
 
-                    // Item 2: Dark Mode
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            DarkMode3DIcon(isDark = isDark, size = 40.dp)
-
-                            Spacer(modifier = Modifier.width(14.dp))
-
-                            Column {
-                                Text(
-                                    text = "Dark Mode",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = colors.textPrimary
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = if (isDarkModeEnabled) "OLED Dark theme enabled" else "Light theme enabled",
-                                    fontSize = 12.sp,
-                                    color = colors.textSecondary
-                                )
-                            }
-                        }
-
-                        Switch(
-                            checked = isDarkModeEnabled,
-                            onCheckedChange = {
-                                AppThemeManager.setDarkMode(context, it)
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = Color(0xFFFF6500),
-                                uncheckedThumbColor = Color.White,
-                                uncheckedTrackColor = Color(0xFF71717A)
-                            ),
-                            modifier = Modifier.testTag("dark_mode_switch")
-                        )
-                    }
-
-                    HorizontalDivider(color = colors.divider)
-
-                    // Item 3: Call Settings
+                    // Item 2: Call Settings
                     SettingsRowItem(
                         icon = { CallSettings3DIcon(size = 40.dp) },
                         title = "Call Settings",
@@ -290,9 +255,9 @@ fun SystemSettingsScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-                border = BorderStroke(1.dp, colors.cardBorder),
-                elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 0.dp else 1.dp)
+                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f)),
+                border = null,
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     // Sign Out
@@ -305,17 +270,19 @@ fun SystemSettingsScreen(
                         onClick = { showSignOutDialog = true }
                     )
 
-                    HorizontalDivider(color = colors.divider)
+                    // Delete Account (Hidden for Admin accounts)
+                    if (session?.isAdmin != true) {
+                        HorizontalDivider(color = colors.divider)
 
-                    // Delete Account
-                    SettingsRowItem(
-                        icon = { DeleteAccount3DIcon(size = 40.dp) },
-                        title = "Delete Account",
-                        subtitle = null,
-                        titleColor = Color(0xFFFF5232),
-                        subtitleColor = colors.textSecondary,
-                        onClick = { showDeleteAccountDialog = true }
-                    )
+                        SettingsRowItem(
+                            icon = { DeleteAccount3DIcon(size = 40.dp) },
+                            title = "Delete Account",
+                            subtitle = null,
+                            titleColor = Color(0xFFFF5232),
+                            subtitleColor = colors.textSecondary,
+                            onClick = { showDeleteAccountDialog = true }
+                        )
+                    }
                 }
             }
 

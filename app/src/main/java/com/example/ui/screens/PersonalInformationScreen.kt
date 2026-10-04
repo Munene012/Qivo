@@ -1,6 +1,7 @@
 package com.example.ui.screens
 import com.example.ui.components.AppToast
 import com.example.data.AppDataCacheManager
+import kotlinx.coroutines.Dispatchers
 
 import android.net.Uri
 import android.widget.Toast
@@ -170,6 +171,7 @@ fun PersonalInformationScreen(
 
     // Gallery and Crop Screen State: Avatar (cropping true) vs Album photo (cropping false)
     var showAvatarGalleryScreen by remember { mutableStateOf(false) }
+    var showAvatarOptionModal by remember { mutableStateOf(false) }
     var showAlbumGalleryScreen by remember { mutableStateOf(false) }
 
     // Picker Dialogs State
@@ -189,6 +191,7 @@ fun PersonalInformationScreen(
 
     BackHandler {
         when {
+            showAvatarOptionModal -> showAvatarOptionModal = false
             showAvatarGalleryScreen -> showAvatarGalleryScreen = false
             showAlbumGalleryScreen -> showAlbumGalleryScreen = false
             showDobPicker -> showDobPicker = false
@@ -211,7 +214,6 @@ fun PersonalInformationScreen(
             onPhotoCroppedAndUploaded = { newUrl ->
                 avatarUrlState = newUrl
                 showAvatarGalleryScreen = false
-                AppToast.show("New avatar selected! Click 'Save Updates' to apply.")
             }
         )
         return
@@ -241,9 +243,24 @@ fun PersonalInformationScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.screenBg)
+            .background(Color(0xFF381A05))
             .testTag("personal_information_screen_root")
     ) {
+        // Top Sunset Orange-Yellow Glow Overlay
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp)
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        listOf(
+                            Color(0x70E65100),
+                            Color(0x35FF9100),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -314,7 +331,7 @@ fun PersonalInformationScreen(
                                 .padding(2.dp)
                                 .clip(CircleShape)
                                 .clickable {
-                                    showAvatarGalleryScreen = true
+                                    showAvatarOptionModal = true
                                 }
                         ) {
                             com.example.data.AvatarHelper.UserAvatarImage(
@@ -336,7 +353,7 @@ fun PersonalInformationScreen(
                                 .align(Alignment.BottomEnd)
                                 .size(40.dp)
                                 .clickable {
-                                    showAvatarGalleryScreen = true
+                                    showAvatarOptionModal = true
                                 },
                             contentAlignment = Alignment.Center
                         ) {
@@ -456,20 +473,27 @@ fun PersonalInformationScreen(
                         )
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
 
-                        // Gender
-                        InfoRow(
-                            label = "Gender",
-                            value = genderState,
-                            onClick = {
-                                activeCategoryTitle = "Gender"
-                                activeCategoryOptions = listOf("Male", "Female")
-                                activeCategorySelectedValue = genderState
-                                onOptionChosenCallback = { chosen ->
-                                    genderState = chosen
+                        // Gender (Cannot be changed once set - remove from edit profile screen once set)
+                        if (currentProfile.gender.isBlank()) {
+                            val isGenderSet = genderState.isNotBlank()
+                            InfoRow(
+                                label = "Gender",
+                                value = if (genderState.isNotBlank()) "$genderState 🔒" else "Not set",
+                                onClick = {
+                                    if (isGenderSet) {
+                                        AppToast.show("Gender cannot be changed once set.")
+                                    } else {
+                                        activeCategoryTitle = "Gender"
+                                        activeCategoryOptions = listOf("Male", "Female")
+                                        activeCategorySelectedValue = genderState
+                                        onOptionChosenCallback = { chosen ->
+                                            genderState = chosen
+                                        }
+                                    }
                                 }
-                            }
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
+                            )
+                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
+                        }
 
                         // Country (User can tap and select from list of all countries)
                         InfoRow(
@@ -1056,11 +1080,22 @@ fun PersonalInformationScreen(
 
                             isSaving = true
                             scope.launch {
-                                // 1. Always save locally immediately so User Details displays changes instantly
+                                val token = UserSessionManager.getAccessToken(context)
+                                val oldAvatarToClean = if (currentProfile.avatarUrl.isNotBlank() && currentProfile.avatarUrl != avatarUrlState) {
+                                    currentProfile.avatarUrl
+                                } else null
+
+                                // 1. Sync to Supabase server FIRST
+                                if (NetworkUtils.isOnline(context)) {
+                                    try {
+                                        profileService.saveFullProfile(updatedProfile, accessToken = token)
+                                    } catch (_: Exception) {}
+                                }
+
+                                // 2. Update local caches and session immediately so UI displays changes instantly
                                 AppDataCacheManager.saveUserDetailCache(context, updatedProfile)
                                 SupabaseProfileService.updateInMemoryProfile(updatedProfile)
 
-                                val token = UserSessionManager.getAccessToken(context)
                                 UserSessionManager.saveSession(
                                     context = context,
                                     email = updatedProfile.email,
@@ -1074,16 +1109,26 @@ fun PersonalInformationScreen(
                                     accessToken = token
                                 )
 
-                                // 2. Delete old avatar if photo changed
-                                if (currentProfile.avatarUrl.isNotBlank() && currentProfile.avatarUrl != avatarUrlState) {
-                                    profileService.deleteOldAvatar(currentProfile.id, currentProfile.avatarUrl)
-                                }
-
-                                // 3. Sync to Supabase server if online
+                                // 3. Refresh authoritative profile from Supabase to prevent stale cached avatar URLs
                                 if (NetworkUtils.isOnline(context)) {
                                     try {
-                                        profileService.saveFullProfile(updatedProfile, accessToken = token)
+                                        val fresh = profileService.fetchProfileById(updatedProfile.id, forceRefresh = true)
+                                        if (fresh != null) {
+                                            SupabaseProfileService.updateInMemoryProfile(fresh)
+                                            AppDataCacheManager.saveUserDetailCache(context, fresh)
+                                        }
                                     } catch (_: Exception) {}
+                                }
+
+                                // 4. ONLY AFTER new URL is saved successfully, attempt to delete old Storage object
+                                if (oldAvatarToClean != null && oldAvatarToClean.contains("/storage/v1/object/public/photos/")) {
+                                    launch(Dispatchers.IO) {
+                                        try {
+                                            profileService.deleteOldAvatar(currentProfile.id, oldAvatarToClean, context, token)
+                                        } catch (e: Exception) {
+                                            // Harmless cleanup - never rollback avatar_url or show error
+                                        }
+                                    }
                                 }
 
                                 isSaving = false
@@ -1121,6 +1166,119 @@ fun PersonalInformationScreen(
                 }
             }
         }
+    }
+
+    // Avatar Options Modal (Change photo / Mascot or Remove photo)
+    if (showAvatarOptionModal) {
+        AlertDialog(
+            onDismissRequest = { showAvatarOptionModal = false },
+            containerColor = colors.cardBg,
+            title = {
+                Text(
+                    text = "Profile Photo",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = colors.textPrimary
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Option 1: Choose photo from gallery / crop or mascots
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = colors.screenBg,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showAvatarOptionModal = false
+                                showAvatarGalleryScreen = true
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CameraAlt,
+                                contentDescription = null,
+                                tint = Color(0xFFFFD600)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "Choose New Photo / Mascot",
+                                fontWeight = FontWeight.SemiBold,
+                                color = colors.textPrimary,
+                                fontSize = 15.sp
+                            )
+                        }
+                    }
+
+                    // Option 2: Remove photo (if avatar is present)
+                    if (avatarUrlState.isNotBlank() || currentProfile.avatarUrl.isNotBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = colors.screenBg,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    showAvatarOptionModal = false
+                                    isUploadingPhoto = true
+                                    scope.launch {
+                                        val token = UserSessionManager.getValidAccessToken(context)
+                                        val oldPhoto = avatarUrlState.ifBlank { currentProfile.avatarUrl }
+                                        val (success, _) = profileService.safeReplaceProfilePhoto(
+                                            context = context,
+                                            userId = currentProfile.id,
+                                            newBitmap = null,
+                                            newAvatarKeyOrUrl = "",
+                                            oldAvatarUrl = oldPhoto,
+                                            accessToken = token
+                                        )
+                                        isUploadingPhoto = false
+                                        if (success) {
+                                            avatarUrlState = ""
+                                            AppToast.show("Profile photo removed successfully")
+                                        } else {
+                                            AppToast.show("Failed to remove profile photo")
+                                        }
+                                    }
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFF5252)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = "Remove Current Photo",
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFFFF5252),
+                                    fontSize = 15.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showAvatarOptionModal = false }) {
+                    Text("Cancel", color = colors.textSecondary, fontWeight = FontWeight.Bold)
+                }
+            }
+        )
     }
 
     // 7. Date of Birth Picker Dialog (Day, Month, Year separate selectors)

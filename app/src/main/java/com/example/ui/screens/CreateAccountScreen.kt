@@ -36,6 +36,10 @@ import androidx.compose.material.icons.filled.Female
 import androidx.compose.material.icons.filled.Male
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Button
@@ -135,6 +139,8 @@ fun CreateAccountScreen(
     
     // Gender selection (default empty)
     var selectedGender by remember { mutableStateOf("") }
+    var passwordInput by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
 
     var isSavingProfile by remember { mutableStateOf(false) }
 
@@ -222,6 +228,52 @@ fun CreateAccountScreen(
                     .testTag("name_input_field")
             )
 
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Input Password Field
+            Text(
+                text = "Set Account Password",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            OutlinedTextField(
+                value = passwordInput,
+                onValueChange = { passwordInput = it },
+                placeholder = {
+                    Text(
+                        text = "Create a password (min 6 characters)",
+                        color = Color(0xFFB0B0B0),
+                        fontSize = 15.sp
+                    )
+                },
+                singleLine = true,
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                        Icon(
+                            imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            contentDescription = "Toggle password visibility",
+                            tint = Color(0xFF64748B),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                },
+                shape = RoundedCornerShape(20.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color(0xFFF3F4F6),
+                    unfocusedContainerColor = Color(0xFFF3F4F6),
+                    focusedBorderColor = QivoOrange,
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(58.dp)
+                    .testTag("signup_password_input_field")
+            )
             Spacer(modifier = Modifier.height(16.dp))
 
             // Input 2: Date of Birth (Age) - Day, Month, Year separate dropdown selectors
@@ -579,6 +631,9 @@ fun CreateAccountScreen(
             val handleSaveOrSkip: (Boolean) -> Unit = { skipPhoto ->
                 if (nameInput.isBlank()) {
                     AppToast.show("Please enter your name")
+                } else if (passwordInput.isNotBlank() && passwordInput.length < 6) {
+                    AppToast.show("Password must be at least 6 characters long")
+                    AppToast.show("Please enter your name")
                 } else if (selectedDay == null || selectedMonth == null || selectedYear == null) {
                     AppToast.show("Please select your Day, Month, and Year of birth")
                 } else if (selectedCountry.isBlank()) {
@@ -597,6 +652,9 @@ fun CreateAccountScreen(
                         val finalName = nameInput.trim()
                         isSavingProfile = true
                         scope.launch {
+                            if (passwordInput.isNotBlank()) {
+                                com.example.data.SupabaseAuthService().updateUserPassword(passwordInput, context = context)
+                            }
                             val resolvedCountry = if (selectedCountry.isNotBlank()) {
                                 selectedCountry
                             } else {

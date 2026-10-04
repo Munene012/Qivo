@@ -176,13 +176,105 @@ object ChatStateHolder {
 
     fun appendOrUpdateMessages(newMsgs: List<ChatMessage>) {
         if (newMsgs.isEmpty()) return
-        val current = _messagesList.value.toMutableList()
-        val optimistic = current.filter { it.id == 0L }
-        val combined = (optimistic + newMsgs)
-            .distinctBy { if (it.id == 0L) it.hashCode().toLong() else it.id }
-            .sortedByDescending { chatService.parseTimestampToMillis(it.createdAt) }
-        if (!areMessageListsEqual(_messagesList.value, combined)) {
-            setMessagesList(combined)
+        val uId = connectedUserId.trim()
+        val ctx = appContext
+
+        // Base list: start from current in-memory list, falling back to cached messages
+        val baseList = _messagesList.value.ifEmpty {
+            if (uId.isNotBlank()) SupabaseChatService.getInMemoryMessages(uId) else emptyList()
+        }.ifEmpty {
+            if (ctx != null && uId.isNotBlank()) AppDataCacheManager.getCachedChatMessagesSync(ctx, uId) else emptyList()
+        }
+
+        val current = baseList.toMutableList()
+
+        for (newMsg in newMsgs) {
+            // Strictly check that message involves the connected user
+            if (uId.isNotBlank()) {
+                val s = newMsg.senderId.trim()
+                val r = newMsg.receiverId.trim()
+                if (!s.equals(uId, ignoreCase = true) && !r.equals(uId, ignoreCase = true)) {
+                    continue
+                }
+                if (s.equals(r, ignoreCase = true)) {
+                    continue
+                }
+            }
+
+            // Skip if soft-deleted for current user
+            if (ctx != null && uId.isNotBlank() && chatService.isMessageSoftDeleted(ctx, uId, newMsg)) {
+                continue
+            }
+
+            if (newMsg.id > 0L) {
+                // 1. Check if server ID already exists in current list
+                val existingIndex = current.indexOfFirst { it.id == newMsg.id }
+                if (existingIndex != -1) {
+                    // Update existing server message (e.g. read state or updated content)
+                    current[existingIndex] = newMsg
+                } else {
+                    // 2. Check if this resolves a pending optimistic message (id <= 0L)
+                    val optIndex = current.indexOfFirst {
+                        it.id <= 0L &&
+                        it.senderId.trim().equals(newMsg.senderId.trim(), ignoreCase = true) &&
+                        it.receiverId.trim().equals(newMsg.receiverId.trim(), ignoreCase = true) &&
+                        it.message == newMsg.message
+                    }
+                    if (optIndex != -1) {
+                        current[optIndex] = newMsg
+                    } else {
+                        // Brand new message - append without discarding existing older messages
+                        current.add(newMsg)
+                    }
+                }
+            } else {
+                // Optimistic message (id <= 0L)
+                val existingOpt = current.indexOfFirst {
+                    it.id <= 0L &&
+                    it.senderId.trim().equals(newMsg.senderId.trim(), ignoreCase = true) &&
+                    it.receiverId.trim().equals(newMsg.receiverId.trim(), ignoreCase = true) &&
+                    it.message == newMsg.message
+                }
+                if (existingOpt != -1) {
+                    current[existingOpt] = newMsg
+                } else {
+                    current.add(newMsg)
+                }
+            }
+        }
+
+        // Deduplicate: server messages by id, optimistic messages by signature
+        val distinct = current.distinctBy { msg ->
+            if (msg.id > 0L) "srv_${msg.id}" else "opt_${msg.senderId}_${msg.receiverId}_${msg.createdAt}_${msg.message}"
+        }
+
+        // Filter out any messages that are soft-deleted
+        val filtered = if (ctx != null && uId.isNotBlank()) {
+            distinct.filterNot { chatService.isMessageSoftDeleted(ctx, uId, it) }
+        } else {
+            distinct
+        }
+
+        // Sort descending by timestamp, tie-breaking on id descending
+        val sorted = filtered.sortedWith(
+            compareByDescending<ChatMessage> { chatService.parseTimestampToMillis(it.createdAt) }
+                .thenByDescending { it.id }
+        )
+
+        if (!areMessageListsEqual(_messagesList.value, sorted)) {
+            setMessagesList(sorted)
+        }
+
+        // Persist to in-memory cache and background disk cache
+        if (uId.isNotBlank()) {
+            SupabaseChatService.updateInMemoryMessages(uId, sorted)
+            if (ctx != null) {
+                scope.launch {
+                    try {
+                        AppDataCacheManager.saveChatMessagesCache(ctx, uId, sorted)
+                    } catch (_: Exception) {}
+                }
+            }
         }
     }
 
@@ -241,32 +333,11 @@ object ChatStateHolder {
     }
 
     fun addOptimisticMessage(msg: ChatMessage) {
-        val current = _messagesList.value.toMutableList()
-        // Check for exact ID match
-        val index = current.indexOfFirst { it.id == msg.id && msg.id != 0L }
-        if (index != -1) {
-            current[index] = msg
-        } else {
-            // Check for match of same sender, receiver, and message text to avoid duplicate rows
-            val optIndex = current.indexOfFirst { 
-                it.id == 0L && 
-                it.senderId.trim().equals(msg.senderId.trim(), ignoreCase = true) && 
-                it.receiverId.trim().equals(msg.receiverId.trim(), ignoreCase = true) && 
-                it.message == msg.message 
-            }
-            if (optIndex != -1) {
-                current[optIndex] = msg
-            } else {
-                current.add(0, msg)
-            }
-        }
-        setMessagesList(current.distinctBy { if (it.id == 0L) it.hashCode() else it.id })
+        appendOrUpdateMessages(listOf(msg))
     }
 
     fun appendMessages(msgs: List<ChatMessage>) {
-        val current = _messagesList.value.toMutableList()
-        current.addAll(msgs)
-        setMessagesList(current.distinctBy { if (it.id == 0L) it.hashCode() else it.id })
+        appendOrUpdateMessages(msgs)
     }
 
     fun removeConversationLocally(partnerId: String) {
@@ -280,46 +351,7 @@ object ChatStateHolder {
 
     fun handleRealtimeMessage(msg: ChatMessage, context: Context?) {
         if (connectedUserId.isBlank()) return
-        // Keep only messages involving current user
-        if (!msg.senderId.equals(connectedUserId, ignoreCase = true) && 
-            !msg.receiverId.equals(connectedUserId, ignoreCase = true)) {
-            return
-        }
-
-        val current = _messagesList.value.toMutableList()
-        val existingIndex = current.indexOfFirst { it.id == msg.id && msg.id != 0L }
-        if (existingIndex != -1) {
-            current[existingIndex] = msg
-        } else {
-            // Optimistic match: match on sender, receiver, and exact content to merge placeholder
-            val optIndex = current.indexOfFirst { 
-                it.id == 0L && 
-                it.senderId.trim().equals(msg.senderId.trim(), ignoreCase = true) && 
-                it.receiverId.trim().equals(msg.receiverId.trim(), ignoreCase = true) && 
-                it.message == msg.message 
-            }
-            if (optIndex != -1) {
-                current[optIndex] = msg
-            } else {
-                current.add(0, msg)
-            }
-        }
-
-        val sorted = current.distinctBy { if (it.id == 0L) it.hashCode().toLong() else it.id }
-            .sortedByDescending { m ->
-                chatService.parseTimestampToMillis(m.createdAt)
-            }
-        setMessagesList(sorted)
-
-        // Push updates to chat service's in-memory storage and app persistence cache
-        SupabaseChatService.updateInMemoryMessages(connectedUserId, sorted)
-        if (context != null) {
-            scope.launch {
-                try {
-                    AppDataCacheManager.saveChatMessagesCache(context, connectedUserId, sorted)
-                } catch (_: Exception) {}
-            }
-        }
+        appendOrUpdateMessages(listOf(msg))
     }
 
     fun markMessageAsReadLocally(partnerId: String, context: Context?) {

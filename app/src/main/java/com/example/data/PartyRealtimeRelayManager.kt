@@ -23,12 +23,7 @@ data class RealtimeSpeakingEvent(
     val volume: Float
 )
 
-data class RealtimeAudioChunkEvent(
-    val roomId: String,
-    val userId: String,
-    val seatIndex: Int,
-    val pcmBytes: ByteArray
-)
+
 
 data class RealtimeSeatSwitchEvent(
     val roomId: String,
@@ -92,8 +87,7 @@ object PartyRealtimeRelayManager {
     private val _speakingEvents = MutableSharedFlow<RealtimeSpeakingEvent>(extraBufferCapacity = 64)
     val speakingEvents: SharedFlow<RealtimeSpeakingEvent> = _speakingEvents.asSharedFlow()
 
-    private val _audioChunkEvents = MutableSharedFlow<RealtimeAudioChunkEvent>(extraBufferCapacity = 256)
-    val audioChunkEvents: SharedFlow<RealtimeAudioChunkEvent> = _audioChunkEvents.asSharedFlow()
+
 
     private val _seatSwitchEvents = MutableSharedFlow<RealtimeSeatSwitchEvent>(extraBufferCapacity = 32)
     val seatSwitchEvents: SharedFlow<RealtimeSeatSwitchEvent> = _seatSwitchEvents.asSharedFlow()
@@ -198,19 +192,7 @@ object PartyRealtimeRelayManager {
                             _speakingEvents.tryEmit(RealtimeSpeakingEvent(rId, uid, sIdx, speaking, vol))
                         }
                     }
-                    "audio_chunk" -> {
-                        val uid = data.optString("userId", "")
-                        val sIdx = data.optInt("seatIndex", -1)
-                        val pcmB64 = data.optString("pcm", "")
-                        val rId = data.optString("roomId", currentRoomId)
 
-                        if (pcmB64.isNotEmpty() && uid != currentUserId) {
-                            try {
-                                val bytes = Base64.decode(pcmB64, Base64.NO_WRAP)
-                                _audioChunkEvents.tryEmit(RealtimeAudioChunkEvent(rId, uid, sIdx, bytes))
-                            } catch (_: Exception) {}
-                        }
-                    }
                     "seat_switch" -> {
                         val uid = data.optString("userId", "")
                         val fSeat = data.optInt("fromSeat", -1)
@@ -317,24 +299,7 @@ object PartyRealtimeRelayManager {
         sendBroadcastPayload("speaking", data)
     }
 
-    /**
-     * Broadcast live audio chunk (PCM bytes) to all listeners in the party room
-     */
-    fun broadcastAudioChunk(roomId: String, userId: String, seatIndex: Int, pcmBytes: ByteArray) {
-        // Also emit locally for multi-listener / audio monitor
-        _audioChunkEvents.tryEmit(RealtimeAudioChunkEvent(roomId, userId, seatIndex, pcmBytes))
 
-        try {
-            val b64 = Base64.encodeToString(pcmBytes, Base64.NO_WRAP)
-            val data = JSONObject().apply {
-                put("roomId", roomId)
-                put("userId", userId)
-                put("seatIndex", seatIndex)
-                put("pcm", b64)
-            }
-            sendBroadcastPayload("audio_chunk", data)
-        } catch (_: Exception) {}
-    }
 
     /**
      * Broadcast instantaneous seat change / switch

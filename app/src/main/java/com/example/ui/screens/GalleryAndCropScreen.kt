@@ -341,12 +341,29 @@ fun GalleryAndCropScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clickable {
-                                                if (oldAvatarUrl.isNotBlank() && oldAvatarUrl.contains("/storage/v1/object/public/photos/")) {
-                                                    scope.launch(Dispatchers.IO) {
-                                                        profileService.deleteOldAvatar(userId, oldAvatarUrl)
+                                                if (enableCrop) {
+                                                    isUploading = true
+                                                    scope.launch {
+                                                        val userToken = UserSessionManager.getValidAccessToken(context)
+                                                        val (success, resultUrl) = profileService.safeReplaceProfilePhoto(
+                                                            context = context,
+                                                            userId = userId,
+                                                            newBitmap = null,
+                                                            newAvatarKeyOrUrl = key,
+                                                            oldAvatarUrl = oldAvatarUrl,
+                                                            accessToken = userToken
+                                                        )
+                                                        isUploading = false
+                                                        if (success) {
+                                                            AppToast.show("Avatar updated successfully! 🎉")
+                                                            onPhotoCroppedAndUploaded(resultUrl)
+                                                        } else {
+                                                            AppToast.show("Failed to update avatar.")
+                                                        }
                                                     }
+                                                } else {
+                                                    onPhotoCroppedAndUploaded(key)
                                                 }
-                                                onPhotoCroppedAndUploaded(key)
                                             }
                                     ) {
                                         Column(
@@ -413,18 +430,19 @@ fun GalleryAndCropScreen(
                             isUploading = true
                             scope.launch {
                                 val userToken = UserSessionManager.getValidAccessToken(context)
-                                val uploadedUrl = profileService.uploadProfileBitmap(userId, croppedBitmap, accessToken = userToken)
+                                val (success, resultUrl) = profileService.safeReplaceProfilePhoto(
+                                    context = context,
+                                    userId = userId,
+                                    newBitmap = croppedBitmap,
+                                    oldAvatarUrl = oldAvatarUrl,
+                                    accessToken = userToken
+                                )
                                 isUploading = false
-                                if (uploadedUrl != null) {
-                                    if (oldAvatarUrl.isNotBlank() && oldAvatarUrl != uploadedUrl && oldAvatarUrl.contains("/storage/v1/object/public/photos/")) {
-                                        launch(Dispatchers.IO) {
-                                            profileService.deleteOldAvatar(userId, oldAvatarUrl)
-                                        }
-                                    }
-                                    AppToast.show("Avatar uploaded successfully!")
-                                    onPhotoCroppedAndUploaded(uploadedUrl)
+                                if (success) {
+                                    AppToast.show("Avatar updated successfully! 🎉")
+                                    onPhotoCroppedAndUploaded(resultUrl)
                                 } else {
-                                    AppToast.show("Upload failed")
+                                    AppToast.show(resultUrl.ifBlank { "Upload failed. Please check internet connection." })
                                 }
                             }
                         },

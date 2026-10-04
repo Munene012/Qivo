@@ -2,6 +2,10 @@ package com.example.ui.screens
 
 import android.content.Context
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import android.Manifest
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -36,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.NetworkUtils
 import com.example.data.SupabaseProfileService
 import com.example.data.UserSessionManager
+import com.example.data.CalendarHelper
 import com.example.ui.components.App3DInlineSpinner
 import com.example.ui.components.AppToast
 import com.example.ui.components.Coin3DIcon
@@ -81,19 +86,25 @@ fun TaskCenterScreen(
     var isClaimingReward by remember { mutableStateOf(false) }
     var isOnline by remember { mutableStateOf(NetworkUtils.isOnline(context)) }
     var showInfoDialog by remember { mutableStateOf(false) }
+    var showClaimOptionsDialog by remember { mutableStateOf(false) }
 
-    // Persistent claim state: if already claimed for today locally, stop checking server every time!
-    // If not claimed yet, show the claim action immediately instead of keeping on refreshing.
+    val calendarPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permMap ->
+        val readGranted = permMap[Manifest.permission.READ_CALENDAR] ?: false
+        val writeGranted = permMap[Manifest.permission.WRITE_CALENDAR] ?: false
+        if (readGranted && writeGranted) {
+            CalendarHelper.addCoinCollectionReminder(context)
+        } else {
+            AppToast.show("Calendar permission is required to set coin reminder.")
+        }
+    }
+
     LaunchedEffect(userId) {
         isOnline = NetworkUtils.isOnline(context)
-        val localClaimed = UserSessionManager.isClaimedToday(context, userId, userEmail)
-        if (localClaimed) {
-            isClaimedToday = true
-            // Already claimed today! Stop checking server every time.
-            return@LaunchedEffect
-        }
+        isClaimedToday = UserSessionManager.isClaimedToday(context, userId, userEmail)
+        currentDayNumber = UserSessionManager.getLastCheckInDay(context, userId, userEmail)
 
-        // Only do a lightweight background sync if user hasn't collected yet, without blocking UI
         if (userId.isNotEmpty() && isOnline) {
             try {
                 val liveProfile = profileService.fetchProfile(userId, userEmail) ?: profileService.fetchProfileById(userId)
@@ -102,18 +113,13 @@ fun TaskCenterScreen(
                     UserSessionManager.saveCoins(context, liveProfile.coins)
 
                     val isServerClaimedToday = profileService.isDateMatchingToday(liveProfile.lastCheckinDate)
+                    isClaimedToday = isServerClaimedToday
                     if (isServerClaimedToday) {
-                        isClaimedToday = true
-                        currentDayNumber = if (liveProfile.lastCheckinDay > 0) {
-                            liveProfile.lastCheckinDay
-                        } else {
-                            val localDay = UserSessionManager.getLastCheckInDay(context, userId, userEmail)
-                            if (localDay > 0) localDay else 1
-                        }
+                        currentDayNumber = if (liveProfile.lastCheckinDay > 0) liveProfile.lastCheckinDay else 1
                         val dateToSave = if (liveProfile.lastCheckinDate.isNotBlank()) liveProfile.lastCheckinDate else todayDate
                         UserSessionManager.saveDailyCheckIn(context, userId, dateToSave, currentDayNumber, userEmail)
-                    } else if (liveProfile.lastCheckinDay > 0 && currentDayNumber == 0) {
-                        currentDayNumber = liveProfile.lastCheckinDay
+                    } else {
+                        currentDayNumber = if (liveProfile.lastCheckinDay > 0) liveProfile.lastCheckinDay else 0
                     }
                 }
             } catch (_: Exception) {}
@@ -153,7 +159,7 @@ fun TaskCenterScreen(
     val currentRewardToClaim = dailySchedule.firstOrNull { it.dayNumber == activeDay }
         ?: dailySchedule.first()
 
-    fun claimCoins() {
+    fun claimCoins(shouldOpenCalendar: Boolean) {
         if (!NetworkUtils.isOnline(context)) {
             AppToast.show("Cannot claim rewards while offline. Please connect to the internet.")
             return
@@ -188,7 +194,7 @@ fun TaskCenterScreen(
 
             if (serverResult.success) {
                 val finalDay = if (serverResult.dayNumber > 0) serverResult.dayNumber else activeDay
-                val finalCoins = if (serverResult.updatedCoins > 0L) serverResult.updatedCoins else (userCoins + coinsToAward)
+                val finalCoins = if (serverResult.updatedCoins > 0L) serverResult.updatedCoins else userCoins
 
                 isClaimedToday = true
                 currentDayNumber = finalDay
@@ -203,26 +209,54 @@ fun TaskCenterScreen(
                 )
                 UserSessionManager.saveCoins(context, finalCoins)
 
-                AppToast.show("+$coinsToAward Coins Claimed! ✨")
+                val displayMsg = if (serverResult.message.isNotBlank()) serverResult.message else "+$coinsToAward Coins Claimed! ✨"
+                AppToast.show(displayMsg)
+
+                if (shouldOpenCalendar) {
+                    // Trigger calendar reminder logic
+                    try {
+                        val hasRead = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        val hasWrite = ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        if (hasRead && hasWrite) {
+                            CalendarHelper.addCoinCollectionReminder(context)
+                        } else {
+                            calendarPermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.READ_CALENDAR,
+                                    Manifest.permission.WRITE_CALENDAR
+                                )
+                            )
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("TaskCenterScreen", "Permission launch failed", e)
+                    }
+                }
             } else if (serverResult.isAlreadyClaimed) {
-                isClaimedToday = true
-                if (serverResult.updatedCoins > 0L) {
-                    userCoins = serverResult.updatedCoins
-                    UserSessionManager.saveCoins(context, serverResult.updatedCoins)
+                if (serverResult.message.contains("another account", ignoreCase = true)) {
+                    // Claimed on another account / device
+                    AppToast.show("This reward was already claimed on another account.", isLong = true)
+                } else {
+                    // Same account already claimed
+                    isClaimedToday = true
+                    if (serverResult.updatedCoins > 0L) {
+                        userCoins = serverResult.updatedCoins
+                        UserSessionManager.saveCoins(context, serverResult.updatedCoins)
+                    }
+                    if (serverResult.dayNumber > 0) {
+                        currentDayNumber = serverResult.dayNumber
+                    }
+                    UserSessionManager.saveDailyCheckIn(
+                        context = context,
+                        userId = userId,
+                        dateStr = todayDate,
+                        dayNumber = currentDayNumber,
+                        email = userEmail
+                    )
+                    val msg = if (serverResult.message.isNotBlank()) serverResult.message else "Today's reward has already been claimed."
+                    AppToast.show(msg, isLong = true)
                 }
-                if (serverResult.dayNumber > 0) {
-                    currentDayNumber = serverResult.dayNumber
-                }
-                UserSessionManager.saveDailyCheckIn(
-                    context = context,
-                    userId = userId,
-                    dateStr = todayDate,
-                    dayNumber = currentDayNumber,
-                    email = userEmail
-                )
-                AppToast.show("Already claimed for today on your account.")
             } else {
-                val errorMsg = if (serverResult.message.isNotBlank()) serverResult.message else "Server verification failed. Please try again."
+                val errorMsg = if (serverResult.message.isNotBlank()) serverResult.message else "Error claiming daily reward. Please try again."
                 AppToast.show(errorMsg, isLong = true)
             }
         }
@@ -474,7 +508,7 @@ fun TaskCenterScreen(
 
                     // Clean, Prominent Action Button
                     Button(
-                        onClick = { claimCoins() },
+                        onClick = { showClaimOptionsDialog = true },
                         enabled = isOnline && !isClaimedToday && !isClaimingReward,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -576,6 +610,50 @@ fun TaskCenterScreen(
             confirmButton = {
                 TextButton(onClick = { showInfoDialog = false }) {
                     Text("Understood", color = Color(0xFFFFB300), fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = colors.cardBg,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
+
+    // Claim Options Dialog
+    if (showClaimOptionsDialog) {
+        AlertDialog(
+            onDismissRequest = { showClaimOptionsDialog = false },
+            title = {
+                Text(
+                    text = "Claim Reward",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = colors.textPrimary
+                )
+            },
+            text = {
+                Text(
+                    text = "Would you like to claim your reward and set a calendar reminder for tomorrow?",
+                    fontSize = 14.sp,
+                    color = colors.textSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClaimOptionsDialog = false
+                        claimCoins(shouldOpenCalendar = true)
+                    }
+                ) {
+                    Text("Claim and open", color = Color(0xFFFFB300), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showClaimOptionsDialog = false
+                        claimCoins(shouldOpenCalendar = false)
+                    }
+                ) {
+                    Text("Claim do not open", color = colors.textSecondary)
                 }
             },
             containerColor = colors.cardBg,
@@ -775,3 +853,6 @@ private fun SimpleDay7Tile(
         }
     }
 }
+
+
+

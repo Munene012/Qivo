@@ -47,17 +47,27 @@ import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Headset
 import androidx.compose.material.icons.filled.Male
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.SupervisorAccount
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
+import com.example.ui.components.MyData3DIcon
+import com.example.ui.components.TaskCenterClipboard3DIcon
+import com.example.ui.components.MeScreenMintWaveAtmosphere
 import androidx.compose.material3.CardDefaults
 import com.example.ui.components.AdminAnalytics3DIcon
 import com.example.ui.components.AdminShield3DIcon
@@ -463,7 +473,7 @@ fun MeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.screenBg)
+            .background(Color(0xFF381A05))
             .testTag("me_screen_root")
     ) {
         Column(
@@ -471,1186 +481,984 @@ fun MeScreen(
                 .fillMaxSize()
                 .verticalScroll(scrollState)
         ) {
-            // Top Section with Aesthetic Sunset Amber Background spanning down to 3/4 way of the Recharge Card
+            // Top Section with Sunset Orange-Yellow Gradient Header Only
             Box(
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
             ) {
-                // Background layer: Gradient covering status bar, profile, stats, and 3/4 of the recharge card
-                Column(modifier = Modifier.matchParentSize()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .background(
-                                if (isDark) {
-                                    Brush.verticalGradient(
-                                        listOf(
-                                            Color(0xFF2E1500),
-                                            Color(0xFF3E1E02),
-                                            Color(0xFF4A2503),
-                                            Color(0xFF2E1500)
-                                        )
-                                    )
-                                } else {
-                                    Brush.verticalGradient(
-                                        listOf(
-                                            Color(0xFFBF360C), // Deep Sunset Amber
-                                            Color(0xFFE65100), // Rich Orange
-                                            Color(0xFFFF6500), // Qivo Orange
-                                            Color(0xFFFF8D00)  // Golden Orange
-                                        )
-                                    )
-                                }
+                // Sunset Orange-Yellow Glow Overlay at Top Header (Exact user request)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(265.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color(0x90E65100), // Vibrant deep sunset orange
+                                    Color(0x50FF9100), // Amber mid glow
+                                    Color(0x20FFD54F), // Soft gold aura
+                                    Color.Transparent
+                                )
                             )
-                    )
-                    // Bottom 23dp (remaining 1/4 of 92dp card) with standard background
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(23.dp)
-                            .background(colors.screenBg)
-                    )
-                }
+                        )
+                )
 
-                // Foreground Content for Top Section
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .statusBarsPadding()
-                        .padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 8.dp)
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
-                    // 1. Top Header Profile Area
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            // Name with Chevron - click to edit profile
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .clickable { onOpenEditProfile() }
-                                    .testTag("btn_me_name_edit_profile")
-                            ) {
-                                Text(
-                                    text = if (liveName.isNotBlank()) liveName else "Y",
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Icon(
-                                    imageVector = Icons.Default.ChevronRight,
-                                    contentDescription = "Edit Profile",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(6.dp))
-
-                            // Badges Row: Gender/Age + Country + Verification
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                val isFemale = liveGender.equals("Female", ignoreCase = true) || liveGender.equals("F", ignoreCase = true)
-                                val genderBgColor = if (isFemale) Color(0xFFF48FB1) else Color(0xFF90CAF9)
-
-                                // Gender & Age Badge
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = genderBgColor
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = if (isFemale) Icons.Default.Female else Icons.Default.Male,
-                                            contentDescription = "Gender",
-                                            tint = Color.Black,
-                                            modifier = Modifier.size(11.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(2.dp))
-                                        Text(
-                                            text = computedAge.toString(),
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color.Black
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.width(4.dp))
-
-                                // Country Badge
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = Color(0xFFFFD54F) // Lime Green
-                                ) {
-                                    Text(
-                                        text = if (liveCountry.isNotBlank()) liveCountry else "United States",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.Black,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.width(4.dp))
-
-                                // Level Badge (Lv.X)
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = Color(0xFFFFD54F),
-                                    modifier = Modifier
-                                        .clickable { onOpenLevel() }
-                                        .testTag("badge_user_level")
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.EmojiEvents,
-                                            contentDescription = "Level",
-                                            tint = Color(0xFF5D4037),
-                                            modifier = Modifier.size(11.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(3.dp))
-                                        Text(
-                                            text = "Lv.${userLevelInfo.level}",
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = Color(0xFF3E2723)
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.width(4.dp))
-
-                                // Verification Status Badge
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = if (isDark) Color(0xFF332010) else Color(0xFFFFF3E0),
-                                    modifier = Modifier.clickable { onOpenVerify() }
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Verified,
-                                            contentDescription = "Verification Status",
-                                            tint = if (isVerified) Color(0xFFFF9800) else Color(0xFFFF9800),
-                                            modifier = Modifier.size(11.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(3.dp))
-                                        Text(
-                                            text = if (isVerified) "Verified" else "Unverified",
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isVerified) Color(0xFFFF8D00) else Color(0xFFFF9800)
-                                        )
-                                    }
-                                }
-
-                                if (isCoinSeller) {
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = Color(0xFFFF6500)
-                                    ) {
-                                        Text(
-                                            text = "SELLER",
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Black,
-                                            color = Color.White,
-                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
-
-                                if (isAgent) {
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = Color(0xFF7C4DFF)
-                                    ) {
-                                        Text(
-                                            text = "AGENT",
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Black,
-                                            color = Color.White,
-                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            // ID Row with Copy Icon
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .clickable {
-                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        clipboard.setPrimaryClip(ClipData.newPlainText("User ID", displayId))
-                                        AppToast.show("Copied ID: $displayId")
-                                    }
-                                    .testTag("btn_me_copy_id")
-                            ) {
-                                Text(
-                                    text = "ID:$displayId",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = Color.White.copy(alpha = 0.9f)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Icon(
-                                    imageVector = Icons.Default.ContentCopy,
-                                    contentDescription = "Copy ID",
-                                    tint = Color.White.copy(alpha = 0.9f),
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        }
-
-                        // Profile Avatar Photo on Right with Frame Overlay and Glow
-                        // Clicking avatar opens Profile Preview
-                        Box(
-                            modifier = Modifier
-                                .size(64.dp)
-                                .clickable {
-                                    if (onOpenUserDetail != null) {
-                                        val currentProf = fullProfileState?.copy(
-                                            id = userId,
-                                            numericId = liveNumericId,
-                                            email = userEmail,
-                                            name = liveName,
-                                            gender = liveGender,
-                                            birthDate = liveBirthDate,
-                                            country = liveCountry,
-                                            avatarUrl = liveAvatarUrl,
-                                            coins = liveCoins,
-                                            diamonds = liveDiamonds,
-                                            isAdmin = isAdmin,
-                                            isCoinSeller = isCoinSeller,
-                                            isAgent = isAgent
-                                        ) ?: UserProfile(
-                                            id = userId,
-                                            numericId = liveNumericId,
-                                            email = userEmail,
-                                            name = liveName,
-                                            gender = liveGender,
-                                            birthDate = liveBirthDate,
-                                            country = liveCountry,
-                                            avatarUrl = liveAvatarUrl,
-                                            coins = liveCoins,
-                                            diamonds = liveDiamonds,
-                                            isAdmin = isAdmin,
-                                            isCoinSeller = isCoinSeller,
-                                            isAgent = isAgent
-                                        )
-                                        onOpenUserDetail(currentProf)
-                                    }
-                                }
-                                .testTag("btn_me_avatar_preview"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            AvatarHelper.UserAvatarImage(
-                                avatarUrl = liveAvatarUrl,
-                                userId = userId,
-                                gender = liveGender,
-                                numericId = liveNumericId,
-                                frameId = currentWornFrameId,
-                                showFrame = true,
-                                shape = CircleShape,
-                                contentDescription = "User Avatar",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    // 2. Stats Row: Friends, Following, Followers, Visitors (clean text stats without background cards/padding)
+                    // 1. Top Header Row: "Me" title + Frosted Coin & Moon/Diamond balance pills
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
+                            .padding(top = 4.dp, bottom = 14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { onOpenFriends() },
-                            horizontalAlignment = Alignment.CenterHorizontally
+                        Text(
+                            text = "Me",
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Black,
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                            color = Color.White
+                        )
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(
-                                text = "${followStats.friendsCount}",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.White
+                            // Bag Button Pill [ 🎒 Bag ]
+                            Surface(
+                                shape = RoundedCornerShape(18.dp),
+                                color = Color.White.copy(alpha = 0.1f),
+                                modifier = Modifier.clickable { onOpenBag() }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Bag3DIcon(size = 17.dp)
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        text = "Bag",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+
+                            // Coin Balance Capsule [ 🪙 <coins> ▶ ]
+                            Surface(
+                                shape = RoundedCornerShape(18.dp),
+                                color = Color.White.copy(alpha = 0.1f),
+                                modifier = Modifier.clickable { onOpenWallet() }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Coin3DIcon(size = 17.dp)
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        text = numberFormat.format(liveCoins),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(10.dp)
+                                    )
+                                }
+                            }
+
+                            // Moon / Diamond Balance Capsule [ 🌙 <diamonds> ▶ ]
+                            Surface(
+                                shape = RoundedCornerShape(18.dp),
+                                color = Color.White.copy(alpha = 0.1f),
+                                modifier = Modifier.clickable { onOpenIncome() }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("🌙", fontSize = 13.sp)
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        text = numberFormat.format(liveDiamonds),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(10.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // 2. Profile Section (Using screen background directly, no background pad/card)
+                    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp)) {
+                        // Location on Top Right
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.LocationOn,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(14.dp)
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Friends",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color.White.copy(alpha = 0.9f)
+                                text = if (liveCountry.isNotBlank()) liveCountry else "Kenya",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
                             )
                         }
 
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { onOpenFollowing() },
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "${followStats.followingCount}",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.White
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Following",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color.White.copy(alpha = 0.9f)
-                            )
-                        }
+                            Spacer(modifier = Modifier.height(6.dp))
 
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { onOpenFollowers() },
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "${followStats.followersCount}",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.White
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Followers",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color.White.copy(alpha = 0.9f)
-                            )
-                        }
+                            // Avatar + Name + ID + Edit Button Row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Avatar with circular glow border
+                                Box(
+                                    modifier = Modifier
+                                        .size(66.dp)
+                                        .clip(CircleShape)
+                                        .border(2.dp, Brush.linearGradient(listOf(Color(0xFF00E5FF), Color(0xFFFFD54F))), CircleShape)
+                                        .clickable {
+                                            if (onOpenUserDetail != null) {
+                                                val currentProf = fullProfileState?.copy(
+                                                    id = userId,
+                                                    numericId = liveNumericId,
+                                                    email = userEmail,
+                                                    name = liveName,
+                                                    gender = liveGender,
+                                                    birthDate = liveBirthDate,
+                                                    country = liveCountry,
+                                                    avatarUrl = liveAvatarUrl,
+                                                    coins = liveCoins,
+                                                    diamonds = liveDiamonds,
+                                                    isAdmin = isAdmin,
+                                                    isCoinSeller = isCoinSeller,
+                                                    isAgent = isAgent
+                                                ) ?: UserProfile(
+                                                    id = userId,
+                                                    numericId = liveNumericId,
+                                                    email = userEmail,
+                                                    name = liveName,
+                                                    gender = liveGender,
+                                                    birthDate = liveBirthDate,
+                                                    country = liveCountry,
+                                                    avatarUrl = liveAvatarUrl,
+                                                    coins = liveCoins,
+                                                    diamonds = liveDiamonds,
+                                                    isAdmin = isAdmin,
+                                                    isCoinSeller = isCoinSeller,
+                                                    isAgent = isAgent
+                                                )
+                                                onOpenUserDetail(currentProf)
+                                            }
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    AvatarHelper.UserAvatarImage(
+                                        avatarUrl = liveAvatarUrl,
+                                        userId = userId,
+                                        gender = liveGender,
+                                        numericId = liveNumericId,
+                                        frameId = currentWornFrameId,
+                                        showFrame = true,
+                                        shape = CircleShape,
+                                        contentDescription = "User Avatar",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                    )
+                                }
 
+                                Spacer(modifier = Modifier.width(14.dp))
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = if (liveName.isNotBlank()) liveName else "Munene",
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color.White
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.clickable {
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            clipboard.setPrimaryClip(ClipData.newPlainText("User ID", displayId))
+                                            AppToast.show("Copied ID: $displayId")
+                                        }
+                                    ) {
+                                        Text(
+                                            text = "ID:$displayId",
+                                            fontSize = 12.5.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = Color.White.copy(alpha = 0.75f)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(
+                                            imageVector = Icons.Default.ContentCopy,
+                                            contentDescription = "Copy ID",
+                                            tint = Color.White.copy(alpha = 0.75f),
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                    }
+                                }
+
+                                // Edit Button on Right
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .clickable { onOpenEditProfile() }
+                                        .padding(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Edit Profile",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = "Edit",
+                                        color = Color.White,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // Level & Store Capsules Row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // My Level Capsule [ My Level  ♦ <level>   ♦ 0   > ]
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = Color.White.copy(alpha = 0.1f),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { onOpenLevel() }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = "My Level",
+                                                color = Color(0xFF9E86F8),
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = Color(0x33FFFFFF)
+                                            ) {
+                                                Text(
+                                                    text = "♦ ${userLevelInfo.level}",
+                                                    color = Color.White,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(3.dp))
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = Color(0x33FFFFFF)
+                                            ) {
+                                                Text(
+                                                    text = "♦ 0",
+                                                    color = Color.White,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                            contentDescription = null,
+                                            tint = Color(0xFF9E86F8),
+                                            modifier = Modifier.size(10.dp)
+                                        )
+                                    }
+                                }
+
+                                // Store Capsule [ Store  🏎️ 🛡️ 🏅  > ]
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = Color.White.copy(alpha = 0.1f),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { onOpenStore() }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = "Store",
+                                                color = Color(0xFFFFB74D),
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("🏎️", fontSize = 13.sp)
+                                            Text("🛡️", fontSize = 13.sp)
+                                            Text("🏅", fontSize = 13.sp)
+                                        }
+
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                            contentDescription = null,
+                                            tint = Color(0xFFFFB74D),
+                                            modifier = Modifier.size(10.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // Social Stats Row (Friends 0, Following 0, Followers 0)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    modifier = Modifier.clickable { onOpenFriends() },
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Friends", color = Color(0xFFA0A5BA), fontSize = 12.5.sp)
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text("${followStats.friendsCount}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                Row(
+                                    modifier = Modifier.clickable { onOpenFollowing() },
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Following", color = Color(0xFFA0A5BA), fontSize = 12.5.sp)
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text("${followStats.followingCount}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                Row(
+                                    modifier = Modifier.clickable { onOpenFollowers() },
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Followers", color = Color(0xFFA0A5BA), fontSize = 12.5.sp)
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text("${followStats.followersCount}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+
+            // Lower Section: Feature Cards & Settings Group
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp)
+            ) {
+                // 3. Feature Grid Cards (2 columns, dark rounded tiles without border lines)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Card 1: My Data (3D Pie Chart)
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = Color(0xFF151724),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(105.dp)
+                            .clickable { onOpenVisitors() }
+                    ) {
                         Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { onOpenVisitors() },
-                            horizontalAlignment = Alignment.CenterHorizontally
+                            modifier = Modifier.fillMaxSize().padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
                         ) {
+                            MyData3DIcon(size = 40.dp)
+                            Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "${followStats.visitorsCount}",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.ExtraBold,
+                                text = "My Data",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
                                 color = Color.White
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Visitors",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color.White.copy(alpha = 0.9f)
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    // Card 2: Task Center (3D Checklist Clipboard)
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = Color(0xFF151724),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(105.dp)
+                            .clickable { onOpenTaskCenter() }
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxSize().padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            TaskCenterClipboard3DIcon(size = 40.dp)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Task Center",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
 
-                    // 3. Banner Cards Row (Coins & VIP/SVIP Privileges)
+                // Card 3: Join Agency (Appears ONLY in Female accounts, or Agency Center for agents)
+                if (isFemaleAccount || isAgent) {
+                    Spacer(modifier = Modifier.height(12.dp))
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                    // Card 1: Coins Card (Luxury Sunset Amber / Gold Gradient) - opens Wallet Recharge screen
-                    Surface(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(96.dp)
-                            .clickable { onOpenWallet() }
-                            .testTag("btn_me_popup_recharge"),
-                        shape = RoundedCornerShape(20.dp),
-                        color = Color.Transparent
-                    ) {
-                        Box(
+                        Surface(
+                            shape = RoundedCornerShape(18.dp),
+                            color = Color(0xFF151724),
                             modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    Brush.linearGradient(
-                                        colors = if (isDark) listOf(Color(0xFF2E1C0A), Color(0xFF1E1104))
-                                        else listOf(Color(0xFFFFF9C4), Color(0xFFFFECB3))
-                                    )
-                                )
-                                .padding(12.dp)
+                                .weight(1f)
+                                .height(72.dp)
+                                .clickable { onOpenAgency() }
                         ) {
                             Row(
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Group,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = if (isAgent) "Agency Center" else "Join Agency",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+
+                        // Blank balanced cell
+                        Box(modifier = Modifier.weight(1f))
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // 4. List Menu Settings Group (Dark Rounded Container with dividers, no border lines)
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.White.copy(alpha = 0.07f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                        // 1. Store (Moved above Support)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onOpenStore() }
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Store,
+                                    contentDescription = "Store",
+                                    tint = Color(0xFFFFB74D),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Text(
+                                    text = "Store",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("🏎️ 🛡️ 🏅", fontSize = 12.sp)
+                            }
+
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                contentDescription = "Go",
+                                tint = Color.White.copy(alpha = 0.5f),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+
+                        HorizontalDivider(color = Color(0x10FFFFFF))
+
+                        // 2. My Level (Moved above Support)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onOpenLevel() }
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.EmojiEvents,
+                                    contentDescription = "My Level",
+                                    tint = Color(0xFF9E86F8),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Text(
+                                    text = "My Level",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0x33FFFFFF)
+                                ) {
+                                    Text(
+                                        text = "♦ ${userLevelInfo.level}",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                contentDescription = "Go",
+                                tint = Color.White.copy(alpha = 0.5f),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+
+                        HorizontalDivider(color = Color(0x18FFFFFF))
+
+                        // 3. Support
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onOpenSupport() }
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Support3DIcon(size = 22.dp)
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Text(
+                                    text = "Support",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.White
+                                )
+                            }
+
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                contentDescription = "Go",
+                                tint = Color.White.copy(alpha = 0.5f),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+
+                        HorizontalDivider(color = Color(0x18FFFFFF))
+
+                        // 4. Verify identity (Changed from Login & security)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onOpenVerify() }
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Shield,
+                                    contentDescription = "Verify identity",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Text(
+                                    text = "Verify identity",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.White
+                                )
+                            }
+
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                contentDescription = "Go",
+                                tint = Color.White.copy(alpha = 0.5f),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+
+                        HorizontalDivider(color = Color(0x10FFFFFF))
+
+                        // 5. Bag (NEW)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onOpenBag() }
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.ShoppingBag,
+                                    contentDescription = "Bag",
+                                    tint = Color(0xFFFFD54F),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Text(
+                                    text = "Bag",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.White
+                                )
+                            }
+
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                contentDescription = "Go",
+                                tint = Color.White.copy(alpha = 0.5f),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+
+                        HorizontalDivider(color = Color(0x10FFFFFF))
+
+                        // 6. Reports & Moderation (Restricted to Admin)
+                        if (isAdmin) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.White.copy(alpha = 0.05f))
+                                    .clickable { onOpenManageReports() }
+                                    .padding(horizontal = 16.dp, vertical = 16.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.Center
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Flag,
+                                        contentDescription = "Reports & Moderation",
+                                        tint = QivoOrange,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(14.dp))
+                                    Text(
+                                        text = "Reports & Moderation",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color.White
+                                    )
+                                }
+
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                    contentDescription = "Go",
+                                    tint = Color.White.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                            HorizontalDivider(color = Color(0x10FFFFFF))
+                        }
+
+                        // 7. Admin Center (Restricted to Admin)
+                        if (isAdmin) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.White.copy(alpha = 0.05f))
+                                    .clickable { onOpenAdminAnalytics() }
+                                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.AdminPanelSettings,
+                                        contentDescription = "Admin Center",
+                                        tint = QivoOrange,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(14.dp))
+                                    Text(
+                                        text = "Admin Center",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color.White
+                                    )
+                                }
+
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                    contentDescription = "Go",
+                                    tint = Color.White.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                            HorizontalDivider(color = Color(0x10FFFFFF))
+                        }
+
+                        // 7. App Settings
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onOpenSettings() }
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "App Settings",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Text(
+                                    text = "App Settings",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.White
+                                )
+                            }
+
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                contentDescription = "Go",
+                                tint = Color.White.copy(alpha = 0.5f),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+                }
+
+                // 5. ALL EXTRA BUTTONS (Placed at the very bottom below App Settings)
+                if (isAdmin || isCoinSeller) {
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color(0xFF151724),
+                        border = BorderStroke(1.dp, QivoOrange.copy(alpha = 0.4f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Shield,
+                                        contentDescription = null,
+                                        tint = QivoOrange,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (isAdmin) "Executive Hub" else "Coin Seller Panel",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
+
+                                Surface(shape = RoundedCornerShape(6.dp), color = QivoOrange) {
+                                    Text(
+                                        text = if (isAdmin) "ADMIN" else "SELLER",
+                                        color = Color.White,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Black,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                             Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Surface(
+                                    color = Color.White.copy(alpha = 0.12f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(42.dp)
+                                        .clickable { onOpenAwardCoins() }
                                 ) {
-                                    if (liveCoins <= 0) {
-                                        // When bal is 0: show the name Recharge only, no 0!
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(
-                                                    Brush.horizontalGradient(
-                                                        listOf(Color(0xFFFF9800), Color(0xFFFF6D00))
-                                                    )
-                                                )
-                                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                                        ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            text = "Transfer",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                    }
+                                }
+                                
+                                if (isAdmin) {
+                                    Surface(
+                                        color = Color.White.copy(alpha = 0.12f),
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(42.dp)
+                                            .clickable { onOpenManageRoles() }
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
                                             Text(
-                                                text = "Recharge",
+                                                text = "Roles",
                                                 fontSize = 13.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = Color.White
                                             )
-                                            Spacer(modifier = Modifier.width(3.dp))
-                                            Icon(
-                                                imageVector = Icons.Default.ChevronRight,
-                                                contentDescription = null,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(14.dp)
-                                            )
-                                        }
-                                    } else {
-                                        // 1 and above: show the coins only, NO name Recharge!
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Coin3DIcon(size = 24.dp)
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = numberFormat.format(liveCoins),
-                                                fontSize = 17.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (isDark) Color(0xFFFFD54F) else Color(0xFFE65100)
-                                            )
                                         }
                                     }
-                                }
-                            }
-                        }
-                    }
-
-                    // Card 2: Income Card (Converts Diamonds to Coins)
-                    Surface(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(96.dp)
-                            .clickable { onOpenIncome() }
-                            .testTag("income_button"),
-                        shape = RoundedCornerShape(20.dp),
-                        color = Color.Transparent
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    Brush.linearGradient(
-                                        colors = if (isDark) listOf(Color(0xFF0A2234), Color(0xFF061420))
-                                        else listOf(Color(0xFFE0F7FA), Color(0xFFB2EBF2))
-                                    )
-                                )
-                                .padding(12.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    if (liveDiamonds <= 0) {
-                                        // When bal is 0: show the name Income only, no 0!
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(
-                                                    if (isDark) Color(0xFF00E5FF).copy(alpha = 0.25f)
-                                                    else Color(0xFF00ACC1).copy(alpha = 0.2f)
-                                                )
-                                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                                        ) {
+                                    
+                                    Surface(
+                                        color = Color.White.copy(alpha = 0.12f),
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(42.dp)
+                                            .clickable { onOpenAdminAnalytics() }
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
                                             Text(
-                                                text = "Income",
+                                                text = "Analytics",
                                                 fontSize = 13.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = if (isDark) Color(0xFF80D8FF) else Color(0xFF006064)
-                                            )
-                                            Spacer(modifier = Modifier.width(3.dp))
-                                            Icon(
-                                                imageVector = Icons.Default.ChevronRight,
-                                                contentDescription = null,
-                                                tint = if (isDark) Color(0xFF80D8FF) else Color(0xFF006064),
-                                                modifier = Modifier.size(14.dp)
-                                            )
-                                        }
-                                    } else {
-                                        // 1 and above: show the diamonds/income only, NO name Income!
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Diamond3DIcon(size = 24.dp, animated = true)
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = numberFormat.format(liveDiamonds),
-                                                fontSize = 17.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (isDark) Color(0xFF80D8FF) else Color(0xFF006064)
+                                                color = Color.White
                                             )
                                         }
                                     }
                                 }
-                                if (liveDiamonds <= 0) {
-                                    Diamond3DIcon(size = 36.dp, animated = true)
-                                }
                             }
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(90.dp))
             }
         }
 
-        // Lower Section on Main Screen Background
-        Column(
+        // Sticky Header with User's Name (Appears on scroll with smooth fade in / fade out)
+        AnimatedVisibility(
+            visible = scrollState.value > 60,
+            enter = fadeIn(animationSpec = androidx.compose.animation.core.tween(250)),
+            exit = fadeOut(animationSpec = androidx.compose.animation.core.tween(200)),
             modifier = Modifier
+                .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp)
-        ) {
-            // 4. BEAUTIFULLY REDESIGNED Admin & Seller Panel
-            if (isAdmin || isCoinSeller) {
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isDark) Color(0xFF131316) else Color.White
-                    ),
-                    border = BorderStroke(
-                        1.5.dp,
-                        if (isDark) Color(0xFF2E2E38) else Color(0xFFFFE082)
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 0.dp else 2.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        // Header row with modern gradient accent or badge
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            Color(0xFFFFEDE0)
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (isAdmin) {
-                                        Icon(
-                                            imageVector = Icons.Default.Shield,
-                                            contentDescription = "Admin Shield",
-                                            tint = QivoOrange,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    } else {
-                                        Coin3DIcon(size = 22.dp)
-                                    }
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = if (isAdmin) "Administration Hub" else "Coin Seller Panel",
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = colors.textPrimary
-                                    )
-                                    Text(
-                                        text = if (isAdmin) "Full executive authority & system tools" else "Authorized coin distribution point",
-                                        fontSize = 11.sp,
-                                        color = colors.textSecondary
-                                    )
-                                }
-                            }
-
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                if (isAdmin) {
-                                    Surface(
-                                        color = QivoOrange,
-                                        shape = RoundedCornerShape(8.dp)
-                                    ) {
-                                        Text(
-                                            text = "ADMIN",
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Black,
-                                            color = Color.White,
-                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-                                        )
-                                    }
-                                }
-
-                                if (isCoinSeller) {
-                                    Surface(
-                                        color = Color(0xFFFF6500),
-                                        shape = RoundedCornerShape(8.dp)
-                                    ) {
-                                        Text(
-                                            text = "SELLER",
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Black,
-                                            color = Color.White,
-                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        if (isAdmin) {
-                            // 3D Icon Grid for Admin Features (Row 1: Award Coins, Roles, Reports, Ads)
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                GridTile(
-                                    title = "Award Coins",
-                                    iconBg = if (isDark) Color(0xFF332612) else Color(0xFFFFF8E1),
-                                    textColor = colors.textPrimary,
-                                    iconContent = { AwardCoins3DIcon(size = 36.dp) },
-                                    onClick = onOpenAwardCoins
-                                )
-                                GridTile(
-                                    title = "Roles",
-                                    iconBg = if (isDark) Color(0xFF10283E) else Color(0xFFE0F2FE),
-                                    textColor = colors.textPrimary,
-                                    iconContent = { ManageRoles3DIcon(size = 36.dp) },
-                                    onClick = onOpenManageRoles
-                                )
-                                GridTile(
-                                    title = "Reports",
-                                    iconBg = if (isDark) Color(0xFF3B181E) else Color(0xFFFFEBEE),
-                                    textColor = colors.textPrimary,
-                                    iconContent = { ManageReports3DIcon(size = 36.dp) },
-                                    onClick = onOpenManageReports
-                                )
-                                GridTile(
-                                    title = "Ads",
-                                    iconBg = if (isDark) Color(0xFF382312) else Color(0xFFFFF3E0),
-                                    textColor = colors.textPrimary,
-                                    iconContent = { ManageAds3DIcon(size = 36.dp) },
-                                    onClick = onOpenManageAds
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(14.dp))
-
-                            // Row 2: Analytics
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.Start
-                            ) {
-                                GridTile(
-                                    title = "Analytics",
-                                    iconBg = if (isDark) Color(0xFF331600) else Color(0xFFFFF3E0),
-                                    textColor = colors.textPrimary,
-                                    iconContent = { AdminAnalytics3DIcon(size = 36.dp) },
-                                    onClick = onOpenAdminAnalytics
-                                )
-                            }
-                        } else {
-                            // Coin Seller Only - 3D Icon Tile
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.Start
-                            ) {
-                                GridTile(
-                                    title = "Transfer Coins",
-                                    iconBg = if (isDark) Color(0xFF331600) else Color(0xFFFFF3E0),
-                                    textColor = colors.textPrimary,
-                                    iconContent = { CoinSeller3DIcon(size = 36.dp) },
-                                    onClick = onOpenAwardCoins
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 4.1 OFFICIAL AGENT AGENCY MANAGEMENT PANEL (When isAgent == true)
-            if (isAgent) {
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onOpenAgency() }
-                        .testTag("agent_agency_panel_card"),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isDark) Color(0xFF1A1828) else Color(0xFFFFF9E6)
-                    ),
-                    border = BorderStroke(
-                        1.5.dp,
-                        QivoOrange
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 0.dp else 2.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(38.dp)
-                                        .clip(CircleShape)
-                                        .background(Brush.linearGradient(listOf(Color(0xFFFF9800), Color(0xFFFF3D00)))),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.SupervisorAccount,
-                                        contentDescription = "Agent Panel",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = "Agency Management Panel",
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = colors.textPrimary
-                                    )
-                                    Text(
-                                        text = "Manage Agency, Unique Code & Applications",
-                                        fontSize = 11.sp,
-                                        color = colors.textSecondary
-                                    )
-                                }
-                            }
-
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = QivoOrange
-                            ) {
-                                Text(
-                                    text = "AGENT",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Black,
-                                    color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = "Create your agency name, bio, upload logo, generate unique code, and review member join requests.",
-                            fontSize = 12.sp,
-                            color = colors.textSecondary
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Button(
-                            onClick = onOpenAgency,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = QivoOrange)
-                        ) {
-                            Icon(Icons.Default.SupervisorAccount, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Open Agency Dashboard →", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // 5. Grid Row 1: Tasks, Level, Blast, Store (Custom 3D Icons)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                GridTile(
-                    title = "Tasks",
-                    iconBg = if (isDark) Color(0xFF331600) else Color(0xFFFFF3E0),
-                    textColor = colors.textPrimary,
-                    iconContent = { TasksCenter3DIcon(size = 34.dp) }
-                ) {
-                    onOpenTaskCenter()
-                }
-                GridTile(
-                    title = "Level",
-                    iconBg = if (isDark) Color(0xFF332612) else Color(0xFFFFF8E1),
-                    textColor = colors.textPrimary,
-                    iconContent = { Level3DIcon(size = 34.dp, level = userLevelInfo.level) }
-                ) {
-                    onOpenLevel()
-                }
-                GridTile(
-                    title = "Blast",
-                    iconBg = if (isDark) Color(0xFF38181A) else Color(0xFFFFEBEE),
-                    textColor = colors.textPrimary,
-                    iconContent = { MessageBlast3DIcon(size = 34.dp) }
-                ) {
-                    onOpenMessageBlast()
-                }
-                GridTile(
-                    title = "Store",
-                    iconBg = if (isDark) Color(0xFF15293D) else Color(0xFFE3F2FD),
-                    textColor = colors.textPrimary,
-                    iconContent = { Store3DIcon(size = 34.dp) }
-                ) {
-                    onOpenStore()
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Grid Row 2: Bag
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Start
-            ) {
-                GridTile(
-                    title = "Bag",
-                    iconBg = if (isDark) Color(0xFF381525) else Color(0xFFFCE4EC),
-                    textColor = colors.textPrimary,
-                    iconContent = { Bag3DIcon(size = 34.dp) }
-                ) {
-                    onOpenBag()
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // 6. Section Title: "Other"
-            Text(
-                text = "Other",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = colors.textPrimary
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // 7. List Items: Level, Verification, Support, Agency (Female/Agent only), Coin Seller (Seller only), Settings
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = colors.cardBg),
-                border = BorderStroke(1.dp, colors.cardBorder),
-                elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 0.dp else 1.dp)
-            ) {
-                Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                    // Verification Row
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onOpenVerify() }
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isDark) Color(0xFF15293D) else Color(0xFFE3F2FD)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Verify3DIcon(size = 26.dp)
-                            }
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column {
-                                Text(
-                                    text = "Verification Center",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = colors.textPrimary
-                                )
-                                Text(
-                                    text = if (isVerified) "Account Verified (Gold Checkmark)" else "Get officially verified on Qivo",
-                                    fontSize = 12.sp,
-                                    color = if (isVerified) Color(0xFFFF8D00) else colors.textSecondary
-                                )
-                            }
-                        }
-
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                            contentDescription = "Go",
-                            tint = colors.textSecondary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-
-                    HorizontalDivider(color = colors.divider)
-
-                    // Support Row
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onOpenSupport() }
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isDark) Color(0xFF331600) else Color(0xFFFFF3E0)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Support3DIcon(size = 26.dp)
-                            }
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Text(
-                                text = "Support",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = colors.textPrimary
-                            )
-                        }
-
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                            contentDescription = "Go",
-                            tint = colors.textSecondary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-
-                    if (isAgent || isFemaleAccount) {
-                        HorizontalDivider(color = colors.divider)
-
-                        // Agency Center Row with 3D Icon
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onOpenAgency() }
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(38.dp)
-                                        .clip(CircleShape)
-                                        .background(if (isDark) Color(0xFF381533) else Color(0xFFFCE4EC)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Agency3DIcon(size = 28.dp)
-                                }
-                                Spacer(modifier = Modifier.width(14.dp))
-                                Column {
-                                    Text(
-                                        text = if (isAgent) "Agency Management" else "Agency Center",
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = colors.textPrimary
-                                    )
-                                    Text(
-                                        text = if (isAgent) "Manage official agency & members" else "Join an official agency with code",
-                                        fontSize = 12.sp,
-                                        color = colors.textSecondary
-                                    )
-                                }
-                            }
-
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                                contentDescription = "Go",
-                                tint = colors.textSecondary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-
-                    if (isCoinSeller) {
-                        HorizontalDivider(color = colors.divider)
-
-                        // Coin Seller Transfer Row with 3D Icon
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onOpenAwardCoins() }
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(38.dp)
-                                        .clip(CircleShape)
-                                        .background(if (isDark) Color(0xFF331600) else Color(0xFFFFF3E0)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CoinSeller3DIcon(size = 28.dp)
-                                }
-                                Spacer(modifier = Modifier.width(14.dp))
-                                Column {
-                                    Text(
-                                        text = "Coin Seller Portal",
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = colors.textPrimary
-                                    )
-                                    Text(
-                                        text = "Distribute coins from your seller balance",
-                                        fontSize = 12.sp,
-                                        color = colors.textSecondary
-                                    )
-                                }
-                            }
-
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                                contentDescription = "Go",
-                                tint = colors.textSecondary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-
-                    HorizontalDivider(color = colors.divider)
-
-                    // Settings Row
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onOpenSettings() }
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isDark) Color(0xFF222228) else Color(0xFFF3F4F6)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Settings3DIcon(size = 26.dp)
-                            }
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Text(
-                                text = "Settings",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = colors.textPrimary
-                            )
-                        }
-
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                            contentDescription = "Go",
-                            tint = colors.textSecondary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(28.dp))
-        }
-    }
-
-    // Sticky Header with User's Name (Appears on scroll with smooth fade in / fade out)
-    AnimatedVisibility(
-        visible = scrollState.value > 60,
-        enter = fadeIn(animationSpec = androidx.compose.animation.core.tween(250)),
-        exit = fadeOut(animationSpec = androidx.compose.animation.core.tween(200)),
-        modifier = Modifier
-            .align(Alignment.TopCenter)
-            .fillMaxWidth()
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .shadow(
-                    elevation = 6.dp,
-                    spotColor = Color(0xFFFF6500).copy(alpha = 0.35f)
-                )
-                .background(
-                    if (isDark) {
-                        Brush.horizontalGradient(
-                            listOf(
-                                Color(0xFF2E1500),
-                                Color(0xFF3E1E02),
-                                Color(0xFF4A2503),
-                                Color(0xFF2E1500)
-                            )
-                        )
-                    } else {
-                        Brush.horizontalGradient(
-                            listOf(
-                                Color(0xFFBF360C), // Deep Sunset Amber
-                                Color(0xFFE65100), // Rich Orange
-                                Color(0xFFFF6500), // Qivo Orange
-                                Color(0xFFFF8D00)  // Golden Orange
-                            )
-                        )
-                    }
-                )
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .statusBarsPadding()
-                    .height(52.dp)
-                    .padding(horizontal = 20.dp),
-                contentAlignment = Alignment.Center
+                    .shadow(
+                        elevation = 6.dp,
+                        spotColor = Color(0xFFFF6500).copy(alpha = 0.35f)
+                    )
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color(0xFF381A05),
+                                Color(0xFF241003),
+                                Color(0xFF140801),
+                                Color(0xFF381A05)
+                            )
+                        )
+                    )
             ) {
-                Text(
-                    text = if (liveName.isNotBlank()) liveName else "Me",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .height(52.dp)
+                        .padding(horizontal = 20.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (liveName.isNotBlank()) liveName else "Me",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     }
-}
 }
 
 @Composable

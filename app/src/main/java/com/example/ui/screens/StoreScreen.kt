@@ -109,7 +109,7 @@ fun StoreScreen(
     var showBagSheet by remember { mutableStateOf(false) }
     var ownedFrames by remember { mutableStateOf<List<com.example.data.UserOwnedFrame>>(emptyList()) }
 
-    // Sync live profile stats and owned frames on load
+    // Sync live profile stats, owned frames and owned special effects on load
     LaunchedEffect(Unit) {
         val s = UserSessionManager.getSession(context)
         session = s
@@ -143,7 +143,7 @@ fun StoreScreen(
                         text = "Store",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1E293B)
+                        color = Color.White
                     )
                 },
                 navigationIcon = {
@@ -151,7 +151,7 @@ fun StoreScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = Color(0xFF1E293B)
+                            tint = Color.White
                         )
                     }
                 },
@@ -190,36 +190,38 @@ fun StoreScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.White
+                    containerColor = Color(0xFF381A05)
                 )
             )
         },
-        containerColor = Color(0xFFF8FAFC)
+        containerColor = Color(0xFF381A05)
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Category Header: "Frames" (Active indicator)
+            // Category Header: "Frames" & "Special Effects"
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.White)
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .background(Color(0xFF381A05))
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(28.dp)
             ) {
+                // Tab 1: Frames
                 Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(vertical = 4.dp)
                 ) {
                     Text(
                         text = "Frames",
-                        fontSize = 20.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFF1E293B)
+                        color = Color.White
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    // Wavy/pill amber underline for selected tab
                     Box(
                         modifier = Modifier
                             .width(36.dp)

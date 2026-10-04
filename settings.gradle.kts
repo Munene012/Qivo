@@ -19,9 +19,10 @@ dependencyResolutionManagement {
   repositories {
     google()
     mavenCentral()
+    maven { url = uri("https://maven.zego.im") }
   }
 }
 
-rootProject.name = "QIVO"
+rootProject.name = "Qivo"
 
 include(":app")

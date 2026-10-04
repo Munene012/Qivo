@@ -92,7 +92,16 @@ fun AccountSecurityScreen(
     var isDeletingAccount by remember { mutableStateOf(false) }
 
     val session = remember { UserSessionManager.getSession(context) }
-    val effectiveEmail = userEmail.ifBlank { session?.email ?: "Unknown Email" }
+    var isFastAccount by remember {
+        mutableStateOf(
+            session?.isFastLoginAccount == true ||
+            UserSessionManager.isFastLoginAccount(context) ||
+            userEmail.contains("@fast.qivo.app", ignoreCase = true) ||
+            userEmail.contains("fast_", ignoreCase = true)
+        )
+    }
+    var currentEmail by remember { mutableStateOf(userEmail.ifBlank { session?.email ?: "Unknown Email" }) }
+    val effectiveEmail = currentEmail
     val effectiveNumericId = if (userNumericId > 0L) userNumericId else session?.numericId ?: 0L
     val effectiveName = userName.ifBlank { session?.name ?: "User" }
     val isGoogleAccount = effectiveEmail.endsWith("@gmail.com", ignoreCase = true) ||
@@ -100,6 +109,11 @@ fun AccountSecurityScreen(
 
     var showDeleteAccountDialog by remember { mutableStateOf(false) }
     var showPasswordInfoDialog by remember { mutableStateOf(false) }
+    var showLinkEmailDialog by remember { mutableStateOf(false) }
+    var linkEmailInput by remember { mutableStateOf("") }
+    var linkPasswordInput by remember { mutableStateOf("") }
+    var linkPasswordVisible by remember { mutableStateOf(false) }
+    var isLinkingEmail by remember { mutableStateOf(false) }
 
     BackHandler {
         onBackClick()
@@ -115,9 +129,24 @@ fun AccountSecurityScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.screenBg)
+            .background(Color(0xFF381A05))
             .testTag("account_security_screen")
     ) {
+        // Top Sunset Orange-Yellow Glow Overlay
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp)
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        listOf(
+                            Color(0x70E65100),
+                            Color(0x35FF9100),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -249,12 +278,70 @@ fun AccountSecurityScreen(
                 border = BorderStroke(1.dp, colors.cardBorder)
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
-                    Text(
-                        text = "Linked Credentials",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = colors.textPrimary
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Linked Credentials",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.textPrimary
+                        )
+
+                        if (isFastAccount) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFFFF9800).copy(alpha = 0.15f),
+                                border = BorderStroke(1.dp, Color(0xFFFF9800).copy(alpha = 0.5f))
+                            ) {
+                                Text(
+                                    text = "⚡ Fast Login",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFF9800),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    if (isFastAccount) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        // Prominent Link Email Banner for Fast Login users
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (isDark) Color(0xFF2E1C0A) else Color(0xFFFFF3E0),
+                            border = BorderStroke(1.dp, Color(0xFFFF9800).copy(alpha = 0.6f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Text(
+                                    text = "Link Email Address ✉️",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isDark) Color(0xFFFFB74D) else Color(0xFFE65100)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "This is a Fast Login guest account. Link a real email address and password so you can access your account on any device.",
+                                    fontSize = 12.sp,
+                                    color = colors.textSecondary,
+                                    lineHeight = 16.sp
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Button(
+                                    onClick = { showLinkEmailDialog = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800)),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth().height(40.dp)
+                                ) {
+                                    Text("Link Email Now", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color.White)
+                                }
+                            }
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(14.dp))
 
@@ -424,23 +511,152 @@ fun AccountSecurityScreen(
                         colors = colors
                     )
 
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
+                    if (session?.isAdmin != true) {
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = colors.divider)
 
-                    SecurityActionItem(
-                        icon = Icons.Default.DeleteForever,
-                        title = "Delete Account",
-                        subtitle = "Permanently remove your account and data",
-                        isDestructive = true,
-                        onClick = {
-                            showDeleteAccountDialog = true
-                        },
-                        colors = colors
-                    )
+                        SecurityActionItem(
+                            icon = Icons.Default.DeleteForever,
+                            title = "Delete Account",
+                            subtitle = "Permanently remove your account and data",
+                            isDestructive = true,
+                            onClick = {
+                                showDeleteAccountDialog = true
+                            },
+                            colors = colors
+                        )
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(28.dp))
         }
+    }
+
+    // Link Email Dialog for Fast Login Accounts
+    if (showLinkEmailDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!isLinkingEmail) showLinkEmailDialog = false },
+            title = {
+                Text(
+                    text = "Link Email Account ✉️",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = colors.textPrimary
+                )
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Enter your real email address and create a password to link this Fast Login account.",
+                        fontSize = 12.sp,
+                        color = colors.textSecondary,
+                        lineHeight = 16.sp
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    androidx.compose.material3.OutlinedTextField(
+                        value = linkEmailInput,
+                        onValueChange = { linkEmailInput = it },
+                        label = { Text("Email Address") },
+                        placeholder = { Text("e.g. user@example.com") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    androidx.compose.material3.OutlinedTextField(
+                        value = linkPasswordInput,
+                        onValueChange = { linkPasswordInput = it },
+                        label = { Text("Set Password") },
+                        placeholder = { Text("At least 6 characters") },
+                        singleLine = true,
+                        visualTransformation = if (linkPasswordVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { linkPasswordVisible = !linkPasswordVisible }) {
+                                Icon(
+                                    imageVector = if (linkPasswordVisible) Icons.Default.PhoneAndroid else Icons.Default.Lock,
+                                    contentDescription = "Toggle Password",
+                                    tint = colors.textSecondary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val cleanEmail = linkEmailInput.trim()
+                        val cleanPass = linkPasswordInput.trim()
+                        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()) {
+                            AppToast.show("Please enter a valid email address.")
+                            return@Button
+                        }
+                        if (cleanPass.length < 6) {
+                            AppToast.show("Password must be at least 6 characters long.")
+                            return@Button
+                        }
+
+                        isLinkingEmail = true
+                        scope.launch {
+                            try {
+                                val currentUserId = userId.ifBlank { session?.userId ?: "" }
+                                val result = com.example.data.SupabaseAuthService().linkFastAccountToEmail(
+                                    userId = currentUserId,
+                                    newEmail = cleanEmail,
+                                    newPassword = cleanPass,
+                                    context = context
+                                )
+
+                                when (result) {
+                                    is com.example.data.AuthResult.Success -> {
+                                        currentEmail = cleanEmail
+                                        isFastAccount = false
+                                        showLinkEmailDialog = false
+                                        AppToast.show("Account linked successfully to $cleanEmail! 🚀", isLong = true)
+                                    }
+                                    is com.example.data.AuthResult.Error -> {
+                                        AppToast.show(result.message, isLong = true)
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                AppToast.show("Error linking account: ${e.message}")
+                            } finally {
+                                isLinkingEmail = false
+                            }
+                        }
+                    },
+                    enabled = !isLinkingEmail,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    if (isLinkingEmail) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
+                    Text("Save & Link", fontWeight = FontWeight.Bold, color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showLinkEmailDialog = false },
+                    enabled = !isLinkingEmail
+                ) {
+                    Text("Cancel", color = colors.textSecondary)
+                }
+            },
+            containerColor = colors.cardBg,
+            shape = RoundedCornerShape(20.dp)
+        )
     }
 
     // Password Info Dialog

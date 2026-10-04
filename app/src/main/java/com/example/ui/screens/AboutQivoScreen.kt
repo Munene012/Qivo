@@ -160,7 +160,7 @@ fun AboutQivoScreen(
                     Spacer(modifier = Modifier.height(14.dp))
 
                     Text(
-                        text = "QIVO",
+                        text = "Qivo",
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Black,
                         color = colors.textPrimary,

@@ -59,13 +59,13 @@ private fun android.content.Context.findActivity(): Activity? {
 
 @Composable
 fun MyApplicationTheme(
-  darkTheme: Boolean = AppThemeManager.isDarkModeState.value,
+  darkTheme: Boolean = false,
   // Dynamic color is available on Android 12+
   dynamicColor: Boolean = false,
   content: @Composable () -> Unit,
 ) {
-  val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
-  val appColors = if (darkTheme) darkAppColors() else lightAppColors()
+  val colorScheme = DarkColorScheme
+  val appColors = darkAppColors()
 
   val view = LocalView.current
   if (!view.isInEditMode) {

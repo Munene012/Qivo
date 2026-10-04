@@ -63,10 +63,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -103,6 +105,9 @@ fun AwardCoinsScreen(
     var customCoinAmount by remember { mutableStateOf("") }
     var transferReason by remember { mutableStateOf("") }
     var isSubmitting by remember { mutableStateOf(false) }
+    var showCelebrationDialog by remember { mutableStateOf(false) }
+    var awardedAmount by remember { mutableLongStateOf(0L) }
+    var awardedRecipientName by remember { mutableStateOf("") }
 
     BackHandler {
         onBackClick()
@@ -486,6 +491,9 @@ fun AwardCoinsScreen(
                         isSubmitting = false
 
                         if (result.first) {
+                            awardedAmount = finalAmount
+                            awardedRecipientName = target.name
+                            showCelebrationDialog = true
                             AppToast.show(result.second, isLong = true)
                             currentBalance = profileService.fetchCoins(currentUserId)
                             targetUser = profileService.fetchProfileByNumericId(target.numericId, forceRefresh = true)
@@ -524,6 +532,102 @@ fun AwardCoinsScreen(
             }
 
             Spacer(modifier = Modifier.height(30.dp))
+        }
+
+        // Floating Celebration Dialog Popup in Middle of Screen
+        if (showCelebrationDialog) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.7f))
+                    .clickable(enabled = false) {},
+                contentAlignment = Alignment.Center
+            ) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth(0.85f)
+                        .padding(16.dp),
+                    shape = RoundedCornerShape(28.dp),
+                    colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF1E1E28) else Color.White),
+                    border = BorderStroke(2.dp, Color(0xFFFFD600)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(90.dp)
+                                .clip(CircleShape)
+                                .background(Brush.verticalGradient(listOf(Color(0xFFFFD600), Color(0xFFFF9800)))),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Coin3DIcon(size = 56.dp)
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Text(
+                            text = "🎉 Celebration! 🎉",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFFFFD600),
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = "Successfully Awarded",
+                            fontSize = 14.sp,
+                            color = colors.textSecondary,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Text(
+                            text = "+$awardedAmount Coins",
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFFFF9800),
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = "To: $awardedRecipientName",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.textPrimary,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        Button(
+                            onClick = { showCelebrationDialog = false },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                                .testTag("celebration_ok_btn"),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD600)),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Text(
+                                text = "Awesome! 🌟",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.Black
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -51,6 +51,9 @@ import com.example.ui.components.InAppToastHost
 import com.example.ui.screens.CreateAccountScreen
 import com.example.ui.screens.CustomerSupportScreen
 import com.example.ui.screens.EmailAuthScreen
+import com.example.ui.screens.PasswordLoginScreen
+import com.example.ui.screens.OtpVerificationScreen
+import com.example.ui.screens.SetPasswordScreen
 import com.example.ui.screens.MainBottomNavScaffold
 import com.example.ui.screens.SplashScreen
 import com.example.ui.screens.UploadAvatarScreen
@@ -60,11 +63,18 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+object AppStartupState {
+    var isFirstLaunchInProcess = true
+}
+
 sealed class Screen {
     object Splash : Screen()
     object Welcome : Screen()
     object CustomerSupport : Screen()
     object EmailAuth : Screen()
+    data class OtpVerification(val email: String) : Screen()
+    data class PasswordLogin(val email: String) : Screen()
+    data class SetPassword(val email: String, val userId: String, val accessToken: String? = null) : Screen()
     data class CreateAccount(
         val email: String,
         val userId: String,
@@ -155,7 +165,40 @@ class MainActivity : ComponentActivity() {
 fun QivoApp(notificationIntent: Intent? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var currentScreen by remember { mutableStateOf<Screen>(Screen.Splash) }
+
+    val initialScreen = remember {
+        if (AppStartupState.isFirstLaunchInProcess) {
+            Screen.Splash
+        } else {
+            val session = UserSessionManager.getSession(context)
+            if (session != null && session.userId.isNotBlank()) {
+                val isNewAccount = !session.isProfileCompleted || session.gender.isBlank()
+                if (isNewAccount) {
+                    Screen.CreateAccount(
+                        email = session.email ?: "",
+                        userId = session.userId,
+                        initialName = session.name ?: "",
+                        initialAvatarUrl = session.avatarUrl ?: "",
+                        initialCountry = session.country?.ifBlank { "Kenya" } ?: "Kenya"
+                    )
+                } else {
+                    Screen.MainApp(
+                        email = session.email ?: "",
+                        userId = session.userId,
+                        name = session.name ?: "User",
+                        gender = session.gender ?: "",
+                        country = session.country ?: "United States",
+                        avatarUrl = session.avatarUrl ?: "",
+                        numericId = session.numericId
+                    )
+                }
+            } else {
+                Screen.Welcome
+            }
+        }
+    }
+
+    var currentScreen by remember { mutableStateOf<Screen>(initialScreen) }
     var isAuthenticatingOAuth by remember { mutableStateOf(false) }
     val authService = remember { com.example.data.SupabaseAuthService() }
 
@@ -314,6 +357,7 @@ fun QivoApp(notificationIntent: Intent? = null) {
             is Screen.Splash -> {
                 SplashScreen(
                     onSplashFinished = { session ->
+                        AppStartupState.isFirstLaunchInProcess = false
                         try {
                             if (session != null && !session.userId.isNullOrBlank()) {
                                 val isNewAccount = !session.isProfileCompleted || session.gender.isBlank()
@@ -397,37 +441,78 @@ fun QivoApp(notificationIntent: Intent? = null) {
                     onNavigateBack = {
                         currentScreen = Screen.Welcome
                     },
-                    onAuthSuccess = { email, userId ->
-                        // Persistent login: session saved in EmailAuthScreen
-                        val session = UserSessionManager.getSession(context)
-                        val isNew = session == null || !session.isProfileCompleted || session.gender.isBlank()
-                        if (isNew) {
-                            val emailName = if (email.contains("@")) email.substringBefore("@") else ""
-                            val detectedCountry = session?.country?.ifBlank { "Kenya" } ?: "Kenya"
-                            currentScreen = Screen.CreateAccount(
-                                email = email,
-                                userId = userId,
-                                initialName = if (!session?.name.isNullOrBlank() && session?.name != "QIVO User" && session?.name != "User") session!!.name else emailName,
-                                initialAvatarUrl = session?.avatarUrl ?: "",
-                                initialCountry = detectedCountry
-                            )
-                        } else {
-                            currentScreen = Screen.MainApp(
-                                email = email,
-                                userId = userId,
-                                name = session.name,
-                                gender = session.gender,
-                                country = session.country,
-                                avatarUrl = session.avatarUrl,
-                                numericId = session.numericId
-                            )
-                        }
+                    onNavigateToOtp = { email ->
+                        currentScreen = Screen.OtpVerification(email)
                     },
-                    onNavigateToCreateAccount = { email, userId, initialName ->
+                    onNavigateToPassword = { email ->
+                        currentScreen = Screen.PasswordLogin(email)
+                    }
+                )
+            }
+            is Screen.PasswordLogin -> {
+                BackHandler {
+                    currentScreen = Screen.EmailAuth
+                }
+                PasswordLoginScreen(
+                    email = screen.email,
+                    onNavigateBack = {
+                        currentScreen = Screen.EmailAuth
+                    },
+                    onAuthSuccess = { email: String, userId: String ->
+                        val session = UserSessionManager.getSession(context)
+                        currentScreen = Screen.MainApp(
+                            email = email,
+                            userId = userId,
+                            name = session?.name ?: "User",
+                            gender = session?.gender ?: "",
+                            country = session?.country ?: "Kenya",
+                            avatarUrl = session?.avatarUrl ?: "",
+                            numericId = session?.numericId ?: 0L
+                        )
+                    }
+                )
+            }
+            is Screen.OtpVerification -> {
+                BackHandler {
+                    currentScreen = Screen.EmailAuth
+                }
+                OtpVerificationScreen(
+                    email = screen.email,
+                    onNavigateBack = {
+                        currentScreen = Screen.EmailAuth
+                    },
+                    onOtpVerified = { verifiedEmail, userId, accessToken ->
+                        // Navigate to set password screen after verification
+                        currentScreen = Screen.SetPassword(
+                            email = verifiedEmail,
+                            userId = userId,
+                            accessToken = accessToken
+                        )
+                    }
+                )
+            }
+            is Screen.SetPassword -> {
+                BackHandler {
+                    currentScreen = Screen.OtpVerification(screen.email)
+                }
+                SetPasswordScreen(
+                    email = screen.email,
+                    userId = screen.userId,
+                    accessToken = screen.accessToken,
+                    onNavigateBack = {
+                        currentScreen = Screen.OtpVerification(screen.email)
+                    },
+                    onPasswordSet = { email, userId ->
+                        // Navigate to user details setup
+                        val session = UserSessionManager.getSession(context)
+                        val emailName = if (email.contains("@")) email.substringBefore("@") else ""
+                        val detectedCountry = session?.country?.ifBlank { "Kenya" } ?: "Kenya"
                         currentScreen = Screen.CreateAccount(
                             email = email,
                             userId = userId,
-                            initialName = initialName
+                            initialName = if (!session?.name.isNullOrBlank() && session?.name != "QIVO User" && session?.name != "User") session!!.name else emailName,
+                            initialAvatarUrl = session?.avatarUrl ?: "",
+                            initialCountry = detectedCountry
                         )
                     }
                 )

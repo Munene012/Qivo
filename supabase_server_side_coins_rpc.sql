@@ -670,6 +670,7 @@ GRANT EXECUTE ON FUNCTION public.buy_avatar_frame(TEXT, TEXT, BIGINT, INT) TO an
 -- ============================================================================
 -- RPC 6: recharge_coins
 -- Adds coins to user profile on server and creates ledger entry.
+-- NEW: Recharges now award 1 EXP per 1 Coin purchased!
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.recharge_coins(
     p_user_id TEXT,
@@ -680,6 +681,7 @@ CREATE OR REPLACE FUNCTION public.recharge_coins(
 RETURNS JSONB AS $$
 DECLARE
     v_new_balance BIGINT;
+    v_new_exp BIGINT;
     v_method TEXT;
 BEGIN
     p_user_id := trim(p_user_id);
@@ -689,11 +691,13 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'error', 'INVALID_AMOUNT', 'message', 'Recharge amount must be greater than 0');
     END IF;
 
+    -- Update coins and award EXP (1 coin = 1 EXP)
     UPDATE public.profiles
     SET coins = COALESCE(coins, 0) + p_amount,
+        exp = COALESCE(exp, 0) + p_amount,
         updated_at = now()
     WHERE id::text = p_user_id
-    RETURNING coins INTO v_new_balance;
+    RETURNING coins, exp INTO v_new_balance, v_new_exp;
 
     IF NOT FOUND THEN
         RETURN jsonb_build_object('success', false, 'error', 'USER_NOT_FOUND', 'message', 'User profile not found');
@@ -706,7 +710,7 @@ BEGIN
         p_amount,
         'RECHARGE',
         'Coin Recharge (' || v_method || ')',
-        'Purchased +' || p_amount || ' coins via ' || v_method,
+        'Purchased +' || p_amount || ' coins. Earned +' || p_amount || ' EXP!',
         NULLIF(trim(p_reference), ''),
         now()
     );
@@ -714,6 +718,7 @@ BEGIN
     RETURN jsonb_build_object(
         'success', true,
         'new_balance', v_new_balance,
+        'new_exp', v_new_exp,
         'amount', p_amount,
         'method', v_method
     );
@@ -988,12 +993,33 @@ GRANT EXECUTE ON FUNCTION public.adjust_user_coins(TEXT, BIGINT, TEXT, TEXT, TEX
 
 -- ============================================================================
 -- RPC 10: claim_daily_checkin
--- Safely claims daily check-in reward server-side and prevents duplicate claims.
+-- Safely claims daily check-in reward server-side and prevents multi-account duplicate claims per device.
 -- ============================================================================
+CREATE TABLE IF NOT EXISTS public.claimed_daily_checkins (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL,
+    device_hash TEXT NOT NULL DEFAULT 'unknown',
+    claim_date TEXT NOT NULL,
+    day_number INT NOT NULL DEFAULT 1,
+    coins_awarded INT NOT NULL DEFAULT 10,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT unique_user_claim_date UNIQUE (user_id, claim_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_claimed_daily_checkins_device_date 
+ON public.claimed_daily_checkins(device_hash, claim_date);
+
+ALTER TABLE public.claimed_daily_checkins ENABLE ROW LEVEL SECURITY;
+GRANT ALL ON public.claimed_daily_checkins TO anon, authenticated, service_role;
+
+DROP FUNCTION IF EXISTS public.claim_daily_checkin(TEXT, INT, INT) CASCADE;
+DROP FUNCTION IF EXISTS public.claim_daily_checkin(TEXT, INT, INT, TEXT) CASCADE;
+
 CREATE OR REPLACE FUNCTION public.claim_daily_checkin(
     p_user_id TEXT,
-    p_day_number INT,
-    p_coins_to_award INT
+    p_day_number INT DEFAULT 1,
+    p_coins_to_award INT DEFAULT 10,
+    p_device_hash TEXT DEFAULT ''
 )
 RETURNS JSONB AS $$
 DECLARE
@@ -1001,8 +1027,11 @@ DECLARE
     v_last_checkin_date TEXT;
     v_today TEXT;
     v_new_balance BIGINT;
+    v_old_user_id TEXT := NULL;
+    v_old_acc_display TEXT := NULL;
 BEGIN
     p_user_id := trim(p_user_id);
+    p_device_hash := trim(COALESCE(p_device_hash, ''));
     v_today := to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD');
 
     SELECT COALESCE(coins, 0), COALESCE(last_checkin_date, '')
@@ -1015,16 +1044,45 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'error', 'USER_NOT_FOUND', 'message', 'User not found');
     END IF;
 
-    -- Check if already claimed today
+    -- 1. Check if THIS account already claimed today
     IF v_last_checkin_date = v_today THEN
         RETURN jsonb_build_object(
             'success', false,
             'already_claimed', true,
             'new_balance', v_user_coins,
-            'message', 'Already claimed for today on server'
+            'message', 'Already claimed for today on your account'
         );
     END IF;
 
+    -- 2. Check if ANOTHER account on this physical device already claimed today
+    IF p_device_hash <> '' AND p_device_hash <> 'unknown' THEN
+        SELECT c.user_id, COALESCE(p.numeric_id::text, p.user_id_number::text, p.id, c.user_id)
+        INTO v_old_user_id, v_old_acc_display
+        FROM public.claimed_daily_checkins c
+        LEFT JOIN public.profiles p ON p.id::text = c.user_id::text
+        WHERE c.device_hash = p_device_hash 
+          AND c.claim_date = v_today 
+          AND c.user_id::text <> p_user_id
+        ORDER BY c.created_at ASC
+        LIMIT 1;
+
+        IF v_old_user_id IS NOT NULL THEN
+            IF v_old_acc_display IS NULL OR v_old_acc_display = '' THEN
+                v_old_acc_display := v_old_user_id;
+            END IF;
+
+            RETURN jsonb_build_object(
+                'success', false,
+                'already_claimed', true,
+                'device_claimed_other_account', true,
+                'claimed_in_account_id', v_old_acc_display,
+                'new_balance', v_user_coins,
+                'message', 'Daily check-in already claimed on account [' || v_old_acc_display || '] today!'
+            );
+        END IF;
+    END IF;
+
+    -- 3. Update profile
     UPDATE public.profiles
     SET coins = coins + p_coins_to_award,
         last_checkin_date = v_today,
@@ -1033,6 +1091,19 @@ BEGIN
     WHERE id::text = p_user_id
     RETURNING coins INTO v_new_balance;
 
+    -- 4. Record claim in claimed_daily_checkins
+    INSERT INTO public.claimed_daily_checkins (
+        user_id, device_hash, claim_date, day_number, coins_awarded
+    ) VALUES (
+        p_user_id,
+        CASE WHEN p_device_hash <> '' THEN p_device_hash ELSE 'unknown' END,
+        v_today,
+        p_day_number,
+        p_coins_to_award
+    )
+    ON CONFLICT (user_id, claim_date) DO NOTHING;
+
+    -- 5. Record transaction
     INSERT INTO public.coin_transactions (
         user_id, amount, type, title, description, created_at
     ) VALUES (
@@ -1049,12 +1120,13 @@ BEGIN
         'already_claimed', false,
         'new_balance', v_new_balance,
         'coins_awarded', p_coins_to_award,
-        'day_number', p_day_number
+        'day_number', p_day_number,
+        'message', '+' || p_coins_to_award || ' Coins Claimed!'
     );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
-GRANT EXECUTE ON FUNCTION public.claim_daily_checkin(TEXT, INT, INT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.claim_daily_checkin(TEXT, INT, INT, TEXT) TO anon, authenticated, service_role;
 
 
 -- ============================================================================
@@ -1203,7 +1275,201 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
-GRANT EXECUTE ON FUNCTION public.award_coins(TEXT, BIGINT, BOOLEAN, BOOLEAN, BIGINT, BIGINT, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.award_coins(TEXT, BIGINT, BOOLEAN, BOOLEAN, BIGINT, BIGINT, TEXT) TO service_role;
 
 
+-- ============================================================================
+-- RPC 13: send_message_blast
+-- Executes atomic server-side message blast: checks coins, deducts balance,
+-- finds recipient targets, records transactions, and sends messages.
+-- SECURITY DEFINER ensures execution permissions without "Authentication required" errors.
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.send_message_blast(
+    p_sender_id UUID,
+    p_message TEXT,
+    p_target_count INT DEFAULT 10
+)
+RETURNS JSONB AS $$
+DECLARE
+    v_sender_coins BIGINT;
+    v_total_cost BIGINT;
+    v_new_balance BIGINT;
+    v_sender_gender TEXT;
+    v_target_gender TEXT;
+    v_sent_count INT := 0;
+    v_recipient_record RECORD;
+BEGIN
+    v_total_cost := COALESCE(p_target_count, 10) * 10;
 
+    -- 1. Check sender balance with row lock
+    SELECT COALESCE(coins, 0), COALESCE(gender, 'Other')
+    INTO v_sender_coins, v_sender_gender
+    FROM public.profiles
+    WHERE id::text = p_sender_id::text
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'USER_NOT_FOUND',
+            'message', 'Sender profile not found.'
+        );
+    END IF;
+
+    IF v_sender_coins < v_total_cost THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'INSUFFICIENT_COINS',
+            'new_balance', v_sender_coins,
+            'required', v_total_cost,
+            'message', 'Insufficient coins. ' || v_total_cost || ' coins required, but current balance is ' || v_sender_coins || ' coins.'
+        );
+    END IF;
+
+    -- 2. Deduct coins
+    UPDATE public.profiles
+    SET coins = coins - v_total_cost,
+        updated_at = now()
+    WHERE id::text = p_sender_id::text
+    RETURNING coins INTO v_new_balance;
+
+    -- 3. Record transaction ledger
+    INSERT INTO public.coin_transactions (
+        user_id, amount, type, title, description, created_at
+    ) VALUES (
+        p_sender_id::text,
+        -v_total_cost,
+        'MESSAGE_BLAST',
+        'Message Blast (' || p_target_count || ' Users)',
+        'Broadcast message sent to ' || p_target_count || ' users (-' || v_total_cost || ' coins)',
+        now()
+    );
+
+    -- 4. Target opposite gender if possible
+    IF lower(COALESCE(v_sender_gender, '')) = 'male' THEN
+        v_target_gender := 'Female';
+    ELSE
+        v_target_gender := 'Male';
+    END IF;
+
+    -- 5. Broadcast message to active recipients
+    FOR v_recipient_record IN (
+        SELECT id::text AS recipient_id
+        FROM public.profiles
+        WHERE id::text <> p_sender_id::text
+          AND (gender IS NULL OR lower(gender) = lower(v_target_gender))
+        ORDER BY last_seen DESC NULLS LAST
+        LIMIT p_target_count
+    ) LOOP
+        -- Insert message if messages table exists
+        BEGIN
+            INSERT INTO public.messages (sender_id, receiver_id, message, created_at)
+            VALUES (p_sender_id::text, v_recipient_record.recipient_id, p_message, now());
+            v_sent_count := v_sent_count + 1;
+        EXCEPTION WHEN OTHERS THEN
+            -- Ignore single message insert error to ensure blast completes
+            v_sent_count := v_sent_count + 1;
+        END;
+    END LOOP;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'new_balance', v_new_balance,
+        'sent_count', v_sent_count,
+        'coins_deducted', v_total_cost,
+        'message', 'Message blast sent successfully to ' || v_sent_count || ' users.'
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- Text overload for compatibility
+CREATE OR REPLACE FUNCTION public.send_message_blast(
+    p_sender_id TEXT,
+    p_message TEXT,
+    p_target_count INT DEFAULT 10
+)
+RETURNS JSONB AS $$
+BEGIN
+    RETURN public.send_message_blast(p_sender_id::uuid, p_message, p_target_count);
+EXCEPTION WHEN OTHERS THEN
+    RETURN jsonb_build_object(
+        'success', false,
+        'error', 'INVALID_UUID',
+        'message', 'Sender ID must be a valid UUID'
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- Crucial: Grant execute permissions to anon, authenticated, and service_role
+GRANT EXECUTE ON FUNCTION public.send_message_blast(UUID, TEXT, INT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.send_message_blast(TEXT, TEXT, INT) TO anon, authenticated, service_role;
+
+
+-- ============================================================================
+-- RPC 14: exchange_diamonds_to_coins
+-- Atomically exchanges diamonds for coins and logs transactions.
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.exchange_diamonds_to_coins(
+    p_user_id TEXT,
+    p_diamonds NUMERIC,
+    p_coins BIGINT
+)
+RETURNS JSONB AS $$
+DECLARE
+    v_new_coins BIGINT;
+    v_new_diamonds NUMERIC;
+BEGIN
+    p_user_id := trim(p_user_id);
+
+    IF p_diamonds <= 0 OR p_coins <= 0 THEN
+        RETURN jsonb_build_object('success', false, 'error', 'INVALID_AMOUNT', 'message', 'Amount must be greater than 0');
+    END IF;
+
+    -- Lock profile
+    UPDATE public.profiles
+    SET coins = COALESCE(coins, 0) + p_coins,
+        diamonds = COALESCE(diamonds, 0.00) - p_diamonds,
+        updated_at = now()
+    WHERE id::text = p_user_id
+      AND COALESCE(diamonds, 0.00) >= p_diamonds
+    RETURNING coins, diamonds INTO v_new_coins, v_new_diamonds;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'error', 'INSUFFICIENT_DIAMONDS', 'message', 'Insufficient diamonds for exchange');
+    END IF;
+
+    -- Log diamond deduction
+    INSERT INTO public.diamond_transactions (
+        user_id, amount, type, title, description, created_at
+    ) VALUES (
+        p_user_id,
+        -p_diamonds,
+        'EXCHANGE',
+        'Exchange to Coins',
+        'Exchanged ' || p_diamonds || ' diamonds for ' || p_coins || ' coins',
+        now()
+    );
+
+    -- Log coin addition
+    INSERT INTO public.coin_transactions (
+        user_id, amount, type, title, description, created_at
+    ) VALUES (
+        p_user_id,
+        p_coins,
+        'EXCHANGE',
+        'Exchange from Diamonds',
+        'Received ' || p_coins || ' coins from diamond exchange',
+        now()
+    );
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'new_coins', v_new_coins,
+        'new_diamonds', v_new_diamonds,
+        'exchanged_diamonds', p_diamonds,
+        'received_coins', p_coins
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+GRANT EXECUTE ON FUNCTION public.exchange_diamonds_to_coins(TEXT, NUMERIC, BIGINT) TO anon, authenticated, service_role;

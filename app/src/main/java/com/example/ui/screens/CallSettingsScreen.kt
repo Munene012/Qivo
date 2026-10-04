@@ -86,19 +86,39 @@ fun CallSettingsScreen(
     }
 
     val isDark = true
-    val bgColor = if (isDark) Color(0xFF0F0E17) else Color(0xFFF8F9FA)
-    val cardBg = if (isDark) Color(0xFF1B1A26) else Color.White
-    val textPrimary = if (isDark) Color.White else Color(0xFF1E293B)
-    val textSecondary = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)
+    val bgColor = Color(0xFF381A05)
+    val cardBg = Color(0xFF151724)
+    val textPrimary = Color.White
+    val textSecondary = Color(0xFFB0ACC0)
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(bgColor)
-            .statusBarsPadding()
-            .navigationBarsPadding()
             .testTag("call_settings_screen")
     ) {
+        // Top Sunset Orange-Yellow Glow Overlay
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp)
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        listOf(
+                            Color(0x70E65100),
+                            Color(0x35FF9100),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+        ) {
         // Top Navigation Bar
         Row(
             modifier = Modifier
@@ -313,9 +333,10 @@ fun CallSettingsScreen(
         }
     }
 }
+}
 
 @Composable
-private fun DndCallSettingCard(
+fun DndCallSettingCard(
     title: String,
     subtitle: String,
     activeNotice: String,
@@ -445,7 +466,7 @@ private fun DndCallSettingCard(
 }
 
 @Composable
-private fun DndRuleBullet(
+fun DndRuleBullet(
     icon: ImageVector,
     iconTint: Color,
     title: String,

@@ -203,11 +203,55 @@ class SupabaseAgencyService {
     ): Pair<Boolean, Agency?> {
         return withContext(Dispatchers.IO) {
             try {
+                val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+                val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+
+                if (baseUrl.isEmpty() || apiKey.isEmpty()) {
+                    Log.e("SupabaseAgencyService", "Supabase configuration is missing. Cannot create agency on server.")
+                    return@withContext Pair(false, null)
+                }
+
+                val authHeader = getAuthHeader()
+                if (authHeader.isBlank()) {
+                    Log.e("SupabaseAgencyService", "User auth token is missing. Cannot create agency on server.")
+                    return@withContext Pair(false, null)
+                }
+
                 val agencyId = UUID.randomUUID().toString()
                 val agencyCode = generateUniqueAgencyCode()
                 val isoDate = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
                     timeZone = java.util.TimeZone.getTimeZone("UTC")
                 }.format(Date())
+
+                // 1. Insert into agencies table on Supabase server
+                val bodyJson = JSONObject().apply {
+                    put("id", agencyId)
+                    put("owner_id", ownerId)
+                    put("agency_code", agencyCode)
+                    put("agency_name", agencyName.trim())
+                    put("description", description.trim())
+                    put("logo_url", logoUrl.trim())
+                    put("status", "ACTIVE")
+                    put("created_at", isoDate)
+                }.toString()
+
+                val req = Request.Builder()
+                    .url("$baseUrl/rest/v1/agencies")
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", authHeader)
+                    .addHeader("Content-Type", "application/json")
+                    .addHeader("Prefer", "return=representation")
+                    .post(bodyJson.toRequestBody(jsonMediaType))
+                    .build()
+
+                val resp = client.newCall(req).execute()
+                val respBodyStr = resp.body?.string() ?: ""
+                if (!resp.isSuccessful) {
+                    Log.e("SupabaseAgencyService", "Create agency failed on Supabase server: ${resp.code} - $respBodyStr")
+                    resp.close()
+                    return@withContext Pair(false, null)
+                }
+                resp.close()
 
                 val agency = Agency(
                     id = agencyId,
@@ -221,12 +265,43 @@ class SupabaseAgencyService {
                     createdAt = isoDate
                 )
 
-                // Save to memory
-                memoryAgencies[agencyId] = agency
+                // 2. Insert owner into agency_members on Supabase server
+                val agentMemberId = UUID.randomUUID().toString()
+                val memberBody = JSONObject().apply {
+                    put("id", agentMemberId)
+                    put("agency_id", agencyId)
+                    put("agency_name", agency.agencyName)
+                    put("agency_code", agency.agencyCode)
+                    put("user_id", ownerId)
+                    put("user_numeric_id", agentProfile?.numericId ?: 0L)
+                    put("user_name", agentProfile?.name?.ifBlank { "Agent" } ?: "Agent")
+                    put("user_avatar_url", agentProfile?.avatarUrl ?: "")
+                    put("role", "OWNER")
+                    put("status", "APPROVED")
+                    put("joined_at", isoDate)
+                }.toString()
 
-                // Add Agent as primary member in memory
+                val memberReq = Request.Builder()
+                    .url("$baseUrl/rest/v1/agency_members")
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", authHeader)
+                    .addHeader("Content-Type", "application/json")
+                    .post(memberBody.toRequestBody(jsonMediaType))
+                    .build()
+
+                val memberResp = client.newCall(memberReq).execute()
+                val memberRespBodyStr = memberResp.body?.string() ?: ""
+                if (!memberResp.isSuccessful) {
+                    Log.e("SupabaseAgencyService", "Create agency owner member failed on Supabase server: ${memberResp.code} - $memberRespBodyStr")
+                    memberResp.close()
+                    return@withContext Pair(false, null)
+                }
+                memberResp.close()
+
+                // Save to memory cache only after successful server creation
+                memoryAgencies[agencyId] = agency
                 val agentMember = AgencyMember(
-                    id = UUID.randomUUID().toString(),
+                    id = agentMemberId,
                     agencyId = agencyId,
                     agencyName = agency.agencyName,
                     agencyCode = agency.agencyCode,
@@ -241,59 +316,25 @@ class SupabaseAgencyService {
                 )
                 memoryMembers[agencyId] = mutableListOf(agentMember)
 
-                val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
-                val apiKey = SupabaseConfig.supabaseAnonKey.trim()
-
-                if (baseUrl.isNotEmpty() && apiKey.isNotEmpty()) {
-                    val authHeader = getAuthHeader()
-
-                    // 1. Insert into agencies table
-                    val bodyJson = JSONObject().apply {
-                        put("id", agencyId)
-                        put("owner_id", ownerId)
-                        put("agency_code", agencyCode)
-                        put("agency_name", agency.agencyName)
-                        put("description", agency.description)
-                        put("logo_url", agency.logoUrl)
-                        put("status", "ACTIVE")
-                        put("created_at", isoDate)
+                // Update profiles table: set is_agent = true
+                try {
+                    val updateUrl = "$baseUrl/rest/v1/profiles?id=eq.$ownerId"
+                    val updateBody = JSONObject().apply {
+                        put("is_agent", true)
                     }.toString()
-
-                    val req = Request.Builder()
-                        .url("$baseUrl/rest/v1/agencies")
+                    val updateReq = Request.Builder()
+                        .url(updateUrl)
                         .addHeader("apikey", apiKey)
                         .addHeader("Authorization", authHeader)
                         .addHeader("Content-Type", "application/json")
-                        .addHeader("Prefer", "return=representation")
-                        .post(bodyJson.toRequestBody(jsonMediaType))
+                        .addHeader("Prefer", "return=minimal")
+                        .patch(updateBody.toRequestBody(jsonMediaType))
                         .build()
-
-                    client.newCall(req).execute().close()
-
-                    // 2. Insert owner into agency_members
-                    val memberBody = JSONObject().apply {
-                        put("id", agentMember.id)
-                        put("agency_id", agencyId)
-                        put("agency_name", agency.agencyName)
-                        put("agency_code", agency.agencyCode)
-                        put("user_id", ownerId)
-                        put("user_numeric_id", agentMember.userNumericId)
-                        put("user_name", agentMember.userName)
-                        put("user_avatar_url", agentMember.userAvatarUrl)
-                        put("role", "OWNER")
-                        put("status", "APPROVED")
-                        put("joined_at", isoDate)
-                    }.toString()
-
-                    val memberReq = Request.Builder()
-                        .url("$baseUrl/rest/v1/agency_members")
-                        .addHeader("apikey", apiKey)
-                        .addHeader("Authorization", authHeader)
-                        .addHeader("Content-Type", "application/json")
-                        .post(memberBody.toRequestBody(jsonMediaType))
-                        .build()
-
-                    client.newCall(memberReq).execute().close()
+                    client.newCall(updateReq).execute().use { response ->
+                        Log.d("SupabaseAgencyService", "Updated is_agent=true on profiles table: success=${response.isSuccessful}")
+                    }
+                } catch (pe: Exception) {
+                    Log.e("SupabaseAgencyService", "Failed to update profiles is_agent=true", pe)
                 }
 
                 Pair(true, agency)
@@ -393,6 +434,33 @@ class SupabaseAgencyService {
             }
             null
         }
+    }
+
+    /**
+     * Fetch Agency by Code, Agency User ID, or Agent's Numeric ID
+     */
+    suspend fun fetchAgencyByCodeOrUserId(input: String): Agency? {
+        val trimmed = input.trim()
+        if (trimmed.isBlank()) return null
+        val byCode = fetchAgencyByCode(trimmed)
+        if (byCode != null) return byCode
+        val byId = fetchAgencyById(trimmed)
+        if (byId != null) return byId
+        val byOwner = fetchAgencyByOwner(trimmed)
+        if (byOwner != null) return byOwner
+        val numId = trimmed.toLongOrNull()
+        if (numId != null) {
+            try {
+                val prof = SupabaseProfileService().fetchProfileByNumericId(numId)
+                if (prof != null) {
+                    val agency = fetchAgencyByOwner(prof.id)
+                    if (agency != null) return agency
+                }
+            } catch (e: Exception) {
+                Log.w("SupabaseAgencyService", "Fetch agency by numeric ID error: ${e.message}")
+            }
+        }
+        return null
     }
 
     /**
@@ -569,17 +637,13 @@ class SupabaseAgencyService {
                 if (baseUrl.isNotEmpty() && apiKey.isNotEmpty()) {
                     val authHeader = getAuthHeader()
                     val bodyJson = JSONObject().apply {
-                        put("id", appId)
                         put("agency_id", agency.id)
                         put("agency_name", agency.agencyName)
                         put("agency_code", agency.agencyCode)
                         put("user_id", user.id)
-                        put("user_numeric_id", user.numericId)
                         put("user_name", application.userName)
-                        put("user_avatar_url", application.userAvatarUrl)
+                        put("user_avatar", application.userAvatarUrl)
                         put("status", "PENDING")
-                        put("created_at", isoDate)
-                        put("updated_at", isoDate)
                     }.toString()
 
                     val req = Request.Builder()
@@ -587,10 +651,18 @@ class SupabaseAgencyService {
                         .addHeader("apikey", apiKey)
                         .addHeader("Authorization", authHeader)
                         .addHeader("Content-Type", "application/json")
+                        .addHeader("Prefer", "return=representation")
                         .post(bodyJson.toRequestBody(jsonMediaType))
                         .build()
 
-                    client.newCall(req).execute().close()
+                    val response = client.newCall(req).execute()
+                    if (!response.isSuccessful) {
+                        val errStr = response.body?.string() ?: ""
+                        Log.e("SupabaseAgencyService", "Apply error: ${response.code} $errStr")
+                        response.close()
+                        return@withContext Pair(false, "Failed to submit application: HTTP ${response.code}")
+                    }
+                    response.close()
                 }
 
                 Pair(true, "Application submitted successfully! Awaiting Agent review.")
@@ -914,7 +986,7 @@ class SupabaseAgencyService {
             userId = obj.optString("user_id", ""),
             userNumericId = obj.optLong("user_numeric_id", 0L),
             userName = obj.optString("user_name", "Applicant"),
-            userAvatarUrl = obj.optString("user_avatar_url", ""),
+            userAvatarUrl = obj.optString("user_avatar", obj.optString("user_avatar_url", "")),
             userGender = obj.optString("user_gender", ""),
             status = obj.optString("status", "PENDING"),
             createdAt = obj.optString("created_at", ""),
@@ -997,30 +1069,10 @@ class SupabaseAgencyService {
         senderGender: String,
         messageText: String,
         context: Context? = null
-    ): Pair<Boolean, String> {
+    ): AgencyGroupMessage? {
         return withContext(Dispatchers.IO) {
-            if (messageText.isBlank()) return@withContext Pair(false, "Message cannot be empty")
-            if (agencyId.isBlank() || senderId.isBlank()) return@withContext Pair(false, "Invalid agency or user")
-
-            val nowIso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date())
-            val tempMessage = AgencyGroupMessage(
-                id = System.currentTimeMillis(),
-                agencyId = agencyId,
-                senderId = senderId,
-                senderNumericId = senderNumericId,
-                senderName = senderName,
-                senderAvatar = senderAvatar,
-                senderRole = senderRole,
-                senderGender = senderGender,
-                message = messageText.trim(),
-                createdAt = nowIso
-            )
-
-            // Cache in memory immediately for snappy responsiveness
-            val currentList = memoryGroupMessages.getOrPut(agencyId) { mutableListOf() }
-            synchronized(currentList) {
-                currentList.add(tempMessage)
-            }
+            if (messageText.isBlank()) return@withContext null
+            if (agencyId.isBlank() || senderId.isBlank()) return@withContext null
 
             try {
                 val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
@@ -1052,7 +1104,21 @@ class SupabaseAgencyService {
 
                     client.newCall(req).execute().use { resp ->
                         if (resp.isSuccessful) {
-                            return@withContext Pair(true, "Message sent")
+                            val bodyStr = resp.body?.string() ?: ""
+                            val array = JSONArray(bodyStr)
+                            if (array.length() > 0) {
+                                val obj = array.getJSONObject(0)
+                                val insertedMsg = parseAgencyGroupMessage(obj)
+
+                                // Cache in memory
+                                val currentList = memoryGroupMessages.getOrPut(agencyId) { mutableListOf() }
+                                synchronized(currentList) {
+                                    if (currentList.none { it.id == insertedMsg.id }) {
+                                        currentList.add(insertedMsg)
+                                    }
+                                }
+                                return@withContext insertedMsg
+                            }
                         }
                     }
                 }
@@ -1060,7 +1126,25 @@ class SupabaseAgencyService {
                 Log.w("SupabaseAgency", "sendAgencyGroupMessage server error: ${e.message}")
             }
 
-            Pair(true, "Message sent")
+            // Fallback: construct local-only message if server representation fails but we don't want to block
+            val nowIso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date())
+            val fallbackMsg = AgencyGroupMessage(
+                id = System.currentTimeMillis(),
+                agencyId = agencyId,
+                senderId = senderId,
+                senderNumericId = senderNumericId,
+                senderName = senderName,
+                senderAvatar = senderAvatar,
+                senderRole = senderRole,
+                senderGender = senderGender,
+                message = messageText.trim(),
+                createdAt = nowIso
+            )
+            val currentList = memoryGroupMessages.getOrPut(agencyId) { mutableListOf() }
+            synchronized(currentList) {
+                currentList.add(fallbackMsg)
+            }
+            fallbackMsg
         }
     }
 
@@ -1077,5 +1161,95 @@ class SupabaseAgencyService {
             message = obj.optString("message", ""),
             createdAt = obj.optString("created_at", "")
         )
+    }
+
+    /**
+     * Delete an agency and clean up all members and applications.
+     */
+    suspend fun deleteAgency(agencyId: String, context: Context? = null): Boolean {
+        if (agencyId.isBlank()) return false
+        return withContext(Dispatchers.IO) {
+            try {
+                val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+                val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+                if (baseUrl.isEmpty() || apiKey.isEmpty()) return@withContext false
+
+                val authHeader = getAuthHeader(context)
+
+                // Cache ownerId before deleting agency
+                val ownerId = memoryAgencies[agencyId]?.ownerId ?: ""
+
+                // 1. Delete from agencies table
+                val req1 = Request.Builder()
+                    .url("$baseUrl/rest/v1/agencies?id=eq.$agencyId")
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", authHeader)
+                    .delete()
+                    .build()
+                client.newCall(req1).execute().close()
+
+                // 2. Delete from agency_members
+                val req2 = Request.Builder()
+                    .url("$baseUrl/rest/v1/agency_members?agency_id=eq.$agencyId")
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", authHeader)
+                    .delete()
+                    .build()
+                client.newCall(req2).execute().close()
+
+                // 3. Delete from agency_applications
+                val req3 = Request.Builder()
+                    .url("$baseUrl/rest/v1/agency_applications?agency_id=eq.$agencyId")
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", authHeader)
+                    .delete()
+                    .build()
+                client.newCall(req3).execute().close()
+
+                // 4. Delete from agency_group_messages
+                val req4 = Request.Builder()
+                    .url("$baseUrl/rest/v1/agency_group_messages?agency_id=eq.$agencyId")
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", authHeader)
+                    .delete()
+                    .build()
+                client.newCall(req4).execute().close()
+
+                // Clear memory cache
+                memoryAgencies.remove(agencyId)
+                memoryMembers.remove(agencyId)
+                memoryApplications.remove(agencyId)
+                memoryGroupMessages.remove(agencyId)
+
+                // Update is_agent = false on profiles table for the owner
+                val targetOwnerId = ownerId.ifBlank { UserSessionManager.getUserId(context) }
+                if (targetOwnerId.isNotBlank()) {
+                    try {
+                        val updateUrl = "$baseUrl/rest/v1/profiles?id=eq.$targetOwnerId"
+                        val updateBody = JSONObject().apply {
+                            put("is_agent", false)
+                        }.toString()
+                        val updateReq = Request.Builder()
+                            .url(updateUrl)
+                            .addHeader("apikey", apiKey)
+                            .addHeader("Authorization", authHeader)
+                            .addHeader("Content-Type", "application/json")
+                            .addHeader("Prefer", "return=minimal")
+                            .patch(updateBody.toRequestBody(jsonMediaType))
+                            .build()
+                        client.newCall(updateReq).execute().use { response ->
+                            Log.d("SupabaseAgency", "Updated is_agent=false on profile table: success=${response.isSuccessful}")
+                        }
+                    } catch (pe: Exception) {
+                        Log.e("SupabaseAgency", "Failed to update profile is_agent=false", pe)
+                    }
+                }
+
+                true
+            } catch (e: Exception) {
+                Log.e("SupabaseAgency", "deleteAgency error", e)
+                false
+            }
+        }
     }
 }

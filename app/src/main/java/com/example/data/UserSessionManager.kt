@@ -1,6 +1,7 @@
 package com.example.data
 
 import android.content.Context
+import android.provider.Settings
 import android.content.SharedPreferences
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -34,6 +35,7 @@ object UserSessionManager {
     private const val KEY_USER_EXP = "user_exp"
     private const val KEY_USER_EXP_PREFIX = "user_exp_"
     const val KEY_PROFILE_COMPLETED = "user_profile_completed"
+    const val KEY_IS_FAST_LOGIN = "is_fast_login_account"
     private const val KEY_DND_VOICE = "dnd_voice_calls"
     private const val KEY_DND_VIDEO = "dnd_video_calls"
 
@@ -41,7 +43,7 @@ object UserSessionManager {
     @Volatile private var cachedRefreshToken: String = ""
     @Volatile private var cachedTokenExpiresAt: Long = 0L
     @Volatile private var cachedUserId: String = ""
-    @Volatile private var appContext: Context? = null
+    @Volatile internal var appContext: Context? = null
 
     internal fun getPrefs(context: Context?): SharedPreferences? {
         val targetContext = context?.applicationContext ?: appContext ?: return null
@@ -237,7 +239,11 @@ object UserSessionManager {
         cachedUserId = userId
 
         try {
-            val isComplete = (finalGender.equals("Female", ignoreCase = true) || finalGender.equals("Male", ignoreCase = true))
+            val isComplete = if (isProfileCompleted != null) {
+                isProfileCompleted && (finalGender.equals("Female", ignoreCase = true) || finalGender.equals("Male", ignoreCase = true))
+            } else {
+                (finalGender.equals("Female", ignoreCase = true) || finalGender.equals("Male", ignoreCase = true))
+            }
             getPrefs(context)?.edit()?.apply {
                 putBoolean(KEY_IS_LOGGED_IN, true)
                 putBoolean(KEY_PROFILE_COMPLETED, isComplete)
@@ -334,7 +340,7 @@ object UserSessionManager {
                         putString(KEY_REFRESH_TOKEN, finalRefreshToken)
                     }
                     putLong(KEY_TOKEN_EXPIRES_AT, expiresAt)
-                    commit()
+                    apply()
                 }
             } catch (_: Exception) {}
         }
@@ -496,6 +502,11 @@ object UserSessionManager {
         val currentToken = getAccessToken(targetContext)
         if (currentToken.isNotBlank()) {
             return "Bearer $currentToken"
+        }
+
+        val anon = SupabaseConfig.supabaseAnonKey.trim()
+        if (anon.isNotBlank()) {
+            return "Bearer $anon"
         }
 
         return ""
@@ -772,18 +783,12 @@ object UserSessionManager {
         dayNumber: Int,
         email: String = ""
     ) {
-        val effectiveUserId = userId.ifEmpty { getSession(context)?.userId ?: "global" }
-        val effectiveEmail = email.ifEmpty { getSession(context)?.email ?: "" }
+        val effectiveUserId = userId.ifEmpty { getSession(context)?.userId ?: "" }
+        if (effectiveUserId.isBlank()) return
         try {
             getPrefs(context)?.edit()?.apply {
                 putString("last_checkin_date_$effectiveUserId", dateStr)
                 putInt("last_checkin_day_$effectiveUserId", dayNumber)
-                if (effectiveEmail.isNotEmpty()) {
-                    putString("last_checkin_date_${effectiveEmail.lowercase()}", dateStr)
-                    putInt("last_checkin_day_${effectiveEmail.lowercase()}", dayNumber)
-                }
-                putString("last_checkin_date_global", dateStr)
-                putInt("last_checkin_day_global", dayNumber)
                 apply()
             }
         } catch (_: Exception) {}
@@ -794,16 +799,8 @@ object UserSessionManager {
             val prefs = getPrefs(context) ?: return ""
             val effectiveUserId = userId.ifEmpty { getSession(context)?.userId ?: "" }
             if (effectiveUserId.isNotEmpty()) {
-                val userDate = prefs.getString("last_checkin_date_$effectiveUserId", "") ?: ""
-                if (userDate.isNotEmpty()) return userDate
+                return prefs.getString("last_checkin_date_$effectiveUserId", "") ?: ""
             }
-
-            val effectiveEmail = email.ifEmpty { getSession(context)?.email ?: "" }
-            if (effectiveEmail.isNotEmpty()) {
-                val emailDate = prefs.getString("last_checkin_date_${effectiveEmail.lowercase()}", "") ?: ""
-                if (emailDate.isNotEmpty()) return emailDate
-            }
-
             ""
         } catch (_: Exception) {
             ""
@@ -815,16 +812,8 @@ object UserSessionManager {
             val prefs = getPrefs(context) ?: return 0
             val effectiveUserId = userId.ifEmpty { getSession(context)?.userId ?: "" }
             if (effectiveUserId.isNotEmpty()) {
-                val userDay = prefs.getInt("last_checkin_day_$effectiveUserId", 0)
-                if (userDay > 0) return userDay
+                return prefs.getInt("last_checkin_day_$effectiveUserId", 0)
             }
-
-            val effectiveEmail = email.ifEmpty { getSession(context)?.email ?: "" }
-            if (effectiveEmail.isNotEmpty()) {
-                val emailDay = prefs.getInt("last_checkin_day_${effectiveEmail.lowercase()}", 0)
-                if (emailDay > 0) return emailDay
-            }
-
             0
         } catch (_: Exception) {
             0
@@ -835,6 +824,46 @@ object UserSessionManager {
         val lastDate = getLastCheckInDate(context, userId, email).trim()
         if (lastDate.isEmpty()) return false
         return isSameDayOnPhoneCalendar(lastDate)
+    }
+
+    fun getStableDeviceId(context: Context): String {
+        return try {
+            val prefs = context.getSharedPreferences("qivo_stable_device_identity", Context.MODE_PRIVATE)
+            var deviceId = prefs.getString("stable_device_id", "") ?: ""
+            if (deviceId.length >= 16) {
+                return deviceId
+            }
+
+            val androidId = try {
+                android.provider.Settings.Secure.getString(
+                    context.contentResolver,
+                    android.provider.Settings.Secure.ANDROID_ID
+                ) ?: ""
+            } catch (_: Exception) { "" }
+
+            val cleanAndroidId = if (androidId.isNotBlank() && androidId != "9774d56d682e549c") androidId.trim() else ""
+
+            var storedGuid = prefs.getString("install_guid_seed", "") ?: ""
+            if (storedGuid.isBlank()) {
+                storedGuid = java.util.UUID.randomUUID().toString().replace("-", "")
+                prefs.edit().putString("install_guid_seed", storedGuid).apply()
+            }
+
+            deviceId = if (cleanAndroidId.length >= 16) {
+                cleanAndroidId
+            } else {
+                ("qivo_dev_" + cleanAndroidId + "_" + storedGuid).take(64)
+            }
+
+            if (deviceId.length < 16) {
+                deviceId = ("qivo_device_" + storedGuid).take(64)
+            }
+
+            prefs.edit().putString("stable_device_id", deviceId).apply()
+            deviceId
+        } catch (_: Exception) {
+            "qivo_fallback_device_id_16chars"
+        }
     }
 
     fun isLoggedIn(context: Context? = null): Boolean {
@@ -866,6 +895,7 @@ object UserSessionManager {
         val frameExpiresAt: String = "",
         val exp: Long = 0L,
         val isProfileCompleted: Boolean = false,
+        val isFastLoginAccount: Boolean = false,
         val isDndVoice: Boolean = false,
         val isDndVideo: Boolean = false
     )
@@ -899,7 +929,9 @@ object UserSessionManager {
         val userExp = prefs.getLong(KEY_USER_EXP_PREFIX + userId, prefs.getLong(KEY_USER_EXP, 0L))
 
         val savedGender = prefs.getString(KEY_USER_GENDER, "") ?: ""
-        val isProfileCompleted = (savedGender.equals("Female", ignoreCase = true) || savedGender.equals("Male", ignoreCase = true))
+        val savedCompleted = prefs.getBoolean(KEY_PROFILE_COMPLETED, false)
+        val isProfileCompleted = savedCompleted && (savedGender.equals("Female", ignoreCase = true) || savedGender.equals("Male", ignoreCase = true))
+        val isFast = prefs.getBoolean(KEY_IS_FAST_LOGIN, false) || safeEmail.contains("@fast.qivo.app", ignoreCase = true) || safeEmail.contains("fast_", ignoreCase = true)
 
         return SessionData(
             email = safeEmail,
@@ -922,9 +954,23 @@ object UserSessionManager {
             frameExpiresAt = frameExp,
             exp = userExp,
             isProfileCompleted = isProfileCompleted,
+            isFastLoginAccount = isFast,
             isDndVoice = prefs.getBoolean(KEY_DND_VOICE, false),
             isDndVideo = prefs.getBoolean(KEY_DND_VIDEO, false)
         )
+    }
+
+    fun isFastLoginAccount(context: Context? = null): Boolean {
+        val prefs = getPrefs(context) ?: return false
+        val email = prefs.getString(KEY_USER_EMAIL, "") ?: ""
+        return prefs.getBoolean(KEY_IS_FAST_LOGIN, false) ||
+                email.contains("@fast.qivo.app", ignoreCase = true) ||
+                email.contains("fast_", ignoreCase = true)
+    }
+
+    fun setIsFastLoginAccount(context: Context?, isFast: Boolean) {
+        getPrefs(context)?.edit()?.putBoolean(KEY_IS_FAST_LOGIN, isFast)?.apply()
+        notifySessionUpdated()
     }
 
     private val _activeFrameState = kotlinx.coroutines.flow.MutableStateFlow<Pair<String, String>>("" to "")
@@ -1175,10 +1221,19 @@ object UserSessionManager {
                 putLong(KEY_USER_NUMERIC_ID, 0L)
                 putLong(KEY_USER_COINS, 0L)
                 putLong(KEY_USER_DIAMONDS, 0L)
+                putBoolean(KEY_IS_ADMIN, false)
+                putBoolean(KEY_IS_COIN_SELLER, false)
+                putBoolean(KEY_IS_AGENT, false)
+                putBoolean(KEY_IS_VERIFIED, false)
+                putBoolean(KEY_IS_FAST_LOGIN, false)
+                putLong(KEY_USER_EXP, 0L)
                 apply()
             }
-            _diamondsFlow.value = 0L
-            _coinsFlow.value = 0L
         } catch (_: Exception) {}
+        _coinsFlow.value = 0L
+        _diamondsFlow.value = 0L
+        _expFlow.value = 0L
+        notifySessionUpdated()
     }
 }
+

@@ -131,6 +131,7 @@ val DEFAULT_EXCHANGE_TIERS = listOf(
 fun IncomeScreen(
     userId: String,
     onBackClick: () -> Unit,
+    onOpenDiamondHistory: () -> Unit = {},
     onCoinsUpdated: (Long) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -220,8 +221,14 @@ fun IncomeScreen(
     }
 
     LaunchedEffect(userId) {
-        refreshBalances()
-        loadDiamondHistory()
+        if (userId.isNotBlank()) {
+            try {
+                refreshBalances()
+                loadDiamondHistory()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 
     val targetDiamondsToExchange: Long = remember(isCustomMode, customDiamondInput, selectedTier) {
@@ -375,8 +382,7 @@ fun IncomeScreen(
                     // History icon
                     IconButton(
                         onClick = {
-                            loadDiamondHistory()
-                            showHistorySheet = true
+                            onOpenDiamondHistory()
                         },
                         modifier = Modifier.size(40.dp)
                     ) {
@@ -828,7 +834,7 @@ fun IncomeScreen(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "All diamond conversions are ledgered with atomic PostgreSQL transaction integrity.",
+                                    text = "All diamond conversions are ledgered with secure atomic transaction integrity.",
                                     fontSize = 11.sp,
                                     color = colors.textSecondary,
                                     lineHeight = 15.sp
@@ -842,229 +848,8 @@ fun IncomeScreen(
     }
 
     // 4. DIAMOND HISTORY BOTTOM SHEET (Opens when user clicks top-right icon)
-    if (showHistorySheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showHistorySheet = false },
-            sheetState = historySheetState,
-            containerColor = if (isDark) Color(0xFF182028) else Color.White,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-        ) {
-            var historyFilter by remember { mutableIntStateOf(0) } // 0: All, 1: Earned, 2: Exchanged
-            val filteredTransactions = remember(diamondHistoryList, historyFilter) {
-                when (historyFilter) {
-                    1 -> diamondHistoryList.filter { it.amount > 0 }
-                    2 -> diamondHistoryList.filter { it.amount < 0 }
-                    else -> diamondHistoryList
-                }
-            }
+    // Diamond History is now handled by DiamondHistoryScreen (full screen)
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 8.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Diamond3DIcon(size = 24.dp)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Diamond History",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = colors.textPrimary
-                        )
-                    }
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { loadDiamondHistory() }) {
-                            Icon(
-                                Icons.Default.Refresh,
-                                contentDescription = "Reload",
-                                tint = colors.textPrimary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-
-                        IconButton(onClick = { showHistorySheet = false }) {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = "Close",
-                                tint = colors.textPrimary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Filter Tabs
-                TabRow(
-                    selectedTabIndex = historyFilter,
-                    containerColor = Color.Transparent,
-                    contentColor = if (isDark) Color(0xFFFF8D00) else Color(0xFFFF6500),
-                    indicator = { tabPositions ->
-                        TabRowDefaults.SecondaryIndicator(
-                            Modifier.tabIndicatorOffset(tabPositions[historyFilter]),
-                            color = if (isDark) Color(0xFFFF8D00) else Color(0xFFFF6500)
-                        )
-                    }
-                ) {
-                    listOf("All Records", "Earned (+💎)", "Exchanged (-💎)").forEachIndexed { index, tabName ->
-                        Tab(
-                            selected = historyFilter == index,
-                            onClick = { historyFilter = index },
-                            text = {
-                                Text(
-                                    text = tabName,
-                                    fontSize = 12.5.sp,
-                                    fontWeight = if (historyFilter == index) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (historyFilter == index) {
-                                        if (isDark) Color(0xFFFF8D00) else Color(0xFFE65100)
-                                    } else colors.textSecondary
-                                )
-                            }
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                if (isLoadingHistory) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(240.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(30.dp),
-                            color = if (isDark) Color(0xFFFF8D00) else Color(0xFFFF6500)
-                        )
-                    }
-                } else if (filteredTransactions.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(240.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Diamond3DIcon(size = 48.dp)
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = "No Diamond Transactions Found",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = colors.textPrimary
-                            )
-                            Text(
-                                text = "Exchange diamonds to coins or receive gifts to see records here.",
-                                fontSize = 12.sp,
-                                color = colors.textSecondary,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(horizontal = 24.dp)
-                            )
-                        }
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(340.dp),
-                        contentPadding = PaddingValues(vertical = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        items(filteredTransactions, key = { it.id }) { tx ->
-                            val isIncome = tx.amount > 0
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(14.dp),
-                                color = if (isDark) Color(0xFF222B35) else Color(0xFFF8FAFC),
-                                border = BorderStroke(1.dp, if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0))
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(36.dp)
-                                                .clip(CircleShape)
-                                                .background(
-                                                    if (isIncome) {
-                                                        if (isDark) Color(0xFF132F20) else Color(0xFFD1FAE5)
-                                                    } else {
-                                                        if (isDark) Color(0xFF332014) else Color(0xFFFFEDD5)
-                                                    }
-                                                ),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            if (isIncome) {
-                                                Diamond3DIcon(size = 20.dp)
-                                            } else {
-                                                Coin3DIcon(size = 20.dp)
-                                            }
-                                        }
-
-                                        Spacer(modifier = Modifier.width(10.dp))
-
-                                        Column {
-                                            Text(
-                                                text = tx.title.ifBlank { if (isIncome) "Diamond Reward" else "Exchange to Coins" },
-                                                fontSize = 13.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = colors.textPrimary,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            Text(
-                                                text = tx.createdAt.ifBlank { "Ref: ${tx.referenceId}" },
-                                                fontSize = 11.sp,
-                                                color = colors.textSecondary
-                                            )
-                                        }
-                                    }
-
-                                    Column(horizontalAlignment = Alignment.End) {
-                                        Text(
-                                            text = if (isIncome) "+${numberFormat.format(tx.amount)} 💎" else "${numberFormat.format(tx.amount)} 💎",
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.Black,
-                                            color = if (isIncome) {
-                                                if (isDark) Color(0xFFFF8D00) else Color(0xFFE65100)
-                                            } else {
-                                                if (isDark) Color(0xFFFB923C) else Color(0xFFEA580C)
-                                            }
-                                        )
-                                        Text(
-                                            text = tx.status,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = if (isDark) Color(0xFFFF8D00) else Color(0xFFE65100)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-        }
-    }
 
     // 5. SUCCESS DIALOG
     if (showSuccessDialog) {

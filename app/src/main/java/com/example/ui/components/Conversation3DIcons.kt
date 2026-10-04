@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -684,3 +685,648 @@ fun Conversation3DMicButton(
         Mic3DIcon(size = 26.dp)
     }
 }
+
+/**
+ * 3D Claymorphic Smile / Emoji Icon
+ * Features golden spherical clay face, glossy specular glint, and radiant warm smile.
+ */
+@Composable
+fun SmileEmoji3DIcon(
+    modifier: Modifier = Modifier,
+    size: Dp = 22.dp
+) {
+    Canvas(modifier = modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+
+        // 1. Ambient drop shadow
+        drawCircle(
+            color = Color.Black.copy(alpha = 0.25f),
+            radius = w * 0.45f,
+            center = Offset(w * 0.50f, h * 0.54f)
+        )
+
+        // 2. 3D Golden sphere base
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    Color(0xFFFFF9C4), // Top left glint
+                    Color(0xFFFFD54F), // Bright yellow
+                    Color(0xFFFF9800), // Sunset amber
+                    Color(0xFFE65100)  // Deep shadow rim
+                ),
+                center = Offset(w * 0.38f, h * 0.36f),
+                radius = w * 0.50f
+            ),
+            radius = w * 0.44f,
+            center = Offset(w * 0.50f, h * 0.50f)
+        )
+
+        // 3. Specular gloss glint
+        drawCircle(
+            color = Color.White.copy(alpha = 0.85f),
+            radius = w * 0.08f,
+            center = Offset(w * 0.36f, h * 0.32f)
+        )
+
+        // 4. Cheerful twinkling eyes
+        // Left Eye
+        drawRoundRect(
+            color = Color(0xFF3E1F05),
+            topLeft = Offset(w * 0.30f, h * 0.38f),
+            size = Size(w * 0.09f, h * 0.14f),
+            cornerRadius = CornerRadius(w * 0.045f, w * 0.045f)
+        )
+        // Right Eye
+        drawRoundRect(
+            color = Color(0xFF3E1F05),
+            topLeft = Offset(w * 0.61f, h * 0.38f),
+            size = Size(w * 0.09f, h * 0.14f),
+            cornerRadius = CornerRadius(w * 0.045f, w * 0.045f)
+        )
+
+        // 5. Rosy blush cheeks
+        drawCircle(
+            color = Color(0xFFFF5252).copy(alpha = 0.35f),
+            radius = w * 0.08f,
+            center = Offset(w * 0.24f, h * 0.52f)
+        )
+        drawCircle(
+            color = Color(0xFFFF5252).copy(alpha = 0.35f),
+            radius = w * 0.08f,
+            center = Offset(w * 0.76f, h * 0.52f)
+        )
+
+        // 6. 3D Smile curve
+        val smilePath = Path().apply {
+            moveTo(w * 0.32f, h * 0.58f)
+            quadraticTo(w * 0.50f, h * 0.78f, w * 0.68f, h * 0.58f)
+        }
+        drawPath(
+            path = smilePath,
+            color = Color(0xFF3E1F05),
+            style = Stroke(width = w * 0.07f, cap = StrokeCap.Round)
+        )
+    }
+}
+
+/**
+ * 3D Claymorphic More Tools / Plus Icon
+ * Features golden rounded container with isometric glowing plus.
+ */
+@Composable
+fun MoreTools3DIcon(
+    modifier: Modifier = Modifier,
+    size: Dp = 22.dp
+) {
+    Canvas(modifier = modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+
+        // 1. Ambient drop shadow
+        drawCircle(
+            color = Color.Black.copy(alpha = 0.22f),
+            radius = w * 0.44f,
+            center = Offset(w * 0.50f, h * 0.53f)
+        )
+
+        // 2. Round gradient badge
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    Color(0xFFFFF176),
+                    Color(0xFFFFB300),
+                    Color(0xFFFF6500)
+                ),
+                center = Offset(w * 0.38f, h * 0.38f),
+                radius = w * 0.48f
+            ),
+            radius = w * 0.43f,
+            center = Offset(w * 0.50f, h * 0.50f)
+        )
+
+        // 3. Plus cross bars in pure white with soft shadow
+        val barThickness = w * 0.12f
+        val barLength = w * 0.46f
+
+        // Horizontal bar
+        drawRoundRect(
+            color = Color.White,
+            topLeft = Offset((w - barLength) / 2f, (h - barThickness) / 2f),
+            size = Size(barLength, barThickness),
+            cornerRadius = CornerRadius(barThickness / 2f, barThickness / 2f)
+        )
+
+        // Vertical bar
+        drawRoundRect(
+            color = Color.White,
+            topLeft = Offset((w - barThickness) / 2f, (h - barLength) / 2f),
+            size = Size(barThickness, barLength),
+            cornerRadius = CornerRadius(barThickness / 2f, barThickness / 2f)
+        )
+    }
+}
+
+/**
+ * Blue verified checkmark badge matching reference UI
+ */
+@Composable
+fun VerifiedBlueCheckBadge(modifier: Modifier = Modifier, size: Dp = 15.dp) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(
+                Brush.linearGradient(
+                    listOf(Color(0xFF29B6F6), Color(0xFF1976D2))
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Check,
+            contentDescription = "Verified",
+            tint = Color.White,
+            modifier = Modifier.size(size * 0.70f)
+        )
+    }
+}
+
+/**
+ * Green shield authentication badge matching reference UI
+ */
+@Composable
+fun VerifiedGreenShieldBadge(modifier: Modifier = Modifier, size: Dp = 15.dp) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(
+                Brush.linearGradient(
+                    listOf(Color(0xFF00E676), Color(0xFF00B0FF))
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Check,
+            contentDescription = "Authenticated",
+            tint = Color.White,
+            modifier = Modifier.size(size * 0.70f)
+        )
+    }
+}
+
+/**
+ * Intimacy Crystal Purple Heart Badge [ 💜 0 ]
+ */
+@Composable
+fun IntimacyCrystalHeartBadge(
+    count: Int = 0,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {}
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        color = Color(0x333F1052),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD500F9).copy(alpha = 0.5f)),
+        modifier = modifier.height(26.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(text = "💜", fontSize = 12.sp)
+            Text(
+                text = "$count",
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color.White
+            )
+        }
+    }
+}
+
+/**
+ * Hexagonal Safety / Report Warning Badge [ ⬡ ! ]
+ */
+@Composable
+fun HexagonSafetyBadge(
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {}
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(8.dp),
+        color = Color(0x331F2232),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x44FFFFFF)),
+        modifier = modifier.size(28.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = "!",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Black,
+                color = Color.White.copy(alpha = 0.85f)
+            )
+        }
+    }
+}
+
+/**
+ * Floating "Free × 2" Chat voucher ticket on bottom left
+ */
+@Composable
+fun FloatingFreeChatCard(
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {}
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // "Free × 2" green top pill
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 4.dp, bottomEnd = 4.dp))
+                    .background(Color(0xFF00E676))
+                    .padding(horizontal = 6.dp, vertical = 1.5.dp)
+            ) {
+                Text(
+                    text = "Free × 2",
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.Black
+                )
+            }
+            // Pink Chat Ticket Voucher Card
+            Box(
+                modifier = Modifier
+                    .size(width = 44.dp, height = 36.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xFFFF4081), Color(0xFFC2185B))
+                        )
+                    )
+                    .border(1.dp, Color(0xFFFF80AB), RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Chat",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Floating Fast Forward / Collapse Button [ >> ]
+ */
+@Composable
+fun FloatingFastForwardPill(
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {}
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp),
+        color = Color(0x551E2232),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x33FFFFFF)),
+        modifier = modifier.height(30.dp)
+    ) {
+        Box(
+            modifier = Modifier.padding(horizontal = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "»",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White.copy(alpha = 0.8f)
+            )
+        }
+    }
+}
+
+/**
+ * Face Authentication Verification Banner matching screenshot
+ */
+@Composable
+fun FaceAuthenticationBanner(
+    userName: String = "She",
+    isFemale: Boolean = true,
+    modifier: Modifier = Modifier
+) {
+    val pronoun = if (isFemale) "She" else "He"
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = Color(0xFF181B28),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x22FFFFFF)),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF00E676)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Text(
+                text = "$pronoun has passed the face authentication.Feel free to make friends.",
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFFB0B5C9),
+                lineHeight = 16.sp
+            )
+        }
+    }
+}
+
+/**
+ * 3D Pie Chart Icon for "My Data" tile in MeScreen matching screenshot
+ */
+@Composable
+fun MyData3DIcon(modifier: Modifier = Modifier, size: Dp = 44.dp) {
+    Canvas(modifier = modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+        val center = Offset(w / 2f, h / 2f)
+        val radius = (w / 2f) * 0.85f
+
+        // Pie slice 1 (Top-Left: Soft Violet / Lavender)
+        drawArc(
+            color = Color(0xFF9C27B0),
+            startAngle = 180f,
+            sweepAngle = 90f,
+            useCenter = true,
+            size = Size(radius * 2, radius * 2),
+            topLeft = Offset(center.x - radius, center.y - radius)
+        )
+
+        // Pie slice 2 (Top-Right: Bright Lilac / Purple)
+        drawArc(
+            color = Color(0xFFBA68C8),
+            startAngle = 270f,
+            sweepAngle = 90f,
+            useCenter = true,
+            size = Size(radius * 2, radius * 2),
+            topLeft = Offset(center.x - radius + 2f, center.y - radius - 2f)
+        )
+
+        // Pie slice 3 (Bottom: Deep Plum / Violet)
+        drawArc(
+            color = Color(0xFFCE93D8),
+            startAngle = 0f,
+            sweepAngle = 180f,
+            useCenter = true,
+            size = Size(radius * 2, radius * 2),
+            topLeft = Offset(center.x - radius, center.y - radius)
+        )
+
+        // Specular 3D center glint
+        drawCircle(
+            color = Color.White.copy(alpha = 0.35f),
+            radius = radius * 0.22f,
+            center = center
+        )
+    }
+}
+
+/**
+ * 3D Checklist Clipboard Icon for "Task Center" matching screenshot
+ */
+@Composable
+fun TaskCenterClipboard3DIcon(modifier: Modifier = Modifier, size: Dp = 44.dp) {
+    Canvas(modifier = modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+
+        // Board background (Pastel Blue / Cyan Slate)
+        drawRoundRect(
+            brush = Brush.verticalGradient(
+                listOf(Color(0xFF90CAF9), Color(0xFF64B5F6))
+            ),
+            topLeft = Offset(w * 0.15f, h * 0.12f),
+            size = Size(w * 0.70f, h * 0.82f),
+            cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx())
+        )
+
+        // White paper sheet
+        drawRoundRect(
+            color = Color.White,
+            topLeft = Offset(w * 0.22f, h * 0.22f),
+            size = Size(w * 0.56f, h * 0.66f),
+            cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
+        )
+
+        // Top metal clip
+        drawRoundRect(
+            color = Color(0xFFB0BEC5),
+            topLeft = Offset(w * 0.35f, h * 0.08f),
+            size = Size(w * 0.30f, h * 0.14f),
+            cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx())
+        )
+
+        // Green checkmarks on list
+        val checkY1 = h * 0.34f
+        val checkY2 = h * 0.52f
+        val checkY3 = h * 0.70f
+        listOf(checkY1, checkY2, checkY3).forEach { y ->
+            // Check circle
+            drawCircle(
+                color = Color(0xFF00E676),
+                radius = 3.dp.toPx(),
+                center = Offset(w * 0.32f, y)
+            )
+            // Task line
+            drawRoundRect(
+                color = Color(0xFFCFD8DC),
+                topLeft = Offset(w * 0.42f, y - 1.5.dp.toPx()),
+                size = Size(w * 0.30f, 3.dp.toPx()),
+                cornerRadius = CornerRadius(1.5.dp.toPx(), 1.5.dp.toPx())
+            )
+        }
+    }
+}
+
+/**
+ * 3D Qivo Agency Hero Badge for Join Agency top banner matching screenshot
+ */
+@Composable
+fun QivoAgency3DHeroBadge(modifier: Modifier = Modifier, size: Dp = 90.dp) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(RoundedCornerShape(22.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(Color(0xFF26A69A), Color(0xFF00897B), Color(0xFF004D40))
+                )
+            )
+            .border(
+                2.5.dp,
+                Brush.linearGradient(listOf(Color(0xFF80CBC4), Color(0xFF004D40))),
+                RoundedCornerShape(22.dp)
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // "Qivo" Brand Tag
+            Text(
+                text = "QIVO",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Black,
+                color = Color.White,
+                letterSpacing = 1.sp
+            )
+            Spacer(modifier = Modifier.height(3.dp))
+            // Mascot characters graphic simulation
+            Row(
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Orange mascot
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFFF7043)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("👀", fontSize = 11.sp)
+                }
+                Spacer(modifier = Modifier.width(3.dp))
+                // Green mascot
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF00E676)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("😄", fontSize = 14.sp)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Iridescent Mint-Teal-Cyan fluid wave background for MeScreen top header matching Screenshot 2 exactly
+ */
+@Composable
+fun MeScreenMintWaveAtmosphere(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier.fillMaxWidth()) {
+        val w = size.width
+        val h = size.height
+
+        // 1. Base vibrant teal-mint radiant gradient
+        drawRect(
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    Color(0xFF56BCA8), // Radiant Mint Cyan
+                    Color(0xFF439E8C), // Mid Teal
+                    Color(0xFF2D7366), // Deep Mint
+                    Color(0xFF1E463E), // Dark Pine
+                    Color(0xFF131A26), // Transition Dark Navy
+                    Color(0xFF10121D)  // Canvas Midnight
+                ),
+                startY = 0f,
+                endY = h
+            )
+        )
+
+        // 2. Signature Sunset Orange-Yellow Top Glow Overlay matching Chat List and Home screens
+        drawRect(
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    Color(0xE6E65100), // Vibrant deep sunset orange at the top
+                    Color(0x80FF9100), // Amber mid glow
+                    Color(0x30FFD54F), // Soft gold aura
+                    Color.Transparent
+                ),
+                startY = 0f,
+                endY = h * 0.70f
+            )
+        )
+
+        // 3. Swirling 3D Fluid Ribbon (Upper Glow Curve)
+        val path1 = androidx.compose.ui.graphics.Path().apply {
+            moveTo(w * 0.15f, 0f)
+            cubicTo(
+                w * 0.35f, h * 0.30f,
+                w * 0.85f, h * 0.10f,
+                w * 1.05f, h * 0.65f
+            )
+            lineTo(w, 0f)
+            close()
+        }
+        drawPath(
+            path = path1,
+            brush = Brush.linearGradient(
+                colors = listOf(
+                    Color(0xFF86EFAC).copy(alpha = 0.45f), // Soft Lime Mint
+                    Color(0xFF67E8F9).copy(alpha = 0.55f), // Sky Cyan
+                    Color(0xFFA5B4FC).copy(alpha = 0.30f)  // Soft Periwinkle
+                ),
+                start = Offset(w * 0.2f, 0f),
+                end = Offset(w, h * 0.7f)
+            )
+        )
+
+        // 4. Central Swirling Silk Wave
+        val path2 = androidx.compose.ui.graphics.Path().apply {
+            moveTo(0f, h * 0.45f)
+            cubicTo(
+                w * 0.30f, h * 0.15f,
+                w * 0.60f, h * 0.75f,
+                w, h * 0.35f
+            )
+            lineTo(w, h)
+            lineTo(0f, h)
+            close()
+        }
+        drawPath(
+            path = path2,
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    Color(0xFF2DD4BF).copy(alpha = 0.25f),
+                    Color(0xFF0F172A).copy(alpha = 0.80f),
+                    Color(0xFF10121D)
+                ),
+                startY = h * 0.25f,
+                endY = h
+            )
+        )
+    }
+}
+

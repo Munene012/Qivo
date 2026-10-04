@@ -1,7 +1,11 @@
 package com.example.data
+import com.example.ui.components.AppToast
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -285,9 +289,15 @@ class SupabaseAuthService {
 
                 val endpoint = "$baseUrl/auth/v1/signup"
                 val authEmail = toAuthEmail(emailInput)
+                val qivoDeviceId = if (context != null) UserSessionManager.getStableDeviceId(context) else "unknown_device_id"
+
                 val jsonBody = JSONObject().apply {
                     put("email", authEmail)
                     put("password", passwordInput)
+                    put("data", JSONObject().apply {
+                        put("qivo_device_id", qivoDeviceId)
+                        put("device_id", qivoDeviceId)
+                    })
                 }.toString()
 
                 val request = Request.Builder()
@@ -315,6 +325,15 @@ class SupabaseAuthService {
                                 refreshToken = refreshToken ?: "",
                                 expiresInSeconds = expiresIn
                             )
+                        }
+
+                        // Enforce 1 account per device rule strictly
+                        if (context != null && id.isNotBlank()) {
+                            val deviceCheck = checkAndRegisterSignupDevice(context, id)
+                            if (!deviceCheck.first) {
+                                UserSessionManager.clearSession(context)
+                                return@withContext AuthResult.Error(deviceCheck.second)
+                            }
                         }
 
                         val confirmMsg = if (accessToken.isNullOrEmpty()) {
@@ -482,6 +501,8 @@ class SupabaseAuthService {
                 var userEmail = ""
                 var googleName = ""
                 var googleAvatar = ""
+                var createdAt = ""
+                var lastSignInAt = ""
 
                 client.newCall(userReq).execute().use { uResp ->
                     val uBody = uResp.body?.string() ?: ""
@@ -489,6 +510,8 @@ class SupabaseAuthService {
                         val uJson = JSONObject(uBody)
                         userId = uJson.optString("id", "")
                         userEmail = uJson.optString("email", "")
+                        createdAt = uJson.optString("created_at", "")
+                        lastSignInAt = uJson.optString("last_sign_in_at", "")
 
                         val userMeta = uJson.optJSONObject("user_metadata")
                         if (userMeta != null) {
@@ -564,11 +587,15 @@ class SupabaseAuthService {
                                 )
                             }
 
-                            // Profile is completed only if user has selected Male or Female and has valid name
+                            val isBrandNew = isBrandNewAuth(createdAt, lastSignInAt)
+                            val birthDateInDb = pObj.optString("birth_date", "")
+                            val hasValidBirthDate = birthDateInDb.isNotBlank() && birthDateInDb != "2005-01-01"
+                            val dbProfileCompleted = pObj.optBoolean("is_profile_completed", false)
+
                             val hasGender = genderInDb.equals("Male", ignoreCase = true) ||
                                 genderInDb.equals("Female", ignoreCase = true)
                             val hasName = nameInDb.isNotBlank() && nameInDb != "QIVO User" && nameInDb != "User"
-                            hasCompletedProfile = hasGender && hasName
+                            hasCompletedProfile = !isBrandNew && (dbProfileCompleted || (hasGender && hasName && hasValidBirthDate))
                         }
                     }
                 }
@@ -608,7 +635,9 @@ class SupabaseAuthService {
                     hasCompletedProfile = false
                 }
 
-                val isNewUser = !profileExists || !hasCompletedProfile
+                val isBrandNew = isBrandNewAuth(createdAt, lastSignInAt)
+                val isNewUser = isBrandNew || !profileExists || !hasCompletedProfile
+                val finalProfileCompleted = !isNewUser && hasCompletedProfile
 
                 // 6. Save persistent session
                 UserSessionManager.saveSession(
@@ -616,9 +645,9 @@ class SupabaseAuthService {
                     email = finalEmail,
                     userId = userId,
                     name = existingName,
-                    gender = if (hasCompletedProfile) existingGender else "",
+                    gender = if (finalProfileCompleted) existingGender else "",
                     country = existingCountry,
-                    avatarUrl = existingAvatar,
+                    avatarUrl = if (finalProfileCompleted) existingAvatar else googleAvatar,
                     numericId = existingNumericId,
                     coins = existingCoins,
                     accessToken = accessToken,
@@ -626,8 +655,8 @@ class SupabaseAuthService {
                     expiresInSeconds = expiresIn,
                     isAdmin = existingIsAdmin,
                     isCoinSeller = existingIsCoinSeller,
-                    forceGender = !hasCompletedProfile,
-                    isProfileCompleted = hasCompletedProfile
+                    forceGender = !finalProfileCompleted,
+                    isProfileCompleted = finalProfileCompleted
                 )
 
                 AuthResult.Success(
@@ -643,6 +672,25 @@ class SupabaseAuthService {
                 AuthResult.Error("Google Sign-In failed: ${e.localizedMessage ?: e.message}")
             }
         }
+    }
+
+    private fun isBrandNewAuth(createdAt: String, lastSignInAt: String): Boolean {
+        if (createdAt.isBlank()) return false
+        if (lastSignInAt.isBlank()) return true
+        if (createdAt == lastSignInAt) return true
+        if (createdAt.take(16) == lastSignInAt.take(16)) return true
+        try {
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
+            }
+            val cDate = sdf.parse(createdAt.substringBefore("."))
+            val lDate = sdf.parse(lastSignInAt.substringBefore("."))
+            if (cDate != null && lDate != null) {
+                val diffSeconds = Math.abs(lDate.time - cDate.time) / 1000L
+                if (diffSeconds <= 120L) return true
+            }
+        } catch (_: Exception) {}
+        return false
     }
 
     /**
@@ -781,11 +829,16 @@ class SupabaseAuthService {
                                         )
                                     }
 
-                                    // Profile is completed only if user has selected Male or Female and has valid name
+                                    val isBrandNew = isBrandNewAuth(createdAt, lastSignInAt)
+                                    val birthDateInDb = pObj.optString("birth_date", "")
+                                    val hasValidBirthDate = birthDateInDb.isNotBlank() && birthDateInDb != "2005-01-01"
+                                    val dbProfileCompleted = pObj.optBoolean("is_profile_completed", false)
+
+                                    // Profile is completed only if user has selected Male or Female and has valid name and valid birth date (not brand new auth)
                                     val hasGender = genderInDb.equals("Male", ignoreCase = true) ||
                                         genderInDb.equals("Female", ignoreCase = true)
                                     val hasName = nameInDb.isNotBlank() && nameInDb != "QIVO User" && nameInDb != "User"
-                                    hasCompletedProfile = hasGender && hasName
+                                    hasCompletedProfile = !isBrandNew && (dbProfileCompleted || (hasGender && hasName && hasValidBirthDate))
                                 }
                             }
                         }
@@ -824,16 +877,18 @@ class SupabaseAuthService {
                             hasCompletedProfile = false
                         }
 
-                        val isNewUser = !profileExists || !hasCompletedProfile
+                        val isBrandNew = isBrandNewAuth(createdAt, lastSignInAt)
+                        val isNewUser = isBrandNew || !profileExists || !hasCompletedProfile
+                        val finalProfileCompleted = !isNewUser && hasCompletedProfile
 
                         UserSessionManager.saveSession(
                             context = context,
                             email = finalEmail,
                             userId = id,
                             name = existingName,
-                            gender = if (hasCompletedProfile) existingGender else "",
+                            gender = if (finalProfileCompleted) existingGender else "",
                             country = existingCountry,
-                            avatarUrl = existingAvatar,
+                            avatarUrl = if (finalProfileCompleted) existingAvatar else googleAvatar,
                             numericId = existingNumericId,
                             coins = existingCoins,
                             accessToken = accessToken,
@@ -841,8 +896,8 @@ class SupabaseAuthService {
                             expiresInSeconds = expiresIn,
                             isAdmin = existingIsAdmin,
                             isCoinSeller = existingIsCoinSeller,
-                            forceGender = !hasCompletedProfile,
-                            isProfileCompleted = hasCompletedProfile
+                            forceGender = !finalProfileCompleted,
+                            isProfileCompleted = finalProfileCompleted
                         )
 
                         AuthResult.Success(
@@ -980,6 +1035,72 @@ class SupabaseAuthService {
     }
 
     /**
+     * Links a Fast Login guest account to a real Email and Password.
+     */
+    suspend fun linkFastAccountToEmail(
+        userId: String,
+        newEmail: String,
+        newPassword: String,
+        context: Context? = null
+    ): AuthResult {
+        return withContext(Dispatchers.IO) {
+            try {
+                val cleanEmail = newEmail.trim()
+                if (!android.util.Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()) {
+                    return@withContext AuthResult.Error("Please enter a valid email address.")
+                }
+                if (newPassword.trim().length < 6) {
+                    return@withContext AuthResult.Error("Password must be at least 6 characters long.")
+                }
+
+                // 1. Synchronize profile email on Supabase DB REST API
+                val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+                val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+                if (baseUrl.isNotBlank() && apiKey.isNotBlank() && userId.isNotBlank()) {
+                    val updateObj = JSONObject().apply {
+                        put("email", cleanEmail)
+                    }.toString()
+
+                    val token = UserSessionManager.getValidAccessToken(context)
+                    val authHeader = if (token.isNotBlank()) "Bearer $token" else "Bearer $apiKey"
+                    val patchReq = Request.Builder()
+                        .url("$baseUrl/rest/v1/profiles?id=eq.${userId.trim()}")
+                        .addHeader("apikey", apiKey)
+                        .addHeader("Authorization", authHeader)
+                        .addHeader("Content-Type", "application/json")
+                        .addHeader("Prefer", "return=minimal")
+                        .patch(updateObj.toRequestBody(jsonMediaType))
+                        .build()
+
+                    client.newCall(patchReq).execute().close()
+                }
+
+                // 2. Register email & password account credentials
+                signUp(cleanEmail, newPassword, context)
+
+                // 3. Save linked email and clear Fast Login flag in local session
+                if (context != null) {
+                    UserSessionManager.saveSession(
+                        context = context,
+                        email = cleanEmail,
+                        userId = userId
+                    )
+                    UserSessionManager.setIsFastLoginAccount(context, false)
+                }
+
+                AuthResult.Success(
+                    userId = userId,
+                    email = cleanEmail,
+                    accessToken = null,
+                    message = "Account successfully linked to $cleanEmail!"
+                )
+            } catch (e: Exception) {
+                AuthResult.Error(e.message ?: "Failed to link email account.")
+            }
+        }
+    }
+
+    /**
      * Secure sign out from Supabase Auth and clear local session.
      */
     suspend fun signOut(context: Context) {
@@ -1004,6 +1125,292 @@ class SupabaseAuthService {
             }
         }
     }
-}
 
+    /**
+     * Sends a 6-digit OTP code to the user's email address (sent via Brevo / SMTP).
+     */
+    suspend fun signInWithOtp(emailInput: String): AuthResult {
+        return withContext(Dispatchers.IO) {
+            try {
+                val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+                val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+                val email = emailInput.trim()
+                if (email.isBlank() || !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                    return@withContext AuthResult.Error("Please enter a valid email address.")
+                }
+
+                val jsonBody = JSONObject().apply {
+                    put("email", email)
+                    put("create_user", true)
+                }
+
+                val req = Request.Builder()
+                    .url("$baseUrl/auth/v1/otp")
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Content-Type", "application/json")
+                    .post(jsonBody.toString().toRequestBody(jsonMediaType))
+                    .build()
+
+                val resp = client.newCall(req).execute()
+                val respBody = resp.body?.string() ?: ""
+                if (resp.isSuccessful) {
+                    AuthResult.Success(userId = "", email = email, accessToken = null, message = "6-digit verification code sent to $email!")
+                } else {
+                    val errMsg = try { JSONObject(respBody).optString("error_description", JSONObject(respBody).optString("msg", "Failed to send verification code.")) } catch (_: Exception) { "Failed to send verification code." }
+                    AuthResult.Error(errMsg)
+                }
+            } catch (e: Exception) {
+                AuthResult.Error(e.message ?: "Network error sending verification code.")
+            }
+        }
+    }
+
+    /**
+     * Verifies the 6-digit OTP code entered by the user.
+     */
+    suspend fun verifyOtp(emailInput: String, tokenInput: String, context: Context? = null): AuthResult {
+        return withContext(Dispatchers.IO) {
+            try {
+                val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+                val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+                val email = emailInput.trim()
+                val token = tokenInput.trim()
+
+                if (email.isBlank() || token.length != 6) {
+                    return@withContext AuthResult.Error("Please enter a valid 6-digit code.")
+                }
+
+                val jsonBody = JSONObject().apply {
+                    put("email", email)
+                    put("token", token)
+                    put("type", "email")
+                }
+
+                val req = Request.Builder()
+                    .url("$baseUrl/auth/v1/verify")
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Content-Type", "application/json")
+                    .post(jsonBody.toString().toRequestBody(jsonMediaType))
+                    .build()
+
+                val resp = client.newCall(req).execute()
+                val respBody = resp.body?.string() ?: ""
+                if (resp.isSuccessful) {
+                    val json = JSONObject(respBody)
+                    val accessToken = json.optString("access_token")
+                    val refreshToken = json.optString("refresh_token")
+                    val expiresIn = json.optLong("expires_in", 3600L)
+                    val userObj = json.optJSONObject("user")
+                    val userId = userObj?.optString("id") ?: ""
+
+                    if (context != null && userId.isNotBlank()) {
+                        val deviceCheck = checkAndRegisterSignupDevice(context, userId)
+                        if (!deviceCheck.first) {
+                            UserSessionManager.clearSession(context)
+                            return@withContext AuthResult.Error(deviceCheck.second)
+                        }
+                    }
+
+                    AuthResult.Success(
+                        userId = userId,
+                        email = email,
+                        accessToken = accessToken.ifBlank { null },
+                        refreshToken = refreshToken.ifBlank { null },
+                        expiresIn = expiresIn,
+                        message = "Email successfully verified!"
+                    )
+                } else {
+                    val errMsg = try { JSONObject(respBody).optString("error_description", JSONObject(respBody).optString("msg", "Invalid verification code.")) } catch (_: Exception) { "Invalid verification code." }
+                    AuthResult.Error(errMsg)
+                }
+            } catch (e: Exception) {
+                AuthResult.Error(e.message ?: "Network error verifying code.")
+            }
+        }
+    }
+
+
+    /**
+     * Updates the user password via Supabase Auth PUT /auth/v1/user
+     */
+    suspend fun updateUserPassword(newPassword: String, accessTokenOverride: String? = null, context: Context? = null): AuthResult {
+        return withContext(Dispatchers.IO) {
+            try {
+                val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+                val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+                val token = accessTokenOverride?.ifBlank { null }
+                    ?: (if (context != null) UserSessionManager.getAccessToken(context) else null)
+                    ?: ensureValidToken(context)
+                if (token.isBlank()) {
+                    return@withContext AuthResult.Error("No active authentication session found. Please verify your OTP code first.")
+                }
+                val jsonBody = JSONObject().apply {
+                    put("password", newPassword)
+                }
+                val req = Request.Builder()
+                    .url("$baseUrl/auth/v1/user")
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", "Bearer $token")
+                    .addHeader("Content-Type", "application/json")
+                    .put(jsonBody.toString().toRequestBody(jsonMediaType))
+                    .build()
+                val resp = client.newCall(req).execute()
+                val respBody = resp.body?.string() ?: ""
+                if (resp.isSuccessful) {
+                    val json = JSONObject(respBody)
+                    val userId = json.optString("id")
+                    val email = json.optString("email")
+                    AuthResult.Success(
+                        userId = userId,
+                        email = email,
+                        accessToken = token,
+                        message = "Password set successfully!"
+                    )
+                } else {
+                    val errMsg = try {
+                        val j = JSONObject(respBody)
+                        j.optString("error_description", j.optString("msg", j.optString("message", "Failed to update password.")))
+                    } catch (_: Exception) {
+                        "Failed to update password."
+                    }
+                    AuthResult.Error(errMsg)
+                }
+            } catch (e: Exception) {
+                AuthResult.Error(e.message ?: "Network error updating password.")
+            }
+        }
+    }
+
+
+    /**
+     * Creates or signs in a real authenticated Supabase account for Fast Login.
+     */
+    
+    /**
+     * Performs a real Supabase anonymous authenticated login to obtain a valid access token.
+     */
+    suspend fun signInAnonymously(context: Context): AuthResult {
+        return withContext(Dispatchers.IO) {
+            try {
+                val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+                val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+                if (baseUrl.isEmpty() || apiKey.isEmpty()) {
+                    return@withContext AuthResult.Error("Configuration error. Please check your internet connection.")
+                }
+
+                val endpoint = "$baseUrl/auth/v1/signup"
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Content-Type", "application/json")
+                    .post("{}".toRequestBody(jsonMediaType))
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    val responseBodyString = response.body?.string() ?: ""
+                    if (response.isSuccessful) {
+                        val json = JSONObject(responseBodyString)
+                        val accessToken = json.optString("access_token", null)
+                        val refreshToken = json.optString("refresh_token", null)
+                        val expiresIn = json.optLong("expires_in", 3600L)
+                        val userObj = json.optJSONObject("user")
+                        val id = userObj?.optString("id") ?: json.optString("id", "")
+
+                        if (!accessToken.isNullOrBlank()) {
+                            UserSessionManager.saveTokens(
+                                context = context,
+                                accessToken = accessToken,
+                                refreshToken = refreshToken ?: "",
+                                expiresInSeconds = expiresIn
+                            )
+                        }
+
+                        AuthResult.Success(
+                            userId = id,
+                            email = "anonymous@qivo.app",
+                            accessToken = accessToken,
+                            refreshToken = refreshToken,
+                            expiresIn = expiresIn,
+                            message = "Logged in anonymously!"
+                        )
+                    } else {
+                        AuthResult.Error("Anonymous signup failed (HTTP ${response.code})")
+                    }
+                }
+            } catch (e: Exception) {
+                AuthResult.Error(e.message ?: "Network error during anonymous signup.")
+            }
+        }
+    }
+
+    /**
+     * Enforces strict 1-account-per-device policy.
+     * Registers device ID in server registry; rejects account creation if another account was already registered on this device.
+     */
+    suspend fun checkAndRegisterSignupDevice(context: Context, userId: String): Pair<Boolean, String> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val baseUrl = SupabaseConfig.supabaseUrl.trim().removeSuffix("/")
+                val apiKey = SupabaseConfig.supabaseAnonKey.trim()
+                if (baseUrl.isBlank() || apiKey.isBlank()) return@withContext Pair(true, "")
+
+                val qivoDeviceId = UserSessionManager.getStableDeviceId(context)
+                if (qivoDeviceId.isBlank()) return@withContext Pair(true, "")
+
+                val token = UserSessionManager.getAccessToken(context)
+                val authHeader = if (token.isNotBlank()) "Bearer $token" else "Bearer $apiKey"
+
+                val rpcUrl = "$baseUrl/rest/v1/rpc/check_or_register_signup_device"
+                val payload = JSONObject().apply {
+                    put("qivo_device_id", qivoDeviceId)
+                    put("p_qivo_device_id", qivoDeviceId)
+                    put("p_device_id", qivoDeviceId)
+                    put("p_user_id", userId)
+                }.toString()
+
+                val request = Request.Builder()
+                    .url(rpcUrl)
+                    .addHeader("apikey", apiKey)
+                    .addHeader("Authorization", authHeader)
+                    .addHeader("Content-Type", "application/json")
+                    .post(payload.toRequestBody(jsonMediaType))
+                    .build()
+
+                client.newCall(request).execute().use { resp ->
+                    val bodyStr = resp.body?.string() ?: ""
+                    Log.d("SupabaseAuth", "check_or_register_signup_device code=${resp.code}, body=$bodyStr")
+
+                    if (resp.isSuccessful) {
+                        try {
+                            if (bodyStr.trim().startsWith("{")) {
+                                val json = JSONObject(bodyStr)
+                                val success = json.optBoolean("success", true)
+                                val code = json.optString("code", json.optString("error", ""))
+                                val msg = json.optString("message", "Only one account per device is allowed. A QIVO account has already been created on this device.")
+                                if (!success || code.contains("EXISTS", ignoreCase = true) || code.contains("DEVICE", ignoreCase = true)) {
+                                    return@withContext Pair(false, msg)
+                                }
+                            }
+                        } catch (_: Exception) {}
+                        Pair(true, "")
+                    } else if (resp.code == 400 || resp.code == 403 || resp.code == 409) {
+                        var errMsg = "Only one account per device is allowed. A QIVO account has already been created on this device."
+                        try {
+                            if (bodyStr.trim().startsWith("{")) {
+                                val errJson = JSONObject(bodyStr)
+                                val msg = errJson.optString("message", errJson.optString("msg", errJson.optString("error_description", "")))
+                                if (msg.isNotBlank()) errMsg = msg
+                            }
+                        } catch (_: Exception) {}
+                        Pair(false, errMsg)
+                    } else {
+                        Pair(true, "")
+                    }
+                }
+            } catch (e: Exception) {
+                Pair(true, "")
+            }
+        }
+    }
+}
 

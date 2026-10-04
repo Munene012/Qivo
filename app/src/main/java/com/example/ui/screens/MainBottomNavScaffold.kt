@@ -1,4 +1,5 @@
 package com.example.ui.screens
+import com.example.ui.components.AppToast
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -27,9 +28,30 @@ import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.window.Dialog
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Key
+import coil.compose.AsyncImage
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -112,7 +134,7 @@ sealed class AppNavStep {
     data class FollowsListStep(val initialTab: FollowTab = FollowTab.FOLLOWING, val targetUserId: String = "") : AppNavStep()
     data object CreatePartyRoomStep : AppNavStep()
     data class PartyRoomDetailStep(val room: PartyRoom) : AppNavStep()
-    data object AgencyCenterStep : AppNavStep()
+    data class AgencyCenterStep(val initialView: AgencyFullscreenView = AgencyFullscreenView.NONE) : AppNavStep()
     data object IncomeConversionStep : AppNavStep()
     data object StoreStep : AppNavStep()
     data object BagStep : AppNavStep()
@@ -121,6 +143,8 @@ sealed class AppNavStep {
     data object AboutQivoStep : AppNavStep()
     data object AccountSecurityStep : AppNavStep()
     data object CallSettingsStep : AppNavStep()
+    data object DiamondHistoryStep : AppNavStep()
+    data object OfficialTeamStep : AppNavStep()
 }
 
 @Composable
@@ -140,6 +164,10 @@ fun MainBottomNavScaffold(
     val profileService = remember { SupabaseProfileService() }
     val chatService = remember { SupabaseChatService() }
     val adService = remember { SupabaseAdService() }
+    val partyService = remember { com.example.data.SupabasePartyService() }
+    var showPasswordPromptForRoom by remember { mutableStateOf<PartyRoom?>(null) }
+    var passwordInputState by remember { mutableStateOf("") }
+    var passwordPromptError by remember { mutableStateOf("") }
 
     // App-Open Interstitial / Announcement Ad State
     var openAd by remember { mutableStateOf<AppAdvertisement?>(null) }
@@ -337,6 +365,10 @@ fun MainBottomNavScaffold(
     val chatListState = androidx.compose.foundation.lazy.rememberLazyListState()
     val partyGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
 
+    // Live periodic unread messages count sync & in-app notification detection
+    val knownMessageIds = remember { mutableSetOf<Long>() }
+    var isMessageSyncInitialized by remember { mutableStateOf(false) }
+
     // Always ensure cold start begins at the top of the Home screen
     LaunchedEffect(Unit) {
         com.example.ui.screens.HomeScreenDataStore.resetScrollToTop()
@@ -345,162 +377,94 @@ fun MainBottomNavScaffold(
         } catch (_: Exception) {}
     }
 
-    // Initialize Active Call Engine & Realtime Signaling
-    LaunchedEffect(userId) {
-        if (userId.isNotBlank()) {
-            ActiveCallSessionManager.init(context, userId)
-        }
-    }
-
-    // Refresh profile on launch & continuously maintain active realtime presence when online
-    LaunchedEffect(userId, userEmail, isOnline) {
-        val session = UserSessionManager.getSession(context)
-        val token = session?.accessToken
-        if (isOnline && (userId.isNotEmpty() || userEmail.isNotEmpty())) {
-            val fetched = profileService.fetchProfile(userId, userEmail, token)
-            if (fetched != null) {
-                val resolvedName = when {
-                    fetched.name.isNotBlank() && fetched.name != "QIVO User" -> fetched.name
-                    currentProfileState.name.isNotBlank() && currentProfileState.name != "QIVO User" -> currentProfileState.name
-                    !session?.name.isNullOrBlank() && session?.name != "QIVO User" -> session.name
-                    else -> fetched.name.ifBlank { userName }
-                }
-                val resolvedGender = when {
-                    fetched.gender.equals("female", ignoreCase = true) ||
-                    fetched.gender.equals("f", ignoreCase = true) ||
-                    fetched.gender.equals("woman", ignoreCase = true) ||
-                    fetched.gender.equals("w", ignoreCase = true) -> "Female"
-
-                    fetched.gender.equals("male", ignoreCase = true) ||
-                    fetched.gender.equals("m", ignoreCase = true) ||
-                    fetched.gender.equals("man", ignoreCase = true) -> "Male"
-
-                    userGender.equals("female", ignoreCase = true) ||
-                    userGender.equals("f", ignoreCase = true) ||
-                    userGender.equals("woman", ignoreCase = true) ||
-                    userGender.equals("w", ignoreCase = true) -> "Female"
-
-                    userGender.equals("male", ignoreCase = true) ||
-                    userGender.equals("m", ignoreCase = true) ||
-                    userGender.equals("man", ignoreCase = true) -> "Male"
-
-                    currentProfileState.gender.equals("female", ignoreCase = true) ||
-                    currentProfileState.gender.equals("f", ignoreCase = true) ||
-                    currentProfileState.gender.equals("woman", ignoreCase = true) ||
-                    currentProfileState.gender.equals("w", ignoreCase = true) -> "Female"
-
-                    currentProfileState.gender.equals("male", ignoreCase = true) ||
-                    currentProfileState.gender.equals("m", ignoreCase = true) ||
-                    currentProfileState.gender.equals("man", ignoreCase = true) -> "Male"
-
-                    session?.gender.equals("female", ignoreCase = true) ||
-                    session?.gender.equals("f", ignoreCase = true) ||
-                    session?.gender.equals("woman", ignoreCase = true) ||
-                    session?.gender.equals("w", ignoreCase = true) -> "Female"
-
-                    session?.gender.equals("male", ignoreCase = true) ||
-                    session?.gender.equals("m", ignoreCase = true) ||
-                    session?.gender.equals("man", ignoreCase = true) -> "Male"
-
-                    else -> ""
-                }
-                val resolvedCountry = when {
-                    fetched.country.isNotBlank() -> fetched.country
-                    currentProfileState.country.isNotBlank() -> currentProfileState.country
-                    !session?.country.isNullOrBlank() -> session.country
-                    else -> userCountry
-                }
-                val merged = fetched.copy(
-                    name = resolvedName,
-                    gender = resolvedGender,
-                    country = resolvedCountry,
-                    avatarUrl = if (fetched.avatarUrl.isNotEmpty()) fetched.avatarUrl else currentProfileState.avatarUrl
-                )
-                currentProfileState = merged
-                UserSessionManager.saveRoles(context, merged.isAdmin, merged.isCoinSeller, merged.isAgent)
-                UserSessionManager.saveSession(
-                    context = context,
-                    email = merged.email,
-                    userId = merged.id,
-                    name = merged.name,
-                    gender = merged.gender,
-                    country = merged.country,
-                    avatarUrl = merged.avatarUrl,
-                    numericId = merged.numericId,
-                    coins = merged.coins,
-                    isAdmin = merged.isAdmin,
-                    isCoinSeller = merged.isCoinSeller,
-                    isAgent = merged.isAgent,
-                    accessToken = token
-                )
-            }
-        }
-        if (isOnline && userId.isNotBlank()) {
-            profileService.updateOnlineStatus(userId, true)
-            while (isOnline) {
-                kotlinx.coroutines.delay(30_000L) // Ping every 30s
-                profileService.updateOnlineStatus(userId, true)
-            }
-        }
-    }
-
-    // Live periodic unread messages count sync & in-app notification detection
-    val knownMessageIds = remember { mutableSetOf<Long>() }
-    var isMessageSyncInitialized by remember { mutableStateOf(false) }
-
+    // APP INITIALIZATION SEQUENCE (Strict Order)
     LaunchedEffect(userId, isOnline) {
-        if (isOnline && userId.isNotBlank()) {
-            while (isOnline) {
-                try {
-                    val messages = chatService.checkRecentIncomingMessages(userId, context, limit = 30)
-                    if (messages.isNotEmpty()) {
-                        com.example.data.ChatStateHolder.appendOrUpdateMessages(messages)
-                    }
-                    val unreadIncoming = messages.filter {
-                        !it.isRead && it.receiverId.trim().equals(userId.trim(), ignoreCase = true)
-                    }
+        if (userId.isNotBlank() && isOnline) {
+            try {
+                // 1. CONFIRM SUPABASE SESSION
+                val session = UserSessionManager.getSession(context)
+                if (session == null || session.userId.isBlank()) {
+                    android.util.Log.e("AppInit", "Session not found, stopping initialization.")
+                    return@LaunchedEffect
+                }
 
-                    if (isMessageSyncInitialized) {
-                        for (msg in unreadIncoming) {
-                            if (msg.id > 0L && !knownMessageIds.contains(msg.id)) {
-                                knownMessageIds.add(msg.id)
+                // 2. GET/CREATE PROFILE & INITIALIZE APP
+                val fetched = profileService.fetchProfile(userId, userEmail, session.accessToken)
+                if (fetched != null) {
+                    currentProfileState = fetched
+                    UserSessionManager.saveSession(
+                        context = context,
+                        email = fetched.email,
+                        userId = fetched.id,
+                        name = fetched.name,
+                        gender = fetched.gender,
+                        country = fetched.country,
+                        avatarUrl = fetched.avatarUrl,
+                        numericId = fetched.numericId,
+                        coins = fetched.coins,
+                        isAdmin = fetched.isAdmin,
+                        isCoinSeller = fetched.isCoinSeller,
+                        isAgent = fetched.isAgent,
+                        accessToken = session.accessToken
+                    )
+                }
 
-                                // Trigger in-app floating heads-up banner if not currently chatting with sender
-                                if (SupabaseFcmService.activeConversationUserId != msg.senderId) {
-                                    val timeFmt = if (msg.createdAt.isNotBlank()) {
-                                        try {
-                                            val millis = chatService.parseTimestampToMillis(msg.createdAt)
-                                            if (millis > 0L) {
-                                                java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(millis))
-                                            } else {
-                                                ""
-                                            }
-                                        } catch (_: Throwable) {
-                                            ""
+                // 3. WELCOME BONUS (If applicable)
+                if (!HomeScreenDataStore.hasCheckedWelcomeBonus) {
+                    HomeScreenDataStore.hasCheckedWelcomeBonus = true
+                    try {
+                        val (claimedBonus, bonusAmount) = profileService.claimDeviceWelcomeBonus(context, userId, session.accessToken)
+                        if (claimedBonus && bonusAmount > 0) {
+                            AppToast.show("Welcome Bonus: +$bonusAmount Coins! 🎁")
+                            // Refresh balance after bonus
+                            profileService.fetchCoins(userId).let { newBal ->
+                                currentProfileState = currentProfileState.copy(coins = newBal)
+                                UserSessionManager.saveCoins(context, newBal)
+                            }
+                        }
+                    } catch (_: Exception) {}
+                }
+
+                // 4. HEARTBEAT & CHAT LIST/MESSAGES
+                ActiveCallSessionManager.init(context, userId)
+                profileService.updateOnlineStatus(userId, true)
+                
+                // Concurrent background loops for presence and messages
+                launch {
+                    while (isOnline) {
+                        kotlinx.coroutines.delay(30_000L)
+                        profileService.updateOnlineStatus(userId, true)
+                    }
+                }
+
+                launch {
+                    while (isOnline) {
+                        try {
+                            val messages = chatService.checkRecentIncomingMessages(userId, context, limit = 30)
+                            if (messages.isNotEmpty()) {
+                                com.example.data.ChatStateHolder.appendOrUpdateMessages(messages)
+                            }
+                            val unreadIncoming = messages.filter { !it.isRead && it.receiverId.trim().equals(userId.trim(), ignoreCase = true) }
+                            
+                            if (isMessageSyncInitialized) {
+                                for (msg in unreadIncoming) {
+                                    if (msg.id > 0L && !knownMessageIds.contains(msg.id)) {
+                                        knownMessageIds.add(msg.id)
+                                        if (SupabaseFcmService.activeConversationUserId != msg.senderId) {
+                                            InAppNotificationManager.showNotification(msg.senderId, msg.senderName, msg.senderAvatar, msg.message, "")
                                         }
-                                    } else ""
-
-                                    InAppNotificationManager.showNotification(
-                                        senderId = msg.senderId,
-                                        senderName = msg.senderName,
-                                        senderAvatar = msg.senderAvatar,
-                                        messageText = msg.message,
-                                        timeFormatted = timeFmt
-                                    )
+                                    }
                                 }
+                            } else {
+                                messages.forEach { if (it.id > 0L) knownMessageIds.add(it.id) }
+                                isMessageSyncInitialized = true
                             }
-                        }
-                    } else {
-                        // Populate existing IDs on first sync to avoid alert spam on boot
-                        for (msg in messages) {
-                            if (msg.id > 0L) {
-                                knownMessageIds.add(msg.id)
-                            }
-                        }
-                        isMessageSyncInitialized = true
+                        } catch (_: Exception) {}
+                        kotlinx.coroutines.delay(3_500L)
                     }
-                } catch (_: Exception) {}
-                kotlinx.coroutines.delay(3_500L)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AppInit", "Initialization sequence failed: ${e.message}")
             }
         }
     }
@@ -520,6 +484,25 @@ fun MainBottomNavScaffold(
         if (navStack.size > 1) {
             navStack.removeAt(navStack.lastIndex)
         }
+    }
+
+    // Auto-link active party room session if app closed accidentally or connection dropped
+    LaunchedEffect(Unit) {
+        try {
+            val persistedRoomId = PartyRoomSessionManager.getPersistedRoomId(context)
+            if (!persistedRoomId.isNullOrBlank()) {
+                val restoredRoom = partyService.fetchPartyRoomById(persistedRoomId)
+                if (restoredRoom != null) {
+                    PartyRoomSessionManager.enterRoom(restoredRoom, context)
+                    if (!navStack.any { it is AppNavStep.PartyRoomDetailStep }) {
+                        navigateTo(AppNavStep.PartyRoomDetailStep(restoredRoom))
+                        com.example.ui.components.AppToast.show("Reconnected to Party Lounge 🎧")
+                    }
+                } else {
+                    PartyRoomSessionManager.clearActiveRoomSession(context)
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     fun selectTab(tab: MainTab) {
@@ -557,9 +540,15 @@ fun MainBottomNavScaffold(
         navStack.add(AppNavStep.TabStep(tab))
     }
 
-    // Back button handling: pops navigation stack
-    BackHandler(enabled = navStack.size > 1) {
-        navigateBack()
+    var showExitConfirmationDialog by remember { mutableStateOf(false) }
+
+    // Back button handling: pops navigation stack or shows exit confirmation dialog when at root
+    BackHandler(enabled = true) {
+        if (navStack.size > 1) {
+            navigateBack()
+        } else {
+            showExitConfirmationDialog = true
+        }
     }
 
     val handleSignOut: () -> Unit = {
@@ -887,6 +876,8 @@ fun MainBottomNavScaffold(
                         currentUserName = currentProfileState?.name ?: userName,
                         currentUserAvatar = currentProfileState?.avatarUrl ?: userAvatarUrl,
                         onLeaveRoom = {
+                            PartyRoomSessionManager.leaveRoom(userId, context, scope)
+                            PartyRoomSessionManager.clearActiveRoomSession(context)
                             navStack.removeAll { it is AppNavStep.PartyRoomDetailStep }
                             if (navStack.isEmpty()) {
                                 navStack.add(AppNavStep.TabStep(MainTab.PARTY))
@@ -903,16 +894,28 @@ fun MainBottomNavScaffold(
                         currentUserAvatar = currentProfileState?.avatarUrl ?: userAvatarUrl,
                         currentUserGender = currentProfileState?.gender ?: userGender,
                         isAgent = currentProfileState?.isAgent ?: false,
-                        onBackClick = { navigateBack() }
+                        initialView = currentStep.initialView,
+                        onBackClick = { navigateBack() },
+                        onOpenRechargeWallet = { navigateTo(AppNavStep.WalletRechargeStep) },
+                        onAgentStatusChanged = { isNowAgent ->
+                            currentProfileState = currentProfileState.copy(isAgent = isNowAgent)
+                        }
                     )
                 }
                 is AppNavStep.IncomeConversionStep -> {
                     IncomeScreen(
                         userId = userId,
                         onBackClick = { navigateBack() },
+                        onOpenDiamondHistory = { navigateTo(AppNavStep.DiamondHistoryStep) },
                         onCoinsUpdated = { newCoins ->
                             currentProfileState = currentProfileState.copy(coins = newCoins)
                         }
+                    )
+                }
+                is AppNavStep.DiamondHistoryStep -> {
+                    DiamondHistoryScreen(
+                        userId = userId,
+                        onBackClick = { navigateBack() }
                     )
                 }
                 is AppNavStep.StoreStep -> {
@@ -939,6 +942,12 @@ fun MainBottomNavScaffold(
                     GameCenterScreen(
                         onBackClick = { navigateBack() },
                         onOpenRechargeWallet = { navigateTo(AppNavStep.WalletRechargeStep) }
+                    )
+                }
+                is AppNavStep.OfficialTeamStep -> {
+                    OfficialTeamScreen(
+                        onBackClick = { navigateBack() },
+                        onOpenUserDetails = { user -> navigateTo(AppNavStep.UserDetailStep(user)) }
                     )
                 }
                 is AppNavStep.TabStep -> {
@@ -971,7 +980,18 @@ fun MainBottomNavScaffold(
                         MainTab.PARTY -> PartyScreen(
                             gridState = partyGridState,
                             onOpenPartyRoom = { room ->
-                                navigateTo(AppNavStep.PartyRoomDetailStep(room))
+                                scope.launch {
+                                    val freshRoom = partyService.fetchPartyRoomById(room.id) ?: room
+                                    if (freshRoom.roomPassword.isNotBlank() && freshRoom.hostUserId != userId) {
+                                        showPasswordPromptForRoom = freshRoom
+                                        passwordInputState = ""
+                                        passwordPromptError = ""
+                                    } else {
+                                        PartyRoomSessionManager.enterRoom(freshRoom, context)
+                                        partyService.joinPartyRoomRpc(freshRoom.id, null)
+                                        navigateTo(AppNavStep.PartyRoomDetailStep(freshRoom))
+                                    }
+                                }
                             },
                             onOpenCreateRoom = {
                                 navigateTo(AppNavStep.CreatePartyRoomStep)
@@ -985,6 +1005,18 @@ fun MainBottomNavScaffold(
                             },
                             onOpenConversation = { user ->
                                 navigateTo(AppNavStep.ConversationStep(user))
+                            },
+                            onOpenAgencyGroupChat = {
+                                navigateTo(AppNavStep.AgencyCenterStep(initialView = AgencyFullscreenView.GROUP_CHAT))
+                            },
+                            onOpenOfficialTeam = {
+                                navigateTo(AppNavStep.OfficialTeamStep)
+                            },
+                            onOpenFriends = {
+                                navigateTo(AppNavStep.FriendsStep(userId))
+                            },
+                            onOpenSupport = {
+                                navigateTo(AppNavStep.SupportStep)
                             }
                         )
                         MainTab.ME -> MeScreen(
@@ -1014,7 +1046,7 @@ fun MainBottomNavScaffold(
                             onOpenManageReports = { navigateTo(AppNavStep.ManageReportsStep) },
                             onOpenManageAds = { navigateTo(AppNavStep.ManageAdsStep) },
                             onOpenAdminAnalytics = { navigateTo(AppNavStep.AdminAnalyticsStep) },
-                            onOpenAgency = { navigateTo(AppNavStep.AgencyCenterStep) },
+                            onOpenAgency = { navigateTo(AppNavStep.AgencyCenterStep()) },
                             onOpenIncome = { navigateTo(AppNavStep.IncomeConversionStep) },
                             onOpenFollows = { tab ->
                                 when (tab) {
@@ -1045,9 +1077,10 @@ fun MainBottomNavScaffold(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .testTag("qivo_bottom_navigation_bar"),
-            shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
-            color = colors.bottomNavBg,
-            shadowElevation = 0.dp,
+            shape = RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp),
+            color = Color(0xFF381A05), // Matches warm espresso screen background perfectly
+            border = null, // No border lines on bottom navigation bar
+            shadowElevation = 0.dp, // Flat seamless look with zero border lines
             tonalElevation = 0.dp
         ) {
             Column(
@@ -1069,9 +1102,9 @@ fun MainBottomNavScaffold(
                         isSelected = activeTab == MainTab.HOME,
                         onClick = { selectTab(MainTab.HOME) },
                         testTag = "nav_tab_home",
-                        isDark = colors.isDark,
-                        textColor = colors.textPrimary,
-                        unselectedColor = colors.textSecondary
+                        isDark = true,
+                        textColor = Color.White,
+                        unselectedColor = Color(0xFFA0A5BA)
                     )
 
                     NavTabItem(
@@ -1080,9 +1113,9 @@ fun MainBottomNavScaffold(
                         isSelected = activeTab == MainTab.PARTY,
                         onClick = { selectTab(MainTab.PARTY) },
                         testTag = "nav_tab_party",
-                        isDark = colors.isDark,
-                        textColor = colors.textPrimary,
-                        unselectedColor = colors.textSecondary
+                        isDark = true,
+                        textColor = Color.White,
+                        unselectedColor = Color(0xFFA0A5BA)
                     )
 
                     NavTabItem(
@@ -1091,10 +1124,10 @@ fun MainBottomNavScaffold(
                         isSelected = activeTab == MainTab.CHAT,
                         onClick = { selectTab(MainTab.CHAT) },
                         testTag = "nav_tab_chat",
-                        isDark = colors.isDark,
-                        textColor = colors.textPrimary,
-                        unselectedColor = colors.textSecondary,
-                        badgeCount = totalUnreadCount
+                        isDark = true,
+                        textColor = Color.White,
+                        unselectedColor = Color(0xFFA0A5BA),
+                        badgeCount = 0
                     )
 
                     NavTabItem(
@@ -1103,9 +1136,9 @@ fun MainBottomNavScaffold(
                         isSelected = activeTab == MainTab.ME,
                         onClick = { selectTab(MainTab.ME) },
                         testTag = "nav_tab_me",
-                        isDark = colors.isDark,
-                        textColor = colors.textPrimary,
-                        unselectedColor = colors.textSecondary
+                        isDark = true,
+                        textColor = Color.White,
+                        unselectedColor = Color(0xFFA0A5BA)
                     )
                 }
             }
@@ -1203,6 +1236,517 @@ fun MainBottomNavScaffold(
                 .align(Alignment.TopCenter)
                 .statusBarsPadding()
         )
+
+        if (showExitConfirmationDialog) {
+            AlertDialog(
+                onDismissRequest = { showExitConfirmationDialog = false },
+                title = {
+                    Text(
+                        text = "Exit App",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp
+                    )
+                },
+                text = {
+                    Text(
+                        text = "Are you sure you want to exit the app?",
+                        fontSize = 15.sp
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showExitConfirmationDialog = false
+                            (context as? android.app.Activity)?.finish()
+                        }
+                    ) {
+                        Text(
+                            text = "Exit",
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showExitConfirmationDialog = false }
+                    ) {
+                        Text(
+                            text = "Cancel",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                },
+                shape = RoundedCornerShape(20.dp),
+                containerColor = MaterialTheme.colorScheme.surface,
+                titleContentColor = MaterialTheme.colorScheme.onSurface,
+                textContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        if (showPasswordPromptForRoom != null) {
+            val roomToEnter = showPasswordPromptForRoom!!
+            var isVerifyingPassword by remember { mutableStateOf(false) }
+            var isPasswordVisible by remember { mutableStateOf(false) }
+
+            Dialog(
+                onDismissRequest = {
+                    if (!isVerifyingPassword) {
+                        showPasswordPromptForRoom = null
+                        passwordInputState = ""
+                        passwordPromptError = ""
+                    }
+                }
+            ) {
+                Card(
+                    shape = RoundedCornerShape(28.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF181326)),
+                    border = BorderStroke(
+                        1.5.dp,
+                        Brush.linearGradient(
+                            listOf(
+                                Color(0xFF8B5CF6),
+                                Color(0xFFFF6500),
+                                Color(0xFFEC4899)
+                            )
+                        )
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(22.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Header with glowing Lock Badge & Close
+                        Box(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.Center)
+                                    .size(56.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        Brush.radialGradient(
+                                            listOf(
+                                                Color(0xFFFF6500).copy(alpha = 0.35f),
+                                                Color(0xFF8B5CF6).copy(alpha = 0.15f),
+                                                Color.Transparent
+                                            )
+                                        )
+                                    )
+                                    .border(
+                                        1.5.dp,
+                                        Brush.linearGradient(
+                                            listOf(Color(0xFFFF8D00), Color(0xFF7C4DFF))
+                                        ),
+                                        CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = "Lock",
+                                    tint = Color(0xFFFFD54F),
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    if (!isVerifyingPassword) {
+                                        showPasswordPromptForRoom = null
+                                        passwordInputState = ""
+                                        passwordPromptError = ""
+                                    }
+                                },
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Close",
+                                    tint = Color.White.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            text = "Private Party Room",
+                            fontSize = 19.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+
+                        Spacer(modifier = Modifier.height(3.dp))
+
+                        Text(
+                            text = "This room requires a 6-digit access PIN",
+                            fontSize = 12.sp,
+                            color = Color.White.copy(alpha = 0.65f),
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Room Info Mini Banner
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFF231B38),
+                            border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val coverUrl = roomToEnter.coverUrl.ifBlank { roomToEnter.hostAvatarUrl }
+                                if (coverUrl.isNotBlank()) {
+                                    AsyncImage(
+                                        model = coverUrl,
+                                        contentDescription = "Room Cover",
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(RoundedCornerShape(10.dp)),
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(
+                                                Brush.linearGradient(
+                                                    listOf(Color(0xFF8B5CF6), Color(0xFFFF6500))
+                                                )
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Group,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.width(10.dp))
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = roomToEnter.name,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "Host: ${roomToEnter.hostName.ifBlank { "Host" }}",
+                                        fontSize = 11.sp,
+                                        color = Color(0xFFFFD54F),
+                                        maxLines = 1
+                                    )
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0x33FF6500))
+                                        .border(1.dp, Color(0x88FF6500), RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "Locked 🔒",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFFF8D00)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        // 6-Digit Visual PIN Boxes
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(horizontal = 2.dp)
+                        ) {
+                            for (i in 0 until 6) {
+                                val isFilled = i < passwordInputState.length
+                                val isCurrent = i == passwordInputState.length
+                                val digitChar = if (isFilled) passwordInputState[i] else null
+
+                                Box(
+                                    modifier = Modifier
+                                        .size(width = 38.dp, height = 46.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(
+                                            if (isFilled) Color(0xFF2C2245) else Color(0xFF1E1730)
+                                        )
+                                        .border(
+                                            width = if (isCurrent) 2.dp else 1.dp,
+                                            color = when {
+                                                passwordPromptError.isNotBlank() -> Color(0xFFFF5252)
+                                                isCurrent -> Color(0xFFFF8D00)
+                                                isFilled -> Color(0xFF8B5CF6)
+                                                else -> Color(0x33FFFFFF)
+                                            },
+                                            shape = RoundedCornerShape(10.dp)
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (isFilled) {
+                                        if (isPasswordVisible) {
+                                            Text(
+                                                text = digitChar.toString(),
+                                                fontSize = 18.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = Color.White
+                                            )
+                                        } else {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(10.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color(0xFFFFD54F))
+                                            )
+                                        }
+                                    } else if (isCurrent) {
+                                        Box(
+                                            modifier = Modifier
+                                                .width(2.dp)
+                                                .height(18.dp)
+                                                .background(Color(0xFFFF8D00))
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Input capture field with visibility toggle
+                        androidx.compose.material3.OutlinedTextField(
+                            value = passwordInputState,
+                            onValueChange = {
+                                if (it.length <= 6 && it.all { char -> char.isDigit() }) {
+                                    passwordInputState = it
+                                    passwordPromptError = ""
+                                    if (it.length == 6 && !isVerifyingPassword) {
+                                        isVerifyingPassword = true
+                                        scope.launch {
+                                            val (success, errorMsg) = partyService.verifyAndJoinPartyRoom(
+                                                roomId = roomToEnter.id,
+                                                enteredPassword = it,
+                                                userId = userId,
+                                                userName = currentProfileState?.name ?: userName,
+                                                avatarUrl = currentProfileState?.avatarUrl ?: userAvatarUrl,
+                                                context = context
+                                            )
+                                            if (success) {
+                                                val fresh = partyService.fetchPartyRoomById(roomToEnter.id) ?: roomToEnter
+                                                PartyRoomSessionManager.enterRoom(fresh, context)
+                                                showPasswordPromptForRoom = null
+                                                passwordInputState = ""
+                                                passwordPromptError = ""
+                                                navigateTo(AppNavStep.PartyRoomDetailStep(fresh))
+                                            } else {
+                                                passwordPromptError = if (errorMsg.isNotBlank()) errorMsg else "Incorrect password! Please try again."
+                                            }
+                                            isVerifyingPassword = false
+                                        }
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                textAlign = TextAlign.Center,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                letterSpacing = 6.sp,
+                                color = Color.White
+                            ),
+                            placeholder = {
+                                Text(
+                                    "Tap to type 6-digit PIN",
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = TextAlign.Center,
+                                    fontSize = 12.sp,
+                                    color = Color.White.copy(alpha = 0.35f)
+                                )
+                            },
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword,
+                                imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                            ),
+                            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                                onDone = {
+                                    if (passwordInputState.length == 6 && !isVerifyingPassword) {
+                                        isVerifyingPassword = true
+                                        scope.launch {
+                                            val (success, errorMsg) = partyService.verifyAndJoinPartyRoom(
+                                                roomId = roomToEnter.id,
+                                                enteredPassword = passwordInputState,
+                                                userId = userId,
+                                                userName = currentProfileState?.name ?: userName,
+                                                avatarUrl = currentProfileState?.avatarUrl ?: userAvatarUrl,
+                                                context = context
+                                            )
+                                            if (success) {
+                                                val fresh = partyService.fetchPartyRoomById(roomToEnter.id) ?: roomToEnter
+                                                PartyRoomSessionManager.enterRoom(fresh, context)
+                                                showPasswordPromptForRoom = null
+                                                passwordInputState = ""
+                                                passwordPromptError = ""
+                                                navigateTo(AppNavStep.PartyRoomDetailStep(fresh))
+                                            } else {
+                                                passwordPromptError = if (errorMsg.isNotBlank()) errorMsg else "Incorrect password! Please try again."
+                                            }
+                                            isVerifyingPassword = false
+                                        }
+                                    }
+                                }
+                            ),
+                            trailingIcon = {
+                                IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
+                                    Icon(
+                                        imageVector = if (isPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        contentDescription = "Toggle password visibility",
+                                        tint = Color.White.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            },
+                            visualTransformation = if (isPasswordVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = Color(0xFFFF6500),
+                                unfocusedBorderColor = Color(0x44FFFFFF),
+                                focusedContainerColor = Color(0xFF1E1730),
+                                unfocusedContainerColor = Color(0xFF1E1730)
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("party_room_password_input")
+                        )
+
+                        if (passwordPromptError.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0x33FF5252),
+                                border = BorderStroke(1.dp, Color(0x66FF5252)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = passwordPromptError,
+                                    color = Color(0xFFFF8A80),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        // Action Buttons: Unlock / Cancel
+                        Button(
+                            onClick = {
+                                if (passwordInputState.length == 6 && !isVerifyingPassword) {
+                                    isVerifyingPassword = true
+                                    scope.launch {
+                                        val (success, errorMsg) = partyService.verifyAndJoinPartyRoom(
+                                            roomId = roomToEnter.id,
+                                            enteredPassword = passwordInputState,
+                                            userId = userId,
+                                            userName = currentProfileState?.name ?: userName,
+                                            avatarUrl = currentProfileState?.avatarUrl ?: userAvatarUrl,
+                                            context = context
+                                        )
+                                        if (success) {
+                                            val fresh = partyService.fetchPartyRoomById(roomToEnter.id) ?: roomToEnter
+                                            PartyRoomSessionManager.enterRoom(fresh, context)
+                                            showPasswordPromptForRoom = null
+                                            passwordInputState = ""
+                                            passwordPromptError = ""
+                                            navigateTo(AppNavStep.PartyRoomDetailStep(fresh))
+                                        } else {
+                                            passwordPromptError = if (errorMsg.isNotBlank()) errorMsg else "Incorrect password! Please try again."
+                                        }
+                                        isVerifyingPassword = false
+                                    }
+                                }
+                            },
+                            enabled = passwordInputState.length == 6 && !isVerifyingPassword,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFFF6500),
+                                disabledContainerColor = Color(0x33FF6500)
+                            ),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                        ) {
+                            if (isVerifyingPassword) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Verifying PIN...", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            } else {
+                                Icon(
+                                    Icons.Default.Key,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Unlock & Enter", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        TextButton(
+                            onClick = {
+                                if (!isVerifyingPassword) {
+                                    showPasswordPromptForRoom = null
+                                    passwordInputState = ""
+                                    passwordPromptError = ""
+                                }
+                            },
+                            enabled = !isVerifyingPassword,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                "Cancel",
+                                color = Color.White.copy(alpha = 0.65f),
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1238,7 +1782,7 @@ private fun NavTabItem(
                     modifier = Modifier
                         .fillMaxSize()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(QivoYellow.copy(alpha = 0.25f))
+                        .background(Color.White.copy(alpha = 0.12f))
                 )
             }
 

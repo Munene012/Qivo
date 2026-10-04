@@ -47,9 +47,18 @@ import com.example.ui.components.VoiceCall3DIcon
 import com.example.ui.components.VideoCall3DIcon
 import com.example.ui.components.GiftBox3DIcon
 import com.example.ui.components.Gift3DIcon
+import com.example.ui.components.SmileEmoji3DIcon
+import com.example.ui.components.MoreTools3DIcon
 import com.example.ui.components.SentGiftPreviewOverlay
 import com.example.ui.components.resolveGift
 import com.example.ui.components.HapticSoundFeedback
+import com.example.ui.components.VerifiedBlueCheckBadge
+import com.example.ui.components.VerifiedGreenShieldBadge
+import com.example.ui.components.IntimacyCrystalHeartBadge
+import com.example.ui.components.HexagonSafetyBadge
+import com.example.ui.components.FloatingFreeChatCard
+import com.example.ui.components.FloatingFastForwardPill
+import com.example.ui.components.FaceAuthenticationBanner
 import java.io.File
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Videocam
@@ -142,6 +151,13 @@ fun ConversationScreen(
     }
 
     var messagesList by remember { mutableStateOf(initialConversationMessages) }
+    
+    LaunchedEffect(messagesList.size) {
+        if (messagesList.isNotEmpty()) {
+            listState.animateScrollToItem(messagesList.size - 1)
+        }
+    }
+    
     var isLoadingMessages by remember { mutableStateOf(initialConversationMessages.isEmpty()) }
     var hasOlderMessages by remember { mutableStateOf(true) }
     var isLoadingOlderMessages by remember { mutableStateOf(false) }
@@ -204,6 +220,13 @@ fun ConversationScreen(
     var showInsufficientCoinsDialog by remember { mutableStateOf(false) }
     var insufficientCoinsRequired by remember { mutableLongStateOf(15L) }
     var userCurrentCoins by remember { mutableLongStateOf(session?.coins ?: 100L) }
+    val flowCoins by UserSessionManager.coinsFlow.collectAsState()
+    LaunchedEffect(flowCoins) {
+        val coins = flowCoins
+        if (coins != null && coins >= 0L) {
+            userCurrentCoins = coins
+        }
+    }
     var myProfile by remember { mutableStateOf<UserProfile?>(null) }
 
     val senderGenderResolved = remember(myProfile?.gender, session?.gender) {
@@ -814,89 +837,221 @@ fun ConversationScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.screenBg)
+            .background(Color(0xFF381A05)) // Matching warm espresso background
             .statusBarsPadding()
             .navigationBarsPadding()
             .imePadding()
             .testTag("conversation_screen_root")
     ) {
+        // Atmospheric Sunset Orange-Yellow Glow Overlay at Top
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(240.dp)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color(0x66E65100), // Sunset orange
+                            Color(0x33FF9100), // Amber gold
+                            Color(0x10FFD54F), // Gold aura
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+
         Column(modifier = Modifier.fillMaxSize()) {
-            // 1. Fixed Top Bar Header
+            // 1. Top Bar Header matching screenshot
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .zIndex(10f),
-                color = colors.cardBg,
-                shadowElevation = 4.dp
+                color = Color.Transparent
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .defaultMinSize(minHeight = 62.dp)
-                        .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Conversation3DBackButton(
-                        onClick = onBackClick,
-                        isDark = isDark
-                    )
-
-                    Spacer(modifier = Modifier.width(10.dp))
-
-                    // User Profile Info in Header (Clickable -> opens User Details)
+                Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { onOpenUserDetails(liveTargetUser) }
-                            .padding(vertical = 4.dp, horizontal = 4.dp),
+                            .fillMaxWidth()
+                            .defaultMinSize(minHeight = 56.dp)
+                            .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Avatar
-                        Box(modifier = Modifier.size(44.dp)) {
-                            com.example.data.AvatarHelper.UserAvatarImage(
-                                avatarUrl = if (liveTargetUser.avatarUrl.isNotBlank()) liveTargetUser.avatarUrl else targetUser.avatarUrl,
-                                userId = liveTargetUser.id.ifBlank { targetUser.id },
-                                gender = liveTargetUser.gender.ifBlank { targetUser.gender },
-                                numericId = if (liveTargetUser.numericId > 0L) liveTargetUser.numericId else targetUser.numericId,
-                                contentDescription = liveTargetUser.name,
-                                showFrame = true,
-                                shape = CircleShape,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
+                        // Back Arrow <
+                        IconButton(
+                            onClick = onBackClick,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
 
-                        // Name + Status
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = liveTargetUser.name.ifBlank { "QIVO User" },
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = colors.textPrimary,
-                                maxLines = 1,
-                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                            )
-                            if (liveTargetUser.isOnline) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(Color(0xFF00E676))
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "Online",
-                                        fontSize = 12.sp,
-                                        color = Color(0xFF00E676),
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                }
+                        // Intimacy / Level Numeric Pill Badge (e.g. 112) removed as requested
+                        /*
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0x33FFFFFF),
+                            border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0x44FFFFFF)),
+                            modifier = Modifier.height(26.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier.padding(horizontal = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                val displayLevel = if (liveTargetUser.numericId > 0L) {
+                                    (liveTargetUser.numericId % 900 + 100).toString()
+                                } else "112"
+                                Text(
+                                    text = displayLevel,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
                             }
                         }
+                        */
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        // Target User Name + Badges + Online Status
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onOpenUserDetails(liveTargetUser) }
+                                .padding(vertical = 2.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                val nameWithHeart = if (liveTargetUser.name.contains("❤️") || liveTargetUser.name.contains("❤")) {
+                                    liveTargetUser.name
+                                } else {
+                                    "${liveTargetUser.name.ifBlank { "User" }}❤️"
+                                }
+
+                                Text(
+                                    text = nameWithHeart,
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                )
+
+                                VerifiedBlueCheckBadge(size = 14.dp)
+                                VerifiedGreenShieldBadge(size = 14.dp)
+                            }
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .clip(CircleShape)
+                                        .background(if (liveTargetUser.isOnline) Color(0xFF00E676) else Color(0xFF757575))
+                                )
+                                Text(
+                                    text = if (liveTargetUser.isOnline) "Online" else "Offline",
+                                    fontSize = 11.5.sp,
+                                    color = if (liveTargetUser.isOnline) Color(0xFF00E676) else Color(0xFF9E9E9E),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+
+                        // Right Badges: [ 💜 0 ] and [ ⬡ ! ]
+                        IntimacyCrystalHeartBadge(
+                            count = 0,
+                            onClick = {
+                                onOpenUserDetails(liveTargetUser)
+                            }
+                        )
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        HexagonSafetyBadge(
+                            onClick = {
+                                onOpenUserDetails(liveTargetUser)
+                            }
+                        )
+                    }
+
+                    // Centered Down Arrow Dropdown ⌄ removed as requested
+                    /*
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Surface(
+                            onClick = { onOpenUserDetails(liveTargetUser) },
+                            shape = CircleShape,
+                            color = Color(0x331F2232),
+                            modifier = Modifier.size(20.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "⌄",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White.copy(alpha = 0.7f)
+                                )
+                            }
+                        }
+                    }
+                    */
+                }
+            }
+
+            // Quick Greeting Phrases Horizontal Scroll Bar (User prompt requirement)
+            val quickGreetings = remember {
+                listOf(
+                    "Hi! 👋",
+                    "How are you? 😊",
+                    "Nice to meet you! ✨",
+                    "Free to voice talk? 🎙️",
+                    "Send a gift 🎁",
+                    "Hello beautiful! 🌸",
+                    "What are you up to? 💬"
+                )
+            }
+            androidx.compose.foundation.lazy.LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(if (isDark) Color(0xFF141120) else Color(0xFFFFF7ED))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                items(quickGreetings) { phrase ->
+                    Surface(
+                        onClick = {
+                            if (!isTargetBlocked) {
+                                handleSendMessage(phrase)
+                            }
+                        },
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (isDark) Color(0xFF251F33) else Color.White,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, QivoOrange.copy(alpha = 0.5f)),
+                        shadowElevation = 1.dp
+                    ) {
+                        Text(
+                            text = phrase,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isDark) Color(0xFFFFD54F) else Color(0xFFE65100),
+                            modifier = Modifier.padding(horizontal = 11.dp, vertical = 5.dp)
+                        )
                     }
                 }
             }
@@ -1509,19 +1664,23 @@ fun ConversationScreen(
                                     }
                                 } else {
                                     // Render Text Message Bubble
-                                    Surface(
-                                        shape = RoundedCornerShape(
-                                            topStart = 16.dp,
-                                            topEnd = 16.dp,
-                                            bottomStart = if (isMe) 16.dp else 4.dp,
-                                            bottomEnd = if (isMe) 4.dp else 16.dp
-                                        ),
-                                        color = bubbleBg,
-                                        border = if (!isMe && isDark) androidx.compose.foundation.BorderStroke(1.dp, colors.cardBorder) else null,
-                                        shadowElevation = 1.dp
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                                    if (isMe) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(
+                                                    RoundedCornerShape(
+                                                        topStart = 18.dp,
+                                                        topEnd = 18.dp,
+                                                        bottomStart = 18.dp,
+                                                        bottomEnd = 4.dp
+                                                    )
+                                                )
+                                                .background(
+                                                    Brush.linearGradient(
+                                                        listOf(Color(0xFFFF8D00), Color(0xFFFF6500))
+                                                    )
+                                                )
+                                                .padding(horizontal = 14.dp, vertical = 9.dp)
                                         ) {
                                             val cleanText = msg.message
                                                 .replace(Regex("^\\[GLOBAL BLAST\\]\\s*", RegexOption.IGNORE_CASE), "")
@@ -1532,10 +1691,40 @@ fun ConversationScreen(
                                             Text(
                                                 text = cleanText,
                                                 fontSize = 15.sp,
-                                                fontWeight = FontWeight.Light,
+                                                fontWeight = FontWeight.Medium,
                                                 letterSpacing = 0.2.sp,
-                                                color = bubbleTextColor
+                                                color = Color.White
                                             )
+                                        }
+                                    } else {
+                                        Surface(
+                                            shape = RoundedCornerShape(
+                                                topStart = 18.dp,
+                                                topEnd = 18.dp,
+                                                bottomStart = 4.dp,
+                                                bottomEnd = 18.dp
+                                            ),
+                                            color = if (isDark) Color(0xFF221E31) else Color(0xFFF3F1F8),
+                                            border = if (isDark) androidx.compose.foundation.BorderStroke(1.dp, Color(0x33FFFFFF)) else null,
+                                            shadowElevation = 1.dp
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)
+                                            ) {
+                                                val cleanText = msg.message
+                                                    .replace(Regex("^\\[GLOBAL BLAST\\]\\s*", RegexOption.IGNORE_CASE), "")
+                                                    .replace(Regex("^GLOBAL BLAST:\\s*", RegexOption.IGNORE_CASE), "")
+                                                    .replace(Regex("^Global Blast:\\s*", RegexOption.IGNORE_CASE), "")
+                                                    .replace(Regex("^\\[BLAST\\]\\s*", RegexOption.IGNORE_CASE), "")
+                                                    .trim()
+                                                Text(
+                                                    text = cleanText,
+                                                    fontSize = 15.sp,
+                                                    fontWeight = FontWeight.Normal,
+                                                    letterSpacing = 0.2.sp,
+                                                    color = if (isDark) Color.White else Color(0xFF1E1B2E)
+                                                )
+                                            }
                                         }
                                     }
                                 }

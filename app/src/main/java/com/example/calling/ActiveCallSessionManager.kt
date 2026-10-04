@@ -359,12 +359,6 @@ object ActiveCallSessionManager {
     }
 
     private fun recordCallOutcomeMessage(context: Context, session: ActiveCallSession, outcomeText: String) {
-        if (outcomeText.contains("Cancelled", ignoreCase = true) ||
-            outcomeText.contains("Rejected", ignoreCase = true) ||
-            outcomeText.contains("Timeout", ignoreCase = true) ||
-            outcomeText.contains("Declined", ignoreCase = true)) {
-            return
-        }
         scope.launch {
             try {
                 val chatService = com.example.data.SupabaseChatService()

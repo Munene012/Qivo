@@ -16,17 +16,18 @@ object AppThemeManager {
     val isDarkModeState = mutableStateOf(false)
 
     fun init(context: Context) {
-        val prefs = getPrefs(context)
-        isDarkModeState.value = prefs.getBoolean(KEY_DARK_MODE, false)
+        isDarkModeState.value = false
+        try {
+            getPrefs(context).edit().putBoolean(KEY_DARK_MODE, false).apply()
+        } catch (_: Exception) {}
     }
 
     fun setDarkMode(context: Context, enabled: Boolean) {
-        isDarkModeState.value = enabled
-        getPrefs(context).edit().putBoolean(KEY_DARK_MODE, enabled).apply()
+        isDarkModeState.value = false
     }
 
     fun isDarkMode(context: Context): Boolean {
-        return getPrefs(context).getBoolean(KEY_DARK_MODE, false)
+        return false
     }
 
     private fun getPrefs(context: Context): SharedPreferences {
@@ -84,20 +85,20 @@ fun lightAppColors() = AppColors(
 
 fun darkAppColors() = AppColors(
     isDark = true,
-    screenBg = Color(0xFF0C0A12),         // Rich dark onyx canvas with subtle violet tint
-    surfaceBg = Color(0xFF13101C),        // Obsidian surface
-    cardBg = Color(0xFF1A1626),           // Refined dark obsidian card
-    cardBgElevated = Color(0xFF231D33),   // Elevated card container
-    cardBorder = Color(0xFF322A45),       // Elegant rim border
+    screenBg = Color(0xFF381A05),         // Deep warm espresso status bar color
+    surfaceBg = Color(0xFF151724),        // Dark container surface
+    cardBg = Color(0xFF151724),           // Refined dark card
+    cardBgElevated = Color(0xFF1F2233),   // Elevated card container
+    cardBorder = Color(0xFF282C40),       // Elegant rim border
     cardGoldBorder = Color(0xFF4A3525),   // Warm Gold accent border
     textPrimary = Color(0xFFFFFFFF),      // Pure crisp white
     textSecondary = Color(0xFFB0ACC0),    // Clean legible muted grey-violet
     textMuted = Color(0xFF7A748B),        // Muted text
     divider = Color(0xFF231D33),          // Dark divider
-    inputBg = Color(0xFF161321),          // Dark input field background
-    bottomNavBg = Color(0xFF0C0A12),      // Obsidian bottom navigation bar
+    inputBg = Color(0xFF161826),          // Dark input field background
+    bottomNavBg = Color(0xFF381A05),      // Unified bottom navigation bar matching background
     bottomNavBorder = Color(0xFF231D33),
-    topBarBg = Color(0xFF0C0A12)          // Obsidian top header bar
+    topBarBg = Color(0xFF381A05)          // Obsidian top header bar matching background
 )
 
 object AppTheme {
